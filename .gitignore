@@ -1,0 +1,34 @@
+# Gradle / Android build files
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# Local machine config
+local.properties
+**/local.properties
+
+# Android Studio / IntelliJ
+.idea/
+**/.idea/
+*.iml
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+output.json
+
+# Signing / credentials
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+**/*.apk

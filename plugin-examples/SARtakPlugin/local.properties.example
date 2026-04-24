@@ -1,0 +1,24 @@
+# Copy this file and rename the copy to local.properties
+# Do not commit local.properties
+
+# Android SDK location
+# Windows example:
+sdk.dir=C\:\\Users\\YOUR_USERNAME\\AppData\\Local\\Android\\Sdk
+
+# ATAK Gradle plugin JAR location
+# Change this to wherever you store atak-gradle-takdev.jar
+takdev.plugin=C\:\\path\\to\\atak-gradle-takdev.jar
+
+# Optional: debug signing config
+# Usually Android Studio creates this automatically at:
+# C:\Users\YOUR_USERNAME\.android\debug.keystore
+takDebugKeyFile=C\:\\Users\\YOUR_USERNAME\\.android\\debug.keystore
+takDebugKeyFilePassword=android
+takDebugKeyAlias=androiddebugkey
+takDebugKeyPassword=android
+
+# Optional: temporary release config for local development only
+takReleaseKeyFile=C\:\\Users\\YOUR_USERNAME\\.android\\debug.keystore
+takReleaseKeyFilePassword=android
+takReleaseKeyAlias=androiddebugkey
+takReleaseKeyPassword=android

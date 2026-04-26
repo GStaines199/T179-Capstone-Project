@@ -61,7 +61,7 @@ buildscript {
         //}
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.0.4'
+        classpath 'com.android.tools.build:gradle:7.4.2'
         if(isDevKitEnabled()) {
             classpath "com.atakmap.gradle:atak-gradle-takdev:${takdevVersion}"
         } else {
@@ -87,7 +87,6 @@ apply plugin: 'atak-takdev-plugin'
 
 android {
     compileSdkVersion 26
-    buildToolsVersion "30.0.2"
 
     dexOptions {
         jumboMode = true
@@ -233,5 +232,6 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
 }
 

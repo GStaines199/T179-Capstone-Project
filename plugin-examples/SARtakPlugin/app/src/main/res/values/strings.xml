@@ -1,10 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App -->
-    <string name="app_name">Plugin Template</string>
+    <string name="app_name">SARtak</string>
     <!-- description -->
-    <string name="app_desc">This plugin demonstrate bare bones plugin UI, and may be used to start a new plugin project</string>
+    <string name="app_desc">Search and rescue field coordination tools for ATAK.</string>
 
+    <string name="searcher_role">Searcher View</string>
+    <string name="mission_name">Operation Kestrel</string>
+    <string name="connection_status">TAK Server Connected</string>
+    <string name="assigned_grid">Grid B2</string>
+    <string name="searcher_callsign">Searcher 04</string>
+    <string name="gps_heading">GPS</string>
+    <string name="gps_coords">-27.4705, 153.0260</string>
+    <string name="line_heading">Search Line</string>
+    <string name="line_distance">14 m right of line</string>
+    <string name="spacing_heading">Spacing</string>
+    <string name="spacing_distance">Target 20 m</string>
+    <string name="quick_actions">Quick Actions</string>
+    <string name="action_mark">Mark</string>
+    <string name="action_photo">Photo</string>
+    <string name="action_alert">Alert</string>
+    <string name="action_message">Message</string>
+    <string name="team_heading">Nearby Team</string>
+    <string name="team_member_one">Searcher 03 - 18 m left - tracking</string>
+    <string name="team_member_two">Searcher 05 - 22 m right - tracking</string>
+    <string name="team_member_three">Team Lead - 96 m north - online</string>
+    <string name="area_heading">Search Area</string>
+    <string name="area_grid_status">B2 active - 42% covered</string>
+    <string name="area_tracks_status">Tracks visible for 6 searchers</string>
+    <string name="area_cleared_status">Cleared: A1, A2, B1</string>
+    <string name="show_lanes">Show Grid Overlay</string>
+    <string name="hide_lanes">Hide Grid Overlay</string>
+    <string name="grid_selected_cell">Selected Cell</string>
+    <string name="grid_no_cell">No cell selected</string>
+    <string name="grid_assignment">Assignments</string>
+    <string name="grid_select_cell">Select Current GPS Cell</string>
+    <string name="grid_mark_partial">Mark Partial</string>
+    <string name="grid_mark_complete">Mark Complete</string>
+    <string name="grid_clear_status">Clear Status</string>
+    <string name="team_size">Team Size</string>
+    <string name="team_size_decrease">-</string>
+    <string name="team_size_increase">+</string>
+    <string name="messages_heading">Messages / Alerts</string>
+    <string name="message_latest">Team Lead: Hold current line. Continue east to fence track.</string>
+    <string name="track_heading">My Track Log</string>
+    <string name="track_status">Recording - last sync 2 min ago</string>
 
 
 

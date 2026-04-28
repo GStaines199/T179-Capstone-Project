@@ -122,5 +122,32 @@
         <item name="android:textSize">@dimen/fontSize</item>
     </style>
 
+    <style name="SARtakSectionTitle">
+        <item name="android:textColor">@color/sartak_text_primary</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="SARtakLabel">
+        <item name="android:textColor">@color/sartak_text_secondary</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="SARtakValue">
+        <item name="android:textColor">@color/sartak_text_primary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="SARtakStatusValue">
+        <item name="android:textColor">@color/sartak_green</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="SARtakActionButton" parent="@style/darkButton">
+        <item name="android:minHeight">42dp</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
 
 </resources>

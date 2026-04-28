@@ -4,6 +4,14 @@
     <!-- COMMON -->
     <color name="white">#ffffff</color>
     <color name="darker_gray">#121212</color>
+    <color name="sartak_panel_bg">#202427</color>
+    <color name="sartak_panel_alt">#2B3034</color>
+    <color name="sartak_panel_stroke">#4B5359</color>
+    <color name="sartak_text_primary">#F2F5F7</color>
+    <color name="sartak_text_secondary">#B8C0C6</color>
+    <color name="sartak_green">#42C36A</color>
+    <color name="sartak_yellow">#D8B64C</color>
+    <color name="sartak_red">#D8544C</color>
 
     <!-- LED -->
 

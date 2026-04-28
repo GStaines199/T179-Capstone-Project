@@ -5,6 +5,13 @@
 //                with some examples include 3.11.0, 3.11.0.civ 3.11.1.fvey
 //
 ////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//
+// PLUGIN_VERSION is the common version name when describing the plugin.
+// ATAK_VERSION   is for the version of ATAK this plugin should be compatible
+//                with some examples include 3.11.0, 3.11.0.civ 3.11.1.fvey
+//
+////////////////////////////////////////////////////////////////////////////////
 
 buildscript {
 
@@ -90,6 +97,7 @@ android {
 
     dexOptions {
         jumboMode = true
+
     }
 
     lintOptions {
@@ -194,6 +202,10 @@ android {
 
     packagingOptions {
         exclude 'META-INF/INDEX.LIST'
+
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     sourceSets {
@@ -232,6 +244,4 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
-    implementation 'androidx.recyclerview:recyclerview:1.4.0'
 }
-

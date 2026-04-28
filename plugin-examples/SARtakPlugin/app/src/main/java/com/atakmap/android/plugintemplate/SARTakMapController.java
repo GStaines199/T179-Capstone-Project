@@ -50,7 +50,7 @@ public class SARTakMapController {
     }
 
     public SearchGridCell selectCurrentCell() {
-        SearchGridCell cell = gridManager.selectCellAt(getMapCenter());
+        SearchGridCell cell = gridManager.selectCellAt(getCurrentUserPoint());
         refreshOverlay();
         return cell;
     }
@@ -112,15 +112,15 @@ public class SARTakMapController {
         gridOverlay.render(gridManager);
     }
 
-    private GeoPoint getMapCenter() {
-        GeoPointMetaData center = mapView.getCenterPoint();
-        if (center != null && center.get() != null && center.get().isValid())
-            return center.get();
-
+    private GeoPoint getCurrentUserPoint() {
         if (mapView.getSelfMarker() != null
                 && mapView.getSelfMarker().getPoint() != null
                 && mapView.getSelfMarker().getPoint().isValid())
             return mapView.getSelfMarker().getPoint();
+
+        GeoPointMetaData center = mapView.getCenterPoint();
+        if (center != null && center.get() != null && center.get().isValid())
+            return center.get();
 
         return new GeoPoint(-27.4705, 153.0260);
     }

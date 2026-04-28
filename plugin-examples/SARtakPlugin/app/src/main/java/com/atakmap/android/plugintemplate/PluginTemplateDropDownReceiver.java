@@ -85,7 +85,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         } else if (id == R.id.select_current_cell_button) {
             mapController.selectCurrentCell();
             Toast.makeText(getMapView().getContext(),
-                    "Selected map-centre search cell", Toast.LENGTH_SHORT)
+                    "Selected current GPS search cell", Toast.LENGTH_SHORT)
                     .show();
         } else if (id == R.id.mark_partial_button) {
             mapController.markSelectedPartial();

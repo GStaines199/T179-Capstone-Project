@@ -34,7 +34,7 @@
     <string name="grid_selected_cell">Selected Cell</string>
     <string name="grid_no_cell">No cell selected</string>
     <string name="grid_assignment">Assignments</string>
-    <string name="grid_select_cell">Select Map-Centre Cell</string>
+    <string name="grid_select_cell">Select Current GPS Cell</string>
     <string name="grid_mark_partial">Mark Partial</string>
     <string name="grid_mark_complete">Mark Complete</string>
     <string name="grid_clear_status">Clear Status</string>

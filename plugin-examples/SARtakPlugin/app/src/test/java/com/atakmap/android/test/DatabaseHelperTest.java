@@ -84,7 +84,7 @@ public class DatabaseHelperTest {
         cursor.close();
         return exists;
     }
-
+    // test commit and pushes v2
     private boolean columnExists(String table, String column) {
         Cursor cursor = db.rawQuery("PRAGMA table_info(" + table + ")", null);
         int nameIndex = cursor.getColumnIndex("name");

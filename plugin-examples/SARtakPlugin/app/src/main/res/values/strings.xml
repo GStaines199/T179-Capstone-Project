@@ -38,13 +38,32 @@
     <string name="grid_mark_partial">Mark Partial</string>
     <string name="grid_mark_complete">Mark Complete</string>
     <string name="grid_clear_status">Clear Status</string>
-    <string name="team_size">Team Size</string>
-    <string name="team_size_decrease">-</string>
-    <string name="team_size_increase">+</string>
+    <string name="team_size">Assigned Lane Members</string>
+    <string name="team_size_decrease">Remove</string>
+    <string name="team_size_increase">Add</string>
+    <string name="team_roster">Team Roster</string>
+    <string name="team_alerts">Connection Alerts</string>
     <string name="messages_heading">Messages / Alerts</string>
     <string name="message_latest">Team Lead: Hold current line. Continue east to fence track.</string>
     <string name="track_heading">My Track Log</string>
     <string name="track_status">Recording - last sync 2 min ago</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_grid">Grid</string>
+    <string name="tab_team">Team</string>
+    <string name="tab_track">Track</string>
+    <string name="view_mode_label">Presentation Mode</string>
+    <string name="leader_view">Leader View</string>
+    <string name="member_view">Member View</string>
+    <string name="current_operation">Current Operation</string>
+    <string name="current_grid_info">Current Grid Info</string>
+    <string name="current_search_cell">Current Search Cell</string>
+    <string name="team_name">Team Alpha</string>
+    <string name="leader_team_actions">Leader Team Actions</string>
+    <string name="add_member">Add Member</string>
+    <string name="other_teams">Other Teams</string>
+    <string name="other_team_dropdown">Team Bravo - expand</string>
+    <string name="other_team_summary">Leader: Bravo Lead | Grid: 56J MN 123 456 | Alt: 31 m | Last ping: 1 min ago\nMembers: Bravo 02, Bravo 03, Bravo 04</string>
+    <string name="track_details">Distance: 0.84 km\nDuration: 18 min\nTrack points: 126\nAverage spacing: 20 m target</string>
 
 
 

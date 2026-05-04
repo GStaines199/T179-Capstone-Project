@@ -71,12 +71,12 @@ public class SARTakMapController {
     }
 
     public void increaseTeamSize() {
-        assignmentManager.increaseTeamSize();
+        assignmentManager.addMockMember();
         refreshOverlay();
     }
 
     public void decreaseTeamSize() {
-        assignmentManager.decreaseTeamSize();
+        assignmentManager.removeLastLaneMember();
         refreshOverlay();
     }
 
@@ -97,6 +97,14 @@ public class SARTakMapController {
     public String getAssignmentSummary() {
         return assignmentManager.describeAssignments(gridManager
                 .getSelectedCell());
+    }
+
+    public String getTeamRosterSummary() {
+        return assignmentManager.describeTeamRoster();
+    }
+
+    public String getConnectionAlertSummary() {
+        return assignmentManager.describeConnectionAlerts();
     }
 
     public boolean isGridOverlayVisible() {

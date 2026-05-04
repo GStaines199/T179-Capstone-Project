@@ -23,13 +23,37 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             .getSimpleName();
 
     public static final String SHOW_PLUGIN = "com.atakmap.android.plugintemplate.SHOW_PLUGIN";
+    private static final int TAB_HOME = 0;
+    private static final int TAB_GRID = 1;
+    private static final int TAB_TEAM = 2;
+    private static final int TAB_TRACK = 3;
+
     private final View templateView;
     private final Context pluginContext;
     private final SARTakMapController mapController;
+    private final Button homeTabButton;
+    private final Button gridTabButton;
+    private final Button teamTabButton;
+    private final Button trackTabButton;
+    private final Button roleToggleButton;
     private final Button toggleSearchAreaButton;
+    private final View homeTabContent;
+    private final View gridTabContent;
+    private final View teamTabContent;
+    private final View trackTabContent;
+    private final View leaderTeamControls;
+    private final View otherTeamsSection;
+    private final View gridStatusControls;
     private final TextView currentCellValue;
+    private final TextView homeCellValue;
     private final TextView assignmentValue;
+    private final TextView homeAssignmentValue;
     private final TextView teamSizeValue;
+    private final TextView teamRosterValue;
+    private final TextView teamAlertsValue;
+    private final TextView homeAlertsValue;
+    private final TextView currentRoleValue;
+    private boolean leaderView = true;
 
     /**************************** CONSTRUCTOR *****************************/
 
@@ -45,12 +69,35 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         templateView = PluginLayoutInflater.inflate(context,
                 R.layout.main_layout, null);
 
+        homeTabButton = templateView.findViewById(R.id.home_tab_button);
+        gridTabButton = templateView.findViewById(R.id.grid_tab_button);
+        teamTabButton = templateView.findViewById(R.id.team_tab_button);
+        trackTabButton = templateView.findViewById(R.id.track_tab_button);
+        roleToggleButton = templateView.findViewById(R.id.role_toggle_button);
         toggleSearchAreaButton = templateView
                 .findViewById(R.id.toggle_search_area_button);
+        homeTabContent = templateView.findViewById(R.id.home_tab_content);
+        gridTabContent = templateView.findViewById(R.id.grid_tab_content);
+        teamTabContent = templateView.findViewById(R.id.team_tab_content);
+        trackTabContent = templateView.findViewById(R.id.track_tab_content);
+        leaderTeamControls = templateView.findViewById(R.id.leader_team_controls);
+        otherTeamsSection = templateView.findViewById(R.id.other_teams_section);
+        gridStatusControls = templateView.findViewById(R.id.grid_status_controls);
         currentCellValue = templateView.findViewById(R.id.current_cell_value);
+        homeCellValue = templateView.findViewById(R.id.home_cell_value);
         assignmentValue = templateView.findViewById(R.id.assignment_value);
+        homeAssignmentValue = templateView.findViewById(R.id.home_assignment_value);
         teamSizeValue = templateView.findViewById(R.id.team_size_value);
+        teamRosterValue = templateView.findViewById(R.id.team_roster_value);
+        teamAlertsValue = templateView.findViewById(R.id.team_alerts_value);
+        homeAlertsValue = templateView.findViewById(R.id.home_alerts_value);
+        currentRoleValue = templateView.findViewById(R.id.current_role_value);
 
+        homeTabButton.setOnClickListener(this);
+        gridTabButton.setOnClickListener(this);
+        teamTabButton.setOnClickListener(this);
+        trackTabButton.setOnClickListener(this);
+        roleToggleButton.setOnClickListener(this);
         toggleSearchAreaButton.setOnClickListener(this);
         templateView.findViewById(R.id.select_current_cell_button)
                 .setOnClickListener(this);
@@ -64,6 +111,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .setOnClickListener(this);
         templateView.findViewById(R.id.team_size_plus_button)
                 .setOnClickListener(this);
+        showTab(TAB_HOME);
+        refreshRoleUi();
         refreshGridUi();
 
     }
@@ -77,7 +126,21 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     @Override
     public void onClick(View view) {
         int id = view.getId();
-        if (id == R.id.toggle_search_area_button) {
+        if (id == R.id.home_tab_button) {
+            showTab(TAB_HOME);
+        } else if (id == R.id.grid_tab_button) {
+            showTab(TAB_GRID);
+        } else if (id == R.id.team_tab_button) {
+            showTab(TAB_TEAM);
+        } else if (id == R.id.track_tab_button) {
+            showTab(TAB_TRACK);
+        } else if (id == R.id.role_toggle_button) {
+            leaderView = !leaderView;
+            refreshRoleUi();
+            Toast.makeText(getMapView().getContext(), leaderView
+                    ? "Leader presentation view"
+                    : "Member presentation view", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.toggle_search_area_button) {
             boolean visible = mapController.toggleGridOverlay();
             Toast.makeText(getMapView().getContext(), visible
                     ? "SARtak search grid shown"
@@ -102,16 +165,51 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         refreshGridUi();
     }
 
+    private void showTab(int tab) {
+        homeTabContent.setVisibility(tab == TAB_HOME ? View.VISIBLE : View.GONE);
+        gridTabContent.setVisibility(tab == TAB_GRID ? View.VISIBLE : View.GONE);
+        teamTabContent.setVisibility(tab == TAB_TEAM ? View.VISIBLE : View.GONE);
+        trackTabContent.setVisibility(tab == TAB_TRACK ? View.VISIBLE : View.GONE);
+
+        homeTabButton.setEnabled(tab != TAB_HOME);
+        gridTabButton.setEnabled(tab != TAB_GRID);
+        teamTabButton.setEnabled(tab != TAB_TEAM);
+        trackTabButton.setEnabled(tab != TAB_TRACK);
+    }
+
+    private void refreshRoleUi() {
+        roleToggleButton.setText(leaderView
+                ? R.string.leader_view
+                : R.string.member_view);
+        currentRoleValue.setText(leaderView
+                ? R.string.leader_view
+                : R.string.member_view);
+
+        int leaderVisibility = leaderView ? View.VISIBLE : View.GONE;
+        leaderTeamControls.setVisibility(leaderVisibility);
+        otherTeamsSection.setVisibility(leaderVisibility);
+        gridStatusControls.setVisibility(leaderVisibility);
+    }
+
     private void refreshGridUi() {
         toggleSearchAreaButton.setText(mapController.isGridOverlayVisible()
                 ? R.string.hide_lanes
                 : R.string.show_lanes);
         String status = mapController.getSelectedCellStatus();
-        currentCellValue.setText(status.length() == 0
+        String cellStatus = status.length() == 0
                 ? mapController.getSelectedCellId()
-                : mapController.getSelectedCellId() + " - " + status);
-        assignmentValue.setText(mapController.getAssignmentSummary());
+                : mapController.getSelectedCellId() + " - " + status;
+        String assignmentSummary = mapController.getAssignmentSummary();
+        String alertSummary = mapController.getConnectionAlertSummary();
+
+        currentCellValue.setText(cellStatus);
+        homeCellValue.setText(cellStatus);
+        assignmentValue.setText(assignmentSummary);
+        homeAssignmentValue.setText(assignmentSummary);
         teamSizeValue.setText(String.valueOf(mapController.getTeamSize()));
+        teamRosterValue.setText(mapController.getTeamRosterSummary());
+        teamAlertsValue.setText(alertSummary);
+        homeAlertsValue.setText(alertSummary);
     }
 
     /**************************** INHERITED METHODS *****************************/

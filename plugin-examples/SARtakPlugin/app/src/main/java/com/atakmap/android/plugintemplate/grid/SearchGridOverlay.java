@@ -147,7 +147,7 @@ public class SearchGridOverlay {
     }
 
     private void renderSelectedCellLanes(SearchGridCell cell) {
-        int lanes = assignmentManager.getTeamSize();
+        int lanes = assignmentManager.getLaneMemberCount();
         double laneWidth = (cell.getEast() - cell.getWest()) / lanes;
         // The only subdivision SARtak creates inside a base 100 m cell is the
         // search-lane split for the current team size.

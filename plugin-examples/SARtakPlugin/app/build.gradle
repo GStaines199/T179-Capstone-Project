@@ -233,7 +233,7 @@ android {
 
     }
 
-    defaultConfig {
+     defaultConfig {
         minSdkVersion 21
         ndk {
             abiFilters "armeabi-v7a", "arm64-v8a", "x86"
@@ -244,6 +244,10 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
+
+    // Room Database (SDK 26 compatible version)
+    implementation 'androidx.room:room-runtime:2.3.0'
+    annotationProcessor 'androidx.room:room-compiler:2.3.0'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:4.11.0'

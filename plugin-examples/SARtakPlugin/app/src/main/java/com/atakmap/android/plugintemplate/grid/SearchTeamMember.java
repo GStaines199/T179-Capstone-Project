@@ -2,6 +2,11 @@ package com.atakmap.android.plugintemplate.grid;
 
 public class SearchTeamMember {
 
+    public enum TeamRole {
+        TEAM_LEADER,
+        SEARCHER
+    }
+
     public enum MembershipStatus {
         ACTIVE_MEMBER,
         EXCLUDED_FROM_LANES,
@@ -17,30 +22,44 @@ public class SearchTeamMember {
 
     private final String uniqueId;
     private final String callsign;
-    private final boolean teamLeader;
+    private final TeamRole role;
     private final String colorName;
+    private final int displayColor;
+    private final double latitude;
+    private final double longitude;
     private MembershipStatus membershipStatus;
     private ConnectionStatus connectionStatus;
+    private int laneNumber;
     private String gpsCoordinates;
     private String altitude;
     private String currentGridCell;
     private String lastPing;
+    private String distanceFromYou;
+    private String distanceFromSearchLine;
 
-    public SearchTeamMember(String uniqueId, String callsign,
-            boolean teamLeader, String colorName,
+    public SearchTeamMember(String uniqueId, String callsign, TeamRole role,
+            String colorName, int displayColor,
             MembershipStatus membershipStatus,
-            ConnectionStatus connectionStatus, String gpsCoordinates,
-            String altitude, String currentGridCell, String lastPing) {
+            ConnectionStatus connectionStatus, int laneNumber, double latitude,
+            double longitude, String gpsCoordinates, String altitude,
+            String currentGridCell, String lastPing, String distanceFromYou,
+            String distanceFromSearchLine) {
         this.uniqueId = uniqueId;
         this.callsign = callsign;
-        this.teamLeader = teamLeader;
+        this.role = role;
         this.colorName = colorName;
+        this.displayColor = displayColor;
+        this.latitude = latitude;
+        this.longitude = longitude;
         this.membershipStatus = membershipStatus;
         this.connectionStatus = connectionStatus;
+        this.laneNumber = laneNumber;
         this.gpsCoordinates = gpsCoordinates;
         this.altitude = altitude;
         this.currentGridCell = currentGridCell;
         this.lastPing = lastPing;
+        this.distanceFromYou = distanceFromYou;
+        this.distanceFromSearchLine = distanceFromSearchLine;
     }
 
     public String getUniqueId() {
@@ -51,12 +70,28 @@ public class SearchTeamMember {
         return callsign;
     }
 
+    public TeamRole getRole() {
+        return role;
+    }
+
     public boolean isTeamLeader() {
-        return teamLeader;
+        return role == TeamRole.TEAM_LEADER;
     }
 
     public String getColorName() {
         return colorName;
+    }
+
+    public int getDisplayColor() {
+        return displayColor;
+    }
+
+    public double getLatitude() {
+        return latitude;
+    }
+
+    public double getLongitude() {
+        return longitude;
     }
 
     public MembershipStatus getMembershipStatus() {
@@ -69,6 +104,10 @@ public class SearchTeamMember {
 
     public ConnectionStatus getConnectionStatus() {
         return connectionStatus;
+    }
+
+    public int getLaneNumber() {
+        return laneNumber;
     }
 
     public String getGpsCoordinates() {
@@ -87,8 +126,26 @@ public class SearchTeamMember {
         return lastPing;
     }
 
+    public String getDistanceFromYou() {
+        return distanceFromYou;
+    }
+
+    public String getDistanceFromSearchLine() {
+        return distanceFromSearchLine;
+    }
+
+    public String getRoleLabel() {
+        return isTeamLeader() ? "Team Leader" : "Searcher";
+    }
+
+    public String getLaneLabel() {
+        if (isTeamLeader())
+            return "Leader";
+        return contributesLane() ? "Lane " + laneNumber : "Not assigned";
+    }
+
     public boolean contributesLane() {
-        return !teamLeader
+        return !isTeamLeader()
                 && membershipStatus == MembershipStatus.ACTIVE_MEMBER;
     }
 

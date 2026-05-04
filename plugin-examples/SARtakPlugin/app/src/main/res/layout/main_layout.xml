@@ -486,6 +486,7 @@
 
                 <TextView
                     style="@style/SARtakSectionTitle"
+                    android:id="@+id/team_name_value"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/team_name" />
@@ -497,15 +498,12 @@
                     android:layout_marginTop="6dp"
                     android:text="@string/team_roster" />
 
-                <TextView
-                    android:id="@+id/team_roster_value"
-                    style="@style/SARtakValue"
+                <LinearLayout
+                    android:id="@+id/team_member_cards_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:background="@drawable/sartak_status_green"
-                    android:padding="6dp"
-                    android:text="@string/team_member_one" />
+                    android:orientation="vertical" />
 
                 <TextView
                     style="@style/SARtakLabel"
@@ -523,6 +521,77 @@
                     android:background="@drawable/sartak_status_yellow"
                     android:padding="6dp"
                     android:text="@string/team_member_two" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/team_marker_visibility_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/sartak_panel"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/SARtakSectionTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/team_marker_visibility" />
+
+                <TextView
+                    android:id="@+id/team_marker_visibility_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/team_marker_mode_team" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/marker_mode_me_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/team_marker_mode_me" />
+
+                    <Button
+                        android:id="@+id/marker_mode_team_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="6dp"
+                        android:layout_weight="1"
+                        android:text="@string/team_marker_mode_team" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/marker_mode_leaders_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/team_marker_mode_leaders" />
+
+                    <Button
+                        android:id="@+id/marker_mode_all_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="6dp"
+                        android:layout_weight="1"
+                        android:text="@string/team_marker_mode_all" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -617,6 +686,7 @@
                     android:text="@string/track_heading" />
 
                 <TextView
+                    android:id="@+id/track_status_value"
                     style="@style/SARtakStatusValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -624,11 +694,36 @@
                     android:text="@string/track_status" />
 
                 <TextView
+                    android:id="@+id/track_details_value"
                     style="@style/SARtakValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/track_details" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/track_record_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/track_pause" />
+
+                    <Button
+                        android:id="@+id/track_visibility_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="6dp"
+                        android:layout_weight="1"
+                        android:text="@string/track_hide" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 

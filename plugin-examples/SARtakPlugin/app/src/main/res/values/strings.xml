@@ -64,6 +64,15 @@
     <string name="other_team_dropdown">Team Bravo - expand</string>
     <string name="other_team_summary">Leader: Bravo Lead | Grid: 56J MN 123 456 | Alt: 31 m | Last ping: 1 min ago\nMembers: Bravo 02, Bravo 03, Bravo 04</string>
     <string name="track_details">Distance: 0.84 km\nDuration: 18 min\nTrack points: 126\nAverage spacing: 20 m target</string>
+    <string name="team_marker_visibility">Map Marker Visibility</string>
+    <string name="team_marker_mode_me">Me Only</string>
+    <string name="team_marker_mode_team">My Team</string>
+    <string name="team_marker_mode_leaders">Leaders</string>
+    <string name="team_marker_mode_all">All Visible</string>
+    <string name="track_pause">Pause</string>
+    <string name="track_resume">Resume</string>
+    <string name="track_hide">Hide Track</string>
+    <string name="track_show">Show Track</string>
 
 
 

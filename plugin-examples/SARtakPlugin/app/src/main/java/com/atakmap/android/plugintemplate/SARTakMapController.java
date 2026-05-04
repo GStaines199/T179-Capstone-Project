@@ -12,8 +12,15 @@ import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
+import com.atakmap.android.plugintemplate.grid.SearchTeamMarkerOverlay;
+import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
+import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
+import com.atakmap.android.plugintemplate.grid.SearchTrackOverlay;
+import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.GeoPointMetaData;
+
+import java.util.List;
 
 public class SARTakMapController {
 
@@ -21,6 +28,9 @@ public class SARTakMapController {
     private final SearchGridManager gridManager;
     private final SearchGridOverlay gridOverlay;
     private final SearchPartyAssignmentManager assignmentManager;
+    private final SearchTeamMarkerOverlay teamMarkerOverlay;
+    private final SearchTrackManager trackManager;
+    private final SearchTrackOverlay trackOverlay;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
 
     public SARTakMapController(MapView mapView, Context pluginContext) {
@@ -31,6 +41,10 @@ public class SARTakMapController {
         this.gridManager = new SearchGridManager(converter, stateStore);
         this.gridOverlay = new SearchGridOverlay(mapView, converter,
                 assignmentManager);
+        this.teamMarkerOverlay = new SearchTeamMarkerOverlay(mapView,
+                assignmentManager);
+        this.trackManager = new SearchTrackManager();
+        this.trackOverlay = new SearchTrackOverlay(mapView);
         this.mapEventListener = new MapEventDispatcher.MapEventDispatchListener() {
             @Override
             public void onMapEvent(MapEvent event) {
@@ -38,6 +52,8 @@ public class SARTakMapController {
             }
         };
         registerMapListeners();
+        teamMarkerOverlay.render();
+        trackOverlay.render();
     }
 
     public boolean toggleGridOverlay() {
@@ -72,11 +88,13 @@ public class SARTakMapController {
 
     public void increaseTeamSize() {
         assignmentManager.addMockMember();
+        teamMarkerOverlay.render();
         refreshOverlay();
     }
 
     public void decreaseTeamSize() {
         assignmentManager.removeLastLaneMember();
+        teamMarkerOverlay.render();
         refreshOverlay();
     }
 
@@ -103,8 +121,69 @@ public class SARTakMapController {
         return assignmentManager.describeTeamRoster();
     }
 
+    public String getTeamName() {
+        return assignmentManager.getTeamName();
+    }
+
+    public String getTeamId() {
+        return assignmentManager.getTeamId();
+    }
+
+    public List<SearchTeamMember> getTeamMembers() {
+        return assignmentManager.getVisibleMembers();
+    }
+
+    public void setTeamMarkerVisibilityMode(TeamMarkerVisibilityMode mode) {
+        teamMarkerOverlay.setVisibilityMode(mode);
+    }
+
+    public String getTeamMarkerVisibilityLabel() {
+        return teamMarkerOverlay.getVisibilityMode().getLabel();
+    }
+
     public String getConnectionAlertSummary() {
         return assignmentManager.describeConnectionAlerts();
+    }
+
+    public SearchTeamMember selectTeamMember(String uniqueId) {
+        SearchTeamMember member = assignmentManager.findMemberById(uniqueId);
+        if (member == null)
+            return null;
+
+        teamMarkerOverlay.setSelectedMemberId(uniqueId);
+        mapView.getMapController().panTo(new GeoPoint(member.getLatitude(),
+                member.getLongitude()), true);
+        return member;
+    }
+
+    public String getSelectedTeamMemberId() {
+        return teamMarkerOverlay.getSelectedMemberId();
+    }
+
+    public boolean toggleTrackRecording() {
+        return trackManager.toggleRecording();
+    }
+
+    public boolean toggleTrackVisibility() {
+        boolean visible = trackManager.toggleVisible();
+        trackOverlay.setVisible(visible);
+        return visible;
+    }
+
+    public String getTrackStatusSummary() {
+        return trackManager.getStatusSummary();
+    }
+
+    public String getTrackDetailsSummary() {
+        return trackManager.getDetailsSummary();
+    }
+
+    public boolean isTrackRecording() {
+        return trackManager.isRecording();
+    }
+
+    public boolean isTrackVisible() {
+        return trackManager.isVisible();
     }
 
     public boolean isGridOverlayVisible() {
@@ -114,6 +193,8 @@ public class SARTakMapController {
     public void dispose() {
         unregisterMapListeners();
         gridOverlay.setVisible(false);
+        teamMarkerOverlay.setVisible(false);
+        trackOverlay.setVisible(false);
     }
 
     private void refreshOverlay() {

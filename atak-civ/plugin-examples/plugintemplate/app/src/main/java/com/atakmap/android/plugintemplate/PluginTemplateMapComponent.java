@@ -8,7 +8,6 @@ import com.atakmap.android.ipc.AtakBroadcast.DocumentedIntentFilter;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.dropdown.DropDownMapComponent;
 
-import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.android.plugintemplate.plugin.R;
 
@@ -20,24 +19,22 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
 
     private PluginTemplateDropDownReceiver ddr;
 
-    private DatabaseHelper database;
-
     public void onCreate(final Context context, Intent intent,
-                         final MapView view) {
+            final MapView view) {
+
         context.setTheme(R.style.ATAKPluginTheme);
         super.onCreate(context, intent, view);
         pluginContext = context;
 
-        // Initialise database
-        database = DatabaseHelper.getInstance(context);
-
-        ddr = new PluginTemplateDropDownReceiver(view, context);
+        ddr = new PluginTemplateDropDownReceiver(
+                view, context);
 
         Log.d(TAG, "registering the plugin filter");
         DocumentedIntentFilter ddFilter = new DocumentedIntentFilter();
         ddFilter.addAction(PluginTemplateDropDownReceiver.SHOW_PLUGIN);
         registerDropDownReceiver(ddr, ddFilter);
     }
+
     @Override
     protected void onDestroyImpl(Context context, MapView view) {
         super.onDestroyImpl(context, view);

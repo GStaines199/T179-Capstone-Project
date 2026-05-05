@@ -1,7 +1,9 @@
 
 package com.atakmap.android.plugintemplate;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -49,6 +51,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button markerModeAllButton;
     private final Button trackRecordButton;
     private final Button trackVisibilityButton;
+    private final Button startSearchLineButton;
+    private final Button pauseSearchLineButton;
+    private final Button searchLineColourButton;
     private final View homeTabContent;
     private final View gridTabContent;
     private final View teamTabContent;
@@ -56,10 +61,14 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final View leaderTeamControls;
     private final View otherTeamsSection;
     private final View gridStatusControls;
+    private final View searchLineControls;
     private final TextView currentCellValue;
     private final TextView homeCellValue;
     private final TextView assignmentValue;
     private final TextView homeAssignmentValue;
+    private final TextView homeSearchLineValue;
+    private final TextView searchLineStatusValue;
+    private final TextView searchLineMembersValue;
     private final TextView teamSizeValue;
     private final TextView teamNameValue;
     private final LinearLayout teamMemberCardsContainer;
@@ -104,6 +113,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.track_record_button);
         trackVisibilityButton = templateView
                 .findViewById(R.id.track_visibility_button);
+        startSearchLineButton = templateView
+                .findViewById(R.id.start_search_line_button);
+        pauseSearchLineButton = templateView
+                .findViewById(R.id.pause_search_line_button);
+        searchLineColourButton = templateView
+                .findViewById(R.id.search_line_colour_button);
         homeTabContent = templateView.findViewById(R.id.home_tab_content);
         gridTabContent = templateView.findViewById(R.id.grid_tab_content);
         teamTabContent = templateView.findViewById(R.id.team_tab_content);
@@ -111,10 +126,17 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         leaderTeamControls = templateView.findViewById(R.id.leader_team_controls);
         otherTeamsSection = templateView.findViewById(R.id.other_teams_section);
         gridStatusControls = templateView.findViewById(R.id.grid_status_controls);
+        searchLineControls = templateView.findViewById(R.id.search_line_controls);
         currentCellValue = templateView.findViewById(R.id.current_cell_value);
         homeCellValue = templateView.findViewById(R.id.home_cell_value);
         assignmentValue = templateView.findViewById(R.id.assignment_value);
         homeAssignmentValue = templateView.findViewById(R.id.home_assignment_value);
+        homeSearchLineValue = templateView
+                .findViewById(R.id.home_search_line_value);
+        searchLineStatusValue = templateView
+                .findViewById(R.id.search_line_status_value);
+        searchLineMembersValue = templateView
+                .findViewById(R.id.search_line_members_value);
         teamSizeValue = templateView.findViewById(R.id.team_size_value);
         teamNameValue = templateView.findViewById(R.id.team_name_value);
         teamMemberCardsContainer = templateView
@@ -139,6 +161,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         markerModeAllButton.setOnClickListener(this);
         trackRecordButton.setOnClickListener(this);
         trackVisibilityButton.setOnClickListener(this);
+        startSearchLineButton.setOnClickListener(this);
+        pauseSearchLineButton.setOnClickListener(this);
+        searchLineColourButton.setOnClickListener(this);
         templateView.findViewById(R.id.select_current_cell_button)
                 .setOnClickListener(this);
         templateView.findViewById(R.id.mark_partial_button)
@@ -203,6 +228,23 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             Toast.makeText(getMapView().getContext(), visible
                     ? "Track shown on map"
                     : "Track hidden from map", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.start_search_line_button) {
+            if (mapController.isSearchLineStarted()) {
+                mapController.endSearchLine();
+                Toast.makeText(getMapView().getContext(),
+                        "Search line ended", Toast.LENGTH_SHORT).show();
+            } else {
+                mapController.startSearchLine();
+                Toast.makeText(getMapView().getContext(),
+                        "Search line started", Toast.LENGTH_SHORT).show();
+            }
+        } else if (id == R.id.pause_search_line_button) {
+            handlePauseResumeSearchLine();
+        } else if (id == R.id.search_line_colour_button) {
+            String label = mapController.cycleSearchLineColor();
+            Toast.makeText(getMapView().getContext(),
+                    "Search line colour: " + label, Toast.LENGTH_SHORT)
+                    .show();
         } else if (id == R.id.select_current_cell_button) {
             mapController.selectCurrentCell();
             Toast.makeText(getMapView().getContext(),
@@ -247,6 +289,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         leaderTeamControls.setVisibility(leaderVisibility);
         otherTeamsSection.setVisibility(leaderVisibility);
         gridStatusControls.setVisibility(leaderVisibility);
+        searchLineControls.setVisibility(leaderVisibility);
     }
 
     private void refreshGridUi() {
@@ -258,12 +301,17 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 ? mapController.getSelectedCellId()
                 : mapController.getSelectedCellId() + " - " + status;
         String assignmentSummary = mapController.getAssignmentSummary();
-        String alertSummary = mapController.getConnectionAlertSummary();
+        String alertSummary = mapController.getSearchLineWarningSummary();
+        String searchLineSummary = mapController.getSearchLineSummary();
+        String searchLineMembers = mapController.getSearchLineMemberSummary();
 
         currentCellValue.setText(cellStatus);
         homeCellValue.setText(cellStatus);
         assignmentValue.setText(assignmentSummary);
         homeAssignmentValue.setText(assignmentSummary);
+        homeSearchLineValue.setText(searchLineSummary);
+        searchLineStatusValue.setText(searchLineSummary);
+        searchLineMembersValue.setText(searchLineMembers);
         teamSizeValue.setText(String.valueOf(mapController.getTeamSize()));
         teamNameValue.setText(mapController.getTeamName() + " | "
                 + mapController.getTeamId());
@@ -280,6 +328,57 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         trackVisibilityButton.setText(mapController.isTrackVisible()
                 ? R.string.track_hide
                 : R.string.track_show);
+        startSearchLineButton.setText(mapController.isSearchLineStarted()
+                ? R.string.search_line_end
+                : R.string.search_line_start);
+        pauseSearchLineButton.setText(mapController.isSearchLinePaused()
+                ? R.string.search_line_resume
+                : R.string.search_line_pause);
+        pauseSearchLineButton.setEnabled(mapController.isSearchLineStarted());
+        searchLineColourButton.setText("Line Colour: "
+                + mapController.getSearchLineColorLabel());
+    }
+
+    private void handlePauseResumeSearchLine() {
+        if (!mapController.isSearchLineStarted()) {
+            Toast.makeText(getMapView().getContext(),
+                    "Start the search line first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!mapController.isSearchLinePaused()) {
+            mapController.pauseSearchLine();
+            Toast.makeText(getMapView().getContext(),
+                    "Search line paused", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        boolean resumed = mapController.resumeSearchLine();
+        if (resumed) {
+            Toast.makeText(getMapView().getContext(),
+                    "Search line resumed", Toast.LENGTH_SHORT).show();
+        } else {
+            showForceResumeDialog();
+        }
+    }
+
+    private void showForceResumeDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Restart search line?")
+                .setMessage(mapController.getSearchLineRestartPrompt())
+                .setPositiveButton("Force resume",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.forceResumeSearchLine();
+                                Toast.makeText(getMapView().getContext(),
+                                        "Search line force resumed",
+                                        Toast.LENGTH_SHORT).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Wait", null)
+                .show();
     }
 
     private void setTeamMarkerMode(TeamMarkerVisibilityMode mode) {
@@ -365,7 +464,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + " | Last ping: " + member.getLastPing(), 13, false));
         card.addView(createCardText("From you: "
                 + member.getDistanceFromYou() + " | From line: "
-                + member.getDistanceFromSearchLine(), 13, false));
+                + mapController.getMemberSearchLineSummary(
+                        member.getUniqueId()), 13, false));
         card.addView(createCardText("Membership: "
                 + member.getMembershipStatus().name(), 12, false));
         return card;

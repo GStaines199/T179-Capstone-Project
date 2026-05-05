@@ -162,6 +162,22 @@
                     android:layout_marginTop="4dp"
                     android:text="@string/grid_no_cell" />
 
+                <TextView
+                    style="@style/SARtakLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/search_line_heading" />
+
+                <TextView
+                    android:id="@+id/home_search_line_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/sartak_status_yellow"
+                    android:padding="6dp"
+                    android:text="@string/search_line_not_started" />
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -406,6 +422,69 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/grid_no_cell" />
+
+                <TextView
+                    style="@style/SARtakLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/search_line_heading" />
+
+                <TextView
+                    android:id="@+id/search_line_status_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/sartak_status_yellow"
+                    android:padding="6dp"
+                    android:text="@string/search_line_not_started" />
+
+                <TextView
+                    android:id="@+id/search_line_members_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/search_line_member_empty" />
+
+                <LinearLayout
+                    android:id="@+id/search_line_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/start_search_line_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/search_line_start" />
+
+                        <Button
+                            android:id="@+id/pause_search_line_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:layout_weight="1"
+                            android:text="@string/search_line_pause" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/search_line_colour_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/search_line_colour" />
+                </LinearLayout>
 
                 <TextView
                     style="@style/SARtakLabel"

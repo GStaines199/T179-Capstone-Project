@@ -25,8 +25,8 @@ public class SearchTeamMember {
     private final TeamRole role;
     private final String colorName;
     private final int displayColor;
-    private final double latitude;
-    private final double longitude;
+    private double latitude;
+    private double longitude;
     private MembershipStatus membershipStatus;
     private ConnectionStatus connectionStatus;
     private int laneNumber;
@@ -110,6 +110,10 @@ public class SearchTeamMember {
         return laneNumber;
     }
 
+    public void setLaneNumber(int laneNumber) {
+        this.laneNumber = laneNumber;
+    }
+
     public String getGpsCoordinates() {
         return gpsCoordinates;
     }
@@ -134,19 +138,30 @@ public class SearchTeamMember {
         return distanceFromSearchLine;
     }
 
+    public void updatePosition(double latitude, double longitude,
+            String gpsCoordinates, String currentGridCell,
+            String distanceFromYou, String distanceFromSearchLine) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.gpsCoordinates = gpsCoordinates;
+        this.currentGridCell = currentGridCell;
+        this.distanceFromYou = distanceFromYou;
+        this.distanceFromSearchLine = distanceFromSearchLine;
+    }
+
     public String getRoleLabel() {
         return isTeamLeader() ? "Team Leader" : "Searcher";
     }
 
     public String getLaneLabel() {
-        if (isTeamLeader())
-            return "Leader";
-        return contributesLane() ? "Lane " + laneNumber : "Not assigned";
+        if (!contributesLane())
+            return "Not assigned";
+        return isTeamLeader() ? "Lane " + laneNumber + " (Leader)"
+                : "Lane " + laneNumber;
     }
 
     public boolean contributesLane() {
-        return !isTeamLeader()
-                && membershipStatus == MembershipStatus.ACTIVE_MEMBER;
+        return membershipStatus == MembershipStatus.ACTIVE_MEMBER;
     }
 
     public boolean needsConnectionAlert() {

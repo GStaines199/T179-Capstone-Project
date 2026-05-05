@@ -10,8 +10,6 @@ import java.util.Locale;
 public class SearchLineManager {
 
     public static final double SLOW_DOWN_THRESHOLD_METERS = 8.0;
-    public static final double RETURN_MARK_TOLERANCE_METERS = 10.0;
-
     private final GridCoordinateConverter converter;
     private final SearchPartyAssignmentManager assignmentManager;
     private SearchLineState state = SearchLineState.NOT_STARTED;
@@ -22,6 +20,7 @@ public class SearchLineManager {
     private long linePausedAt;
     private String restartWarning = "Search line not started";
     private SearchLineColorOption colorOption = SearchLineColorOption.CYAN;
+    private double returnMarkToleranceMeters = 10.0;
 
     public SearchLineManager(GridCoordinateConverter converter,
             SearchPartyAssignmentManager assignmentManager) {
@@ -102,8 +101,20 @@ public class SearchLineManager {
         return colorOption;
     }
 
+    public void setColorOption(SearchLineColorOption colorOption) {
+        this.colorOption = colorOption;
+    }
+
     public SearchLineColorOption getColorOption() {
         return colorOption;
+    }
+
+    public void setReturnMarkToleranceMeters(double toleranceMeters) {
+        returnMarkToleranceMeters = Math.max(1.0, toleranceMeters);
+    }
+
+    public double getReturnMarkToleranceMeters() {
+        return returnMarkToleranceMeters;
     }
 
     public SearchGridCell getActiveCell() {
@@ -139,6 +150,25 @@ public class SearchLineManager {
             return null;
         return converter.toGeoPoint(zoneDescriptor, activeCell.getEast(),
                 lineNorthing);
+    }
+
+    public GeoPoint getDirectionStart() {
+        if (activeCell == null)
+            return null;
+        double centerEasting = (activeCell.getWest() + activeCell.getEast())
+                / 2.0;
+        return converter.toGeoPoint(zoneDescriptor, centerEasting,
+                lineNorthing);
+    }
+
+    public GeoPoint getDirectionEnd() {
+        if (activeCell == null)
+            return null;
+        double centerEasting = (activeCell.getWest() + activeCell.getEast())
+                / 2.0;
+        double northing = clamp(lineNorthing + 14.0, activeCell.getSouth(),
+                activeCell.getNorth());
+        return converter.toGeoPoint(zoneDescriptor, centerEasting, northing);
     }
 
     public List<SearchLineMemberStatus> getMemberStatuses() {
@@ -248,7 +278,7 @@ public class SearchLineManager {
         for (SearchLineMemberStatus status : getMemberStatuses()) {
             if (status.getMember().isTeamLeader())
                 continue;
-            if (status.isOffReturnMark(RETURN_MARK_TOLERANCE_METERS))
+            if (status.isOffReturnMark(getReturnMarkToleranceMeters()))
                 offMarks.add(status);
         }
         return offMarks;

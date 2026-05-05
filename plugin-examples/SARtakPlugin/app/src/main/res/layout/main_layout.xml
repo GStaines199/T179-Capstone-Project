@@ -424,6 +424,16 @@
                     android:text="@string/grid_no_cell" />
 
                 <TextView
+                    android:id="@+id/grid_progress_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/sartak_status_green"
+                    android:padding="6dp"
+                    android:text="@string/grid_progress_empty" />
+
+                <TextView
                     style="@style/SARtakLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -477,13 +487,36 @@
                             android:text="@string/search_line_pause" />
                     </LinearLayout>
 
+                    <TextView
+                        style="@style/SARtakLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/search_line_colour" />
+
                     <Button
                         android:id="@+id/search_line_colour_button"
                         style="@style/SARtakActionButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
+                        android:layout_marginTop="4dp"
                         android:text="@string/search_line_colour" />
+
+                    <TextView
+                        style="@style/SARtakLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/search_line_tolerance" />
+
+                    <EditText
+                        android:id="@+id/search_line_tolerance_input"
+                        style="@style/ATAKEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="numberDecimal"
+                        android:singleLine="true"
+                        android:textColor="@color/sartak_text_primary" />
                 </LinearLayout>
 
                 <TextView
@@ -623,6 +656,14 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:text="@string/team_marker_mode_team" />
+
+                <Button
+                    android:id="@+id/toggle_callsigns_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/hide_callsigns" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

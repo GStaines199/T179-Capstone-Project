@@ -82,6 +82,10 @@
     <string name="search_line_resume">Resume</string>
     <string name="search_line_force">Force Resume</string>
     <string name="search_line_colour">Line Colour</string>
+    <string name="search_line_tolerance">Restart Tolerance (m)</string>
+    <string name="grid_progress_empty">Select the current GPS cell to show grid progress.</string>
+    <string name="hide_callsigns">Hide Callsigns</string>
+    <string name="show_callsigns">Show Callsigns</string>
 
 
 

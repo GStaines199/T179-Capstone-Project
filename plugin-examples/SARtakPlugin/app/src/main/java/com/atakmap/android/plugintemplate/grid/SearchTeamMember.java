@@ -27,6 +27,7 @@ public class SearchTeamMember {
     private final int displayColor;
     private double latitude;
     private double longitude;
+    private double headingDegrees;
     private MembershipStatus membershipStatus;
     private ConnectionStatus connectionStatus;
     private int laneNumber;
@@ -41,9 +42,9 @@ public class SearchTeamMember {
             String colorName, int displayColor,
             MembershipStatus membershipStatus,
             ConnectionStatus connectionStatus, int laneNumber, double latitude,
-            double longitude, String gpsCoordinates, String altitude,
-            String currentGridCell, String lastPing, String distanceFromYou,
-            String distanceFromSearchLine) {
+            double longitude, double headingDegrees, String gpsCoordinates,
+            String altitude, String currentGridCell, String lastPing,
+            String distanceFromYou, String distanceFromSearchLine) {
         this.uniqueId = uniqueId;
         this.callsign = callsign;
         this.role = role;
@@ -51,6 +52,7 @@ public class SearchTeamMember {
         this.displayColor = displayColor;
         this.latitude = latitude;
         this.longitude = longitude;
+        this.headingDegrees = headingDegrees;
         this.membershipStatus = membershipStatus;
         this.connectionStatus = connectionStatus;
         this.laneNumber = laneNumber;
@@ -92,6 +94,10 @@ public class SearchTeamMember {
 
     public double getLongitude() {
         return longitude;
+    }
+
+    public double getHeadingDegrees() {
+        return headingDegrees;
     }
 
     public MembershipStatus getMembershipStatus() {
@@ -139,10 +145,12 @@ public class SearchTeamMember {
     }
 
     public void updatePosition(double latitude, double longitude,
+            double headingDegrees,
             String gpsCoordinates, String currentGridCell,
             String distanceFromYou, String distanceFromSearchLine) {
         this.latitude = latitude;
         this.longitude = longitude;
+        this.headingDegrees = headingDegrees;
         this.gpsCoordinates = gpsCoordinates;
         this.currentGridCell = currentGridCell;
         this.distanceFromYou = distanceFromYou;

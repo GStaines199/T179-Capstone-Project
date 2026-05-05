@@ -11,6 +11,7 @@ import com.atakmap.android.plugintemplate.grid.SearchGridManager;
 import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
+import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineManager;
 import com.atakmap.android.plugintemplate.grid.SearchLineOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
@@ -46,12 +47,12 @@ public class SARTakMapController {
         this.gridManager = new SearchGridManager(converter, stateStore);
         this.gridOverlay = new SearchGridOverlay(mapView, converter,
                 assignmentManager);
-        this.teamMarkerOverlay = new SearchTeamMarkerOverlay(mapView,
-                assignmentManager);
-        this.trackManager = new SearchTrackManager();
-        this.trackOverlay = new SearchTrackOverlay(mapView);
         this.searchLineManager = new SearchLineManager(converter,
                 assignmentManager);
+        this.teamMarkerOverlay = new SearchTeamMarkerOverlay(mapView,
+                assignmentManager, searchLineManager);
+        this.trackManager = new SearchTrackManager();
+        this.trackOverlay = new SearchTrackOverlay(mapView);
         this.searchLineOverlay = new SearchLineOverlay(mapView);
         this.mapEventListener = new MapEventDispatcher.MapEventDispatchListener() {
             @Override
@@ -112,6 +113,24 @@ public class SARTakMapController {
         String label = searchLineManager.cycleColor().getLabel();
         refreshOverlay();
         return label;
+    }
+
+    public void setSearchLineColor(SearchLineColorOption colorOption) {
+        searchLineManager.setColorOption(colorOption);
+        refreshOverlay();
+    }
+
+    public void setSearchLineTolerance(double toleranceMeters) {
+        searchLineManager.setReturnMarkToleranceMeters(toleranceMeters);
+        refreshOverlay();
+    }
+
+    public boolean toggleTeamCallsigns() {
+        return teamMarkerOverlay.toggleCallsigns();
+    }
+
+    public boolean isShowingTeamCallsigns() {
+        return teamMarkerOverlay.isShowingCallsigns();
     }
 
     public void markSelectedPartial() {
@@ -218,12 +237,45 @@ public class SARTakMapController {
         return searchLineManager.getColorOption().getLabel();
     }
 
+    public int getSearchLineColorIndex() {
+        return searchLineManager.getColorOption().ordinal();
+    }
+
+    public String getSearchLineToleranceLabel() {
+        return Math.round(searchLineManager.getReturnMarkToleranceMeters())
+                + " m restart tolerance";
+    }
+
+    public double getSearchLineToleranceMeters() {
+        return searchLineManager.getReturnMarkToleranceMeters();
+    }
+
     public String getSearchLineRestartPrompt() {
         return searchLineManager.getRestartPrompt();
     }
 
     public String getMemberSearchLineSummary(String uniqueId) {
         return searchLineManager.getMemberCardLineSummary(uniqueId);
+    }
+
+    public String getGridProgressSummary() {
+        List<SearchGridCell> cells = gridManager.getSelectedAggregateCells();
+        if (cells.isEmpty())
+            return "Select the current GPS cell to show grid progress.";
+        int partial = 0;
+        int complete = 0;
+        int inProgress = 0;
+        for (SearchGridCell cell : cells) {
+            if (cell.getStatus() == SearchGridStatus.PARTIAL)
+                partial++;
+            else if (cell.getStatus() == SearchGridStatus.COMPLETE)
+                complete++;
+            else if (cell.getStatus() == SearchGridStatus.IN_PROGRESS)
+                inProgress++;
+        }
+        return "1 km area: " + complete + " complete, " + partial
+                + " partial, " + inProgress + " in progress, "
+                + cells.size() + " cells total";
     }
 
     public SearchTeamMember selectTeamMember(String uniqueId) {

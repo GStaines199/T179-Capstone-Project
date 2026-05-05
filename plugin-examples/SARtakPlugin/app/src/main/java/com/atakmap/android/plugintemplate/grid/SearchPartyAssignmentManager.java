@@ -28,35 +28,35 @@ public class SearchPartyAssignmentManager {
                 SearchTeamMember.TeamRole.TEAM_LEADER, "White", COLOR_WHITE,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 1,
-                -27.4705, 153.0260,
+                -27.4705, 153.0260, 0.0,
                 "-27.4705, 153.0260", "42 m", "Current", "8 sec ago",
                 "You", "On line"));
         members.add(new SearchTeamMember("A-S01", "Searcher 01",
                 SearchTeamMember.TeamRole.SEARCHER, "Blue", COLOR_BLUE,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 1,
-                -27.4706, 153.0258,
+                -27.4706, 153.0258, 0.0,
                 "-27.4706, 153.0258", "41 m", "Lane cell", "12 sec ago",
                 "18 m left", "4 m left"));
         members.add(new SearchTeamMember("A-S02", "Searcher 02",
                 SearchTeamMember.TeamRole.SEARCHER, "Green", COLOR_GREEN,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 2,
-                -27.4704, 153.0261,
+                -27.4704, 153.0261, 0.0,
                 "-27.4704, 153.0261", "43 m", "Lane cell", "14 sec ago",
                 "22 m right", "2 m right"));
         members.add(new SearchTeamMember("A-S03", "Searcher 03",
                 SearchTeamMember.TeamRole.SEARCHER, "Yellow", COLOR_YELLOW,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.RECONNECTING, 3,
-                -27.4707, 153.0262,
+                -27.4707, 153.0262, 0.0,
                 "-27.4707, 153.0262", "40 m", "Lane cell", "3 min ago",
                 "35 m north", "9 m left"));
         members.add(new SearchTeamMember("A-S04", "Searcher 04",
                 SearchTeamMember.TeamRole.SEARCHER, "Red", COLOR_RED,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 4,
-                -27.4703, 153.0259,
+                -27.4703, 153.0259, 0.0,
                 "-27.4703, 153.0259", "44 m", "Lane cell", "10 sec ago",
                 "28 m south", "1 m right"));
     }
@@ -119,7 +119,7 @@ public class SearchPartyAssignmentManager {
                 SearchTeamMember.ConnectionStatus.CONNECTED,
                 getLaneMemberCount() + 1,
                 -27.4705 + (mockMemberCounter * 0.0001),
-                153.0260 + (mockMemberCounter * 0.0001),
+                153.0260 + (mockMemberCounter * 0.0001), 0.0,
                 "Pending GPS", "Pending", "Unassigned", "new", "Pending",
                 "Pending"));
         mockMemberCounter++;
@@ -153,7 +153,7 @@ public class SearchPartyAssignmentManager {
         if (leader != null && leader.contributesLane()) {
             leader.setLaneNumber(leaderLaneIndex + 1);
             leader.updatePosition(leaderPoint.getLatitude(),
-                    leaderPoint.getLongitude(), formatGeo(leaderPoint),
+                    leaderPoint.getLongitude(), 0.0, formatGeo(leaderPoint),
                     cell.getId(), "You", "Leader line");
         }
 
@@ -182,7 +182,7 @@ public class SearchPartyAssignmentManager {
             GeoPoint point = converter.toGeoPoint(cell.getZoneDescriptor(),
                     easting, northing);
             member.updatePosition(point.getLatitude(), point.getLongitude(),
-                    formatGeo(point), cell.getId(),
+                    0.0, formatGeo(point), cell.getId(),
                     formatDistance(distance(leaderUtm, UTMPoint
                             .fromGeoPoint(point))),
                     formatLineOffset(northing - lineNorthing));

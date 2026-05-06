@@ -11,6 +11,9 @@ import com.atakmap.android.plugintemplate.grid.SearchGridManager;
 import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
+import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
+import com.atakmap.android.plugintemplate.grid.SearchLineManager;
+import com.atakmap.android.plugintemplate.grid.SearchLineOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMarkerOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
@@ -25,26 +28,32 @@ import java.util.List;
 public class SARTakMapController {
 
     private final MapView mapView;
+    private final GridCoordinateConverter converter;
     private final SearchGridManager gridManager;
     private final SearchGridOverlay gridOverlay;
     private final SearchPartyAssignmentManager assignmentManager;
     private final SearchTeamMarkerOverlay teamMarkerOverlay;
     private final SearchTrackManager trackManager;
     private final SearchTrackOverlay trackOverlay;
+    private final SearchLineManager searchLineManager;
+    private final SearchLineOverlay searchLineOverlay;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
 
     public SARTakMapController(MapView mapView, Context pluginContext) {
         this.mapView = mapView;
-        GridCoordinateConverter converter = new GridCoordinateConverter();
+        this.converter = new GridCoordinateConverter();
         SearchGridStateStore stateStore = new SearchGridStateStore(pluginContext);
         this.assignmentManager = new SearchPartyAssignmentManager();
         this.gridManager = new SearchGridManager(converter, stateStore);
         this.gridOverlay = new SearchGridOverlay(mapView, converter,
                 assignmentManager);
-        this.teamMarkerOverlay = new SearchTeamMarkerOverlay(mapView,
+        this.searchLineManager = new SearchLineManager(converter,
                 assignmentManager);
+        this.teamMarkerOverlay = new SearchTeamMarkerOverlay(mapView,
+                assignmentManager, searchLineManager);
         this.trackManager = new SearchTrackManager();
         this.trackOverlay = new SearchTrackOverlay(mapView);
+        this.searchLineOverlay = new SearchLineOverlay(mapView);
         this.mapEventListener = new MapEventDispatcher.MapEventDispatchListener() {
             @Override
             public void onMapEvent(MapEvent event) {
@@ -67,8 +76,61 @@ public class SARTakMapController {
 
     public SearchGridCell selectCurrentCell() {
         SearchGridCell cell = gridManager.selectCellAt(getCurrentUserPoint());
+        searchLineManager.updateLeaderPosition(cell, getCurrentUserPoint());
+        arrangeTeamMembers();
         refreshOverlay();
         return cell;
+    }
+
+    public void startSearchLine() {
+        SearchGridCell cell = ensureSelectedCell();
+        searchLineManager.start(cell, getCurrentUserPoint());
+        refreshOverlay();
+    }
+
+    public void endSearchLine() {
+        searchLineManager.end();
+        refreshOverlay();
+    }
+
+    public void pauseSearchLine() {
+        searchLineManager.pause();
+        refreshOverlay();
+    }
+
+    public boolean resumeSearchLine() {
+        boolean resumed = searchLineManager.resume();
+        refreshOverlay();
+        return resumed;
+    }
+
+    public void forceResumeSearchLine() {
+        searchLineManager.forceResume();
+        refreshOverlay();
+    }
+
+    public String cycleSearchLineColor() {
+        String label = searchLineManager.cycleColor().getLabel();
+        refreshOverlay();
+        return label;
+    }
+
+    public void setSearchLineColor(SearchLineColorOption colorOption) {
+        searchLineManager.setColorOption(colorOption);
+        refreshOverlay();
+    }
+
+    public void setSearchLineTolerance(double toleranceMeters) {
+        searchLineManager.setReturnMarkToleranceMeters(toleranceMeters);
+        refreshOverlay();
+    }
+
+    public boolean toggleTeamCallsigns() {
+        return teamMarkerOverlay.toggleCallsigns();
+    }
+
+    public boolean isShowingTeamCallsigns() {
+        return teamMarkerOverlay.isShowingCallsigns();
     }
 
     public void markSelectedPartial() {
@@ -88,13 +150,13 @@ public class SARTakMapController {
 
     public void increaseTeamSize() {
         assignmentManager.addMockMember();
-        teamMarkerOverlay.render();
+        arrangeTeamMembers();
         refreshOverlay();
     }
 
     public void decreaseTeamSize() {
         assignmentManager.removeLastLaneMember();
-        teamMarkerOverlay.render();
+        arrangeTeamMembers();
         refreshOverlay();
     }
 
@@ -143,6 +205,77 @@ public class SARTakMapController {
 
     public String getConnectionAlertSummary() {
         return assignmentManager.describeConnectionAlerts();
+    }
+
+    public String getSearchLineSummary() {
+        return searchLineManager.getSummary();
+    }
+
+    public String getSearchLineMemberSummary() {
+        return searchLineManager.getMemberLineSummary();
+    }
+
+    public String getSearchLineWarningSummary() {
+        String warning = searchLineManager.getWarningSummary();
+        String connection = getConnectionAlertSummary();
+        if ("No search line warnings".equals(warning))
+            return connection;
+        if ("No team connection alerts".equals(connection))
+            return warning;
+        return warning + "\n" + connection;
+    }
+
+    public boolean isSearchLineStarted() {
+        return searchLineManager.isStarted();
+    }
+
+    public boolean isSearchLinePaused() {
+        return searchLineManager.isPaused();
+    }
+
+    public String getSearchLineColorLabel() {
+        return searchLineManager.getColorOption().getLabel();
+    }
+
+    public int getSearchLineColorIndex() {
+        return searchLineManager.getColorOption().ordinal();
+    }
+
+    public String getSearchLineToleranceLabel() {
+        return Math.round(searchLineManager.getReturnMarkToleranceMeters())
+                + " m restart tolerance";
+    }
+
+    public double getSearchLineToleranceMeters() {
+        return searchLineManager.getReturnMarkToleranceMeters();
+    }
+
+    public String getSearchLineRestartPrompt() {
+        return searchLineManager.getRestartPrompt();
+    }
+
+    public String getMemberSearchLineSummary(String uniqueId) {
+        return searchLineManager.getMemberCardLineSummary(uniqueId);
+    }
+
+    public String getGridProgressSummary() {
+        List<SearchGridCell> cells = gridManager.getSelectedAggregateCells();
+        if (cells.isEmpty())
+            return "Select the current GPS cell to show grid progress.";
+        int partial = 0;
+        int complete = 0;
+        int inProgress = 0;
+        for (SearchGridCell cell : cells) {
+            if (cell.getStatus() == SearchGridStatus.PARTIAL)
+                partial++;
+            else if (cell.getStatus() == SearchGridStatus.COMPLETE)
+                complete++;
+            else if (cell.getStatus() == SearchGridStatus.IN_PROGRESS)
+                inProgress++;
+        }
+        return "1 km area: " + complete + " complete, " + partial
+                + " partial, " + inProgress + " in progress, "
+                + cells.size() + " cells total";
     }
 
     public SearchTeamMember selectTeamMember(String uniqueId) {
@@ -195,10 +328,34 @@ public class SARTakMapController {
         gridOverlay.setVisible(false);
         teamMarkerOverlay.setVisible(false);
         trackOverlay.setVisible(false);
+        searchLineOverlay.setVisible(false);
     }
 
     private void refreshOverlay() {
+        searchLineManager.updateLeaderPosition(gridManager.getSelectedCell(),
+                getCurrentUserPoint());
+        arrangeTeamMembers();
         gridOverlay.render(gridManager);
+        searchLineOverlay.render(searchLineManager);
+        teamMarkerOverlay.render();
+    }
+
+    private void arrangeTeamMembers() {
+        SearchGridCell cell = gridManager.getSelectedCell();
+        if (cell == null)
+            return;
+        GeoPoint leaderPoint = getCurrentUserPoint();
+        double lineNorthing = searchLineManager.getArrangementNorthing(cell,
+                leaderPoint);
+        assignmentManager.arrangeMembersForCell(cell, converter, leaderPoint,
+                lineNorthing);
+    }
+
+    private SearchGridCell ensureSelectedCell() {
+        SearchGridCell cell = gridManager.getSelectedCell();
+        if (cell == null)
+            cell = gridManager.selectCellAt(getCurrentUserPoint());
+        return cell;
     }
 
     private GeoPoint getCurrentUserPoint() {

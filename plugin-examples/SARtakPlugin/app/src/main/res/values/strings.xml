@@ -73,6 +73,19 @@
     <string name="track_resume">Resume</string>
     <string name="track_hide">Hide Track</string>
     <string name="track_show">Show Track</string>
+    <string name="search_line_heading">Search Line</string>
+    <string name="search_line_not_started">Line not started</string>
+    <string name="search_line_member_empty">Start the search line to measure team spacing.</string>
+    <string name="search_line_start">Start Line</string>
+    <string name="search_line_end">End Line</string>
+    <string name="search_line_pause">Pause Line</string>
+    <string name="search_line_resume">Resume</string>
+    <string name="search_line_force">Force Resume</string>
+    <string name="search_line_colour">Line Colour</string>
+    <string name="search_line_tolerance">Restart Tolerance (m)</string>
+    <string name="grid_progress_empty">Select the current GPS cell to show grid progress.</string>
+    <string name="hide_callsigns">Hide Callsigns</string>
+    <string name="show_callsigns">Show Callsigns</string>
 
 
 

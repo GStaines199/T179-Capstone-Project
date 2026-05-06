@@ -3,6 +3,10 @@ package com.atakmap.android.plugintemplate.grid;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+
+import com.atakmap.coremap.maps.coords.GeoPoint;
+import com.atakmap.coremap.maps.coords.UTMPoint;
 
 public class SearchPartyAssignmentManager {
 
@@ -23,36 +27,36 @@ public class SearchPartyAssignmentManager {
         members.add(new SearchTeamMember("TL-A-001", "Alpha Lead",
                 SearchTeamMember.TeamRole.TEAM_LEADER, "White", COLOR_WHITE,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
-                SearchTeamMember.ConnectionStatus.CONNECTED, 0,
-                -27.4705, 153.0260,
+                SearchTeamMember.ConnectionStatus.CONNECTED, 1,
+                -27.4705, 153.0260, 0.0,
                 "-27.4705, 153.0260", "42 m", "Current", "8 sec ago",
                 "You", "On line"));
         members.add(new SearchTeamMember("A-S01", "Searcher 01",
                 SearchTeamMember.TeamRole.SEARCHER, "Blue", COLOR_BLUE,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 1,
-                -27.4706, 153.0258,
+                -27.4706, 153.0258, 0.0,
                 "-27.4706, 153.0258", "41 m", "Lane cell", "12 sec ago",
                 "18 m left", "4 m left"));
         members.add(new SearchTeamMember("A-S02", "Searcher 02",
                 SearchTeamMember.TeamRole.SEARCHER, "Green", COLOR_GREEN,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 2,
-                -27.4704, 153.0261,
+                -27.4704, 153.0261, 0.0,
                 "-27.4704, 153.0261", "43 m", "Lane cell", "14 sec ago",
                 "22 m right", "2 m right"));
         members.add(new SearchTeamMember("A-S03", "Searcher 03",
                 SearchTeamMember.TeamRole.SEARCHER, "Yellow", COLOR_YELLOW,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.RECONNECTING, 3,
-                -27.4707, 153.0262,
+                -27.4707, 153.0262, 0.0,
                 "-27.4707, 153.0262", "40 m", "Lane cell", "3 min ago",
                 "35 m north", "9 m left"));
         members.add(new SearchTeamMember("A-S04", "Searcher 04",
                 SearchTeamMember.TeamRole.SEARCHER, "Red", COLOR_RED,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 4,
-                -27.4703, 153.0259,
+                -27.4703, 153.0259, 0.0,
                 "-27.4703, 153.0259", "44 m", "Lane cell", "10 sec ago",
                 "28 m south", "1 m right"));
     }
@@ -79,6 +83,15 @@ public class SearchPartyAssignmentManager {
         return Collections.unmodifiableList(visibleMembers);
     }
 
+    public List<SearchTeamMember> getLaneMembers() {
+        List<SearchTeamMember> laneMembers = new ArrayList<>();
+        for (SearchTeamMember member : members) {
+            if (member.contributesLane())
+                laneMembers.add(member);
+        }
+        return laneMembers;
+    }
+
     public SearchTeamMember findMemberById(String uniqueId) {
         for (SearchTeamMember member : members) {
             if (member.getUniqueId().equals(uniqueId)
@@ -94,12 +107,7 @@ public class SearchPartyAssignmentManager {
     }
 
     public int getLaneMemberCount() {
-        int count = 0;
-        for (SearchTeamMember member : members) {
-            if (member.contributesLane())
-                count++;
-        }
-        return Math.max(1, count);
+        return Math.max(1, getLaneMembers().size());
     }
 
     public void addMockMember() {
@@ -111,7 +119,7 @@ public class SearchPartyAssignmentManager {
                 SearchTeamMember.ConnectionStatus.CONNECTED,
                 getLaneMemberCount() + 1,
                 -27.4705 + (mockMemberCounter * 0.0001),
-                153.0260 + (mockMemberCounter * 0.0001),
+                153.0260 + (mockMemberCounter * 0.0001), 0.0,
                 "Pending GPS", "Pending", "Unassigned", "new", "Pending",
                 "Pending"));
         mockMemberCounter++;
@@ -125,6 +133,59 @@ public class SearchPartyAssignmentManager {
                         SearchTeamMember.MembershipStatus.REMOVED);
                 return;
             }
+        }
+    }
+
+    public void arrangeMembersForCell(SearchGridCell cell,
+            GridCoordinateConverter converter, GeoPoint leaderPoint,
+            double lineNorthing) {
+        if (cell == null || leaderPoint == null || !leaderPoint.isValid())
+            return;
+
+        List<SearchTeamMember> laneMembers = getLaneMembers();
+        int laneCount = Math.max(1, laneMembers.size());
+        double laneWidth = (cell.getEast() - cell.getWest()) / laneCount;
+        UTMPoint leaderUtm = UTMPoint.fromGeoPoint(leaderPoint);
+        int leaderLaneIndex = clamp((int) Math.floor((leaderUtm.getEasting()
+                - cell.getWest()) / laneWidth), 0, laneCount - 1);
+
+        SearchTeamMember leader = findMemberById(selfMemberId);
+        if (leader != null && leader.contributesLane()) {
+            leader.setLaneNumber(leaderLaneIndex + 1);
+            leader.updatePosition(leaderPoint.getLatitude(),
+                    leaderPoint.getLongitude(), 0.0, formatGeo(leaderPoint),
+                    cell.getId(), "You", "Leader line");
+        }
+
+        List<Integer> availableLaneIndexes = new ArrayList<>();
+        for (int i = 0; i < laneCount; i++) {
+            if (i != leaderLaneIndex)
+                availableLaneIndexes.add(i);
+        }
+
+        int laneCursor = 0;
+        int variationCursor = 0;
+        for (SearchTeamMember member : laneMembers) {
+            if (member.getUniqueId().equals(selfMemberId))
+                continue;
+
+            int laneIndex = laneCursor < availableLaneIndexes.size()
+                    ? availableLaneIndexes.get(laneCursor)
+                    : laneCursor;
+            laneCursor++;
+            member.setLaneNumber(laneIndex + 1);
+
+            double easting = cell.getWest() + laneWidth * (laneIndex + 0.5);
+            double offset = searchLineOffset(variationCursor++);
+            double northing = clamp(lineNorthing + offset, cell.getSouth(),
+                    cell.getNorth());
+            GeoPoint point = converter.toGeoPoint(cell.getZoneDescriptor(),
+                    easting, northing);
+            member.updatePosition(point.getLatitude(), point.getLongitude(),
+                    0.0, formatGeo(point), cell.getId(),
+                    formatDistance(distance(leaderUtm, UTMPoint
+                            .fromGeoPoint(point))),
+                    formatLineOffset(northing - lineNorthing));
         }
     }
 
@@ -148,10 +209,8 @@ public class SearchPartyAssignmentManager {
                     .append(member.getColorName())
                     .append(") ")
                     .append(member.getConnectionStatus());
-            if (!member.isTeamLeader())
-                builder.append(" | Lane: ")
-                        .append(member.contributesLane() ? "assigned"
-                                : "excluded");
+            builder.append(" | ")
+                    .append(member.getLaneLabel());
             builder.append("\nGPS: ")
                     .append(member.getGpsCoordinates())
                     .append(" | Alt: ")
@@ -184,5 +243,41 @@ public class SearchPartyAssignmentManager {
         if (builder.length() == 0)
             return "No team connection alerts";
         return builder.toString().trim();
+    }
+
+    private double searchLineOffset(int index) {
+        double[] offsets = new double[] { -6.0, 4.0, 11.0, -3.0, 7.0,
+                -9.0, 13.0, 2.0 };
+        return offsets[index % offsets.length];
+    }
+
+    private String formatGeo(GeoPoint point) {
+        return String.format(Locale.US, "%.6f, %.6f", point.getLatitude(),
+                point.getLongitude());
+    }
+
+    private String formatDistance(double meters) {
+        return Math.round(meters) + " m";
+    }
+
+    private String formatLineOffset(double meters) {
+        long rounded = Math.round(Math.abs(meters));
+        if (rounded <= 2)
+            return "On line";
+        return rounded + " m " + (meters > 0 ? "ahead" : "behind");
+    }
+
+    private double distance(UTMPoint first, UTMPoint second) {
+        double dx = first.getEasting() - second.getEasting();
+        double dy = first.getNorthing() - second.getNorthing();
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 }

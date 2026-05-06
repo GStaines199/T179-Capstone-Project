@@ -1,19 +1,25 @@
 
 package com.atakmap.android.plugintemplate;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.atak.plugins.impl.PluginLayoutInflater;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
 import com.atakmap.android.plugintemplate.plugin.R;
@@ -49,6 +55,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button markerModeAllButton;
     private final Button trackRecordButton;
     private final Button trackVisibilityButton;
+    private final Button startSearchLineButton;
+    private final Button pauseSearchLineButton;
+    private final Button toggleCallsignsButton;
+    private final Button searchLineColourButton;
+    private final EditText searchLineToleranceInput;
     private final View homeTabContent;
     private final View gridTabContent;
     private final View teamTabContent;
@@ -56,10 +67,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final View leaderTeamControls;
     private final View otherTeamsSection;
     private final View gridStatusControls;
+    private final View searchLineControls;
+    private final View teamMarkerVisibilitySection;
     private final TextView currentCellValue;
     private final TextView homeCellValue;
     private final TextView assignmentValue;
     private final TextView homeAssignmentValue;
+    private final TextView homeSearchLineValue;
+    private final TextView searchLineStatusValue;
+    private final TextView searchLineMembersValue;
+    private final TextView gridProgressValue;
     private final TextView teamSizeValue;
     private final TextView teamNameValue;
     private final LinearLayout teamMemberCardsContainer;
@@ -70,6 +87,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView trackStatusValue;
     private final TextView trackDetailsValue;
     private boolean leaderView = true;
+    private boolean suppressToleranceUpdate;
 
     /**************************** CONSTRUCTOR *****************************/
 
@@ -104,6 +122,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.track_record_button);
         trackVisibilityButton = templateView
                 .findViewById(R.id.track_visibility_button);
+        startSearchLineButton = templateView
+                .findViewById(R.id.start_search_line_button);
+        pauseSearchLineButton = templateView
+                .findViewById(R.id.pause_search_line_button);
+        toggleCallsignsButton = templateView
+                .findViewById(R.id.toggle_callsigns_button);
+        searchLineColourButton = templateView
+                .findViewById(R.id.search_line_colour_button);
+        searchLineToleranceInput = templateView
+                .findViewById(R.id.search_line_tolerance_input);
         homeTabContent = templateView.findViewById(R.id.home_tab_content);
         gridTabContent = templateView.findViewById(R.id.grid_tab_content);
         teamTabContent = templateView.findViewById(R.id.team_tab_content);
@@ -111,10 +139,20 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         leaderTeamControls = templateView.findViewById(R.id.leader_team_controls);
         otherTeamsSection = templateView.findViewById(R.id.other_teams_section);
         gridStatusControls = templateView.findViewById(R.id.grid_status_controls);
+        searchLineControls = templateView.findViewById(R.id.search_line_controls);
+        teamMarkerVisibilitySection = templateView
+                .findViewById(R.id.team_marker_visibility_section);
         currentCellValue = templateView.findViewById(R.id.current_cell_value);
         homeCellValue = templateView.findViewById(R.id.home_cell_value);
         assignmentValue = templateView.findViewById(R.id.assignment_value);
         homeAssignmentValue = templateView.findViewById(R.id.home_assignment_value);
+        homeSearchLineValue = templateView
+                .findViewById(R.id.home_search_line_value);
+        searchLineStatusValue = templateView
+                .findViewById(R.id.search_line_status_value);
+        searchLineMembersValue = templateView
+                .findViewById(R.id.search_line_members_value);
+        gridProgressValue = templateView.findViewById(R.id.grid_progress_value);
         teamSizeValue = templateView.findViewById(R.id.team_size_value);
         teamNameValue = templateView.findViewById(R.id.team_name_value);
         teamMemberCardsContainer = templateView
@@ -137,8 +175,13 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         markerModeTeamButton.setOnClickListener(this);
         markerModeLeadersButton.setOnClickListener(this);
         markerModeAllButton.setOnClickListener(this);
+        toggleCallsignsButton.setOnClickListener(this);
         trackRecordButton.setOnClickListener(this);
         trackVisibilityButton.setOnClickListener(this);
+        startSearchLineButton.setOnClickListener(this);
+        pauseSearchLineButton.setOnClickListener(this);
+        searchLineColourButton.setOnClickListener(this);
+        setupToleranceInput();
         templateView.findViewById(R.id.select_current_cell_button)
                 .setOnClickListener(this);
         templateView.findViewById(R.id.mark_partial_button)
@@ -193,6 +236,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             setTeamMarkerMode(TeamMarkerVisibilityMode.LEADERS);
         } else if (id == R.id.marker_mode_all_button) {
             setTeamMarkerMode(TeamMarkerVisibilityMode.ALL_VISIBLE);
+        } else if (id == R.id.toggle_callsigns_button) {
+            boolean showing = mapController.toggleTeamCallsigns();
+            Toast.makeText(getMapView().getContext(), showing
+                    ? "Callsigns shown"
+                    : "Callsigns hidden", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.track_record_button) {
             boolean recording = mapController.toggleTrackRecording();
             Toast.makeText(getMapView().getContext(), recording
@@ -203,6 +251,20 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             Toast.makeText(getMapView().getContext(), visible
                     ? "Track shown on map"
                     : "Track hidden from map", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.start_search_line_button) {
+            if (mapController.isSearchLineStarted()) {
+                mapController.endSearchLine();
+                Toast.makeText(getMapView().getContext(),
+                        "Search line ended", Toast.LENGTH_SHORT).show();
+            } else {
+                mapController.startSearchLine();
+                Toast.makeText(getMapView().getContext(),
+                        "Search line started", Toast.LENGTH_SHORT).show();
+            }
+        } else if (id == R.id.pause_search_line_button) {
+            handlePauseResumeSearchLine();
+        } else if (id == R.id.search_line_colour_button) {
+            showLineColourDialog();
         } else if (id == R.id.select_current_cell_button) {
             mapController.selectCurrentCell();
             Toast.makeText(getMapView().getContext(),
@@ -247,6 +309,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         leaderTeamControls.setVisibility(leaderVisibility);
         otherTeamsSection.setVisibility(leaderVisibility);
         gridStatusControls.setVisibility(leaderVisibility);
+        searchLineControls.setVisibility(leaderVisibility);
+        teamMarkerVisibilitySection.setVisibility(View.VISIBLE);
     }
 
     private void refreshGridUi() {
@@ -258,12 +322,18 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 ? mapController.getSelectedCellId()
                 : mapController.getSelectedCellId() + " - " + status;
         String assignmentSummary = mapController.getAssignmentSummary();
-        String alertSummary = mapController.getConnectionAlertSummary();
+        String alertSummary = mapController.getSearchLineWarningSummary();
+        String searchLineSummary = mapController.getSearchLineSummary();
+        String searchLineMembers = mapController.getSearchLineMemberSummary();
 
         currentCellValue.setText(cellStatus);
         homeCellValue.setText(cellStatus);
         assignmentValue.setText(assignmentSummary);
         homeAssignmentValue.setText(assignmentSummary);
+        homeSearchLineValue.setText(searchLineSummary);
+        searchLineStatusValue.setText(searchLineSummary);
+        searchLineMembersValue.setText(searchLineMembers);
+        gridProgressValue.setText(mapController.getGridProgressSummary());
         teamSizeValue.setText(String.valueOf(mapController.getTeamSize()));
         teamNameValue.setText(mapController.getTeamName() + " | "
                 + mapController.getTeamId());
@@ -280,6 +350,129 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         trackVisibilityButton.setText(mapController.isTrackVisible()
                 ? R.string.track_hide
                 : R.string.track_show);
+        startSearchLineButton.setText(mapController.isSearchLineStarted()
+                ? R.string.search_line_end
+                : R.string.search_line_start);
+        pauseSearchLineButton.setText(mapController.isSearchLinePaused()
+                ? R.string.search_line_resume
+                : R.string.search_line_pause);
+        pauseSearchLineButton.setEnabled(mapController.isSearchLineStarted());
+        toggleCallsignsButton.setText(mapController.isShowingTeamCallsigns()
+                ? R.string.hide_callsigns
+                : R.string.show_callsigns);
+        searchLineColourButton.setText("Line Colour: "
+                + mapController.getSearchLineColorLabel());
+        String toleranceText = String.valueOf(Math.round(mapController
+                .getSearchLineToleranceMeters()));
+        if (!toleranceText.contentEquals(searchLineToleranceInput.getText())) {
+            suppressToleranceUpdate = true;
+            searchLineToleranceInput.setText(toleranceText);
+            searchLineToleranceInput.setSelection(searchLineToleranceInput
+                    .getText().length());
+            suppressToleranceUpdate = false;
+        }
+    }
+
+    private void showLineColourDialog() {
+        final SearchLineColorOption[] values = SearchLineColorOption.values();
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Search line colour")
+                .setSingleChoiceItems(getLineColourLabels(),
+                        mapController.getSearchLineColorIndex(),
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                if (which >= 0 && which < values.length) {
+                                    mapController.setSearchLineColor(
+                                            values[which]);
+                                    refreshGridUi();
+                                }
+                                dialog.dismiss();
+                            }
+                        })
+                .show();
+    }
+
+    private String[] getLineColourLabels() {
+        SearchLineColorOption[] values = SearchLineColorOption.values();
+        String[] labels = new String[values.length];
+        for (int i = 0; i < values.length; i++) {
+            labels[i] = values[i].getLabel();
+        }
+        return labels;
+    }
+
+    private void setupToleranceInput() {
+        searchLineToleranceInput.setText(String.valueOf(Math.round(
+                mapController.getSearchLineToleranceMeters())));
+        searchLineToleranceInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count,
+                    int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before,
+                    int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+                if (suppressToleranceUpdate)
+                    return;
+                String value = editable.toString().trim();
+                if (value.length() == 0)
+                    return;
+                try {
+                    mapController.setSearchLineTolerance(Double
+                            .parseDouble(value));
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        });
+    }
+
+    private void handlePauseResumeSearchLine() {
+        if (!mapController.isSearchLineStarted()) {
+            Toast.makeText(getMapView().getContext(),
+                    "Start the search line first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!mapController.isSearchLinePaused()) {
+            mapController.pauseSearchLine();
+            Toast.makeText(getMapView().getContext(),
+                    "Search line paused", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        boolean resumed = mapController.resumeSearchLine();
+        if (resumed) {
+            Toast.makeText(getMapView().getContext(),
+                    "Search line resumed", Toast.LENGTH_SHORT).show();
+        } else {
+            showForceResumeDialog();
+        }
+    }
+
+    private void showForceResumeDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Restart search line?")
+                .setMessage(mapController.getSearchLineRestartPrompt())
+                .setPositiveButton("Force resume",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.forceResumeSearchLine();
+                                Toast.makeText(getMapView().getContext(),
+                                        "Search line force resumed",
+                                        Toast.LENGTH_SHORT).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Wait", null)
+                .show();
     }
 
     private void setTeamMarkerMode(TeamMarkerVisibilityMode mode) {
@@ -365,7 +558,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + " | Last ping: " + member.getLastPing(), 13, false));
         card.addView(createCardText("From you: "
                 + member.getDistanceFromYou() + " | From line: "
-                + member.getDistanceFromSearchLine(), 13, false));
+                + mapController.getMemberSearchLineSummary(
+                        member.getUniqueId()), 13, false));
         card.addView(createCardText("Membership: "
                 + member.getMembershipStatus().name(), 12, false));
         return card;

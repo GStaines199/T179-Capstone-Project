@@ -66,6 +66,14 @@ public class GridCoordinateConverter {
         };
     }
 
+    public String cellIdForPoint(GeoPoint point) {
+        UTMPoint utm = UTMPoint.fromGeoPoint(point);
+        double cellWest = floorToGrid(utm.getEasting(), BASE_CELL_SIZE_METERS);
+        double cellSouth = floorToGrid(utm.getNorthing(),
+                BASE_CELL_SIZE_METERS);
+        return cellId(utm.getZoneDescriptor(), cellWest, cellSouth);
+    }
+
     public String aggregateId(String zone, double west, double south) {
         return "utm-" + zone + "-agg1k-e" + Math.round(west) + "-n"
                 + Math.round(south);

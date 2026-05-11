@@ -5,6 +5,10 @@ import android.content.Context;
 import com.atakmap.android.maps.MapEvent;
 import com.atakmap.android.maps.MapEventDispatcher;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.plugintemplate.database.DatabaseHelper;
+import com.atakmap.android.plugintemplate.database.LocationRepository;
+import com.atakmap.android.plugintemplate.database.SearcherRepository;
+import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
@@ -17,11 +21,17 @@ import com.atakmap.android.plugintemplate.grid.SearchLineOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMarkerOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
+import com.atakmap.android.plugintemplate.grid.SearchTeamStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 import com.atakmap.android.plugintemplate.grid.SearchTrackOverlay;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
+import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
+import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.AtakTrackBridge;
+import com.atakmap.android.plugintemplate.runtime.IdentityManager;
+import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
+import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
 import com.atakmap.coremap.maps.coords.GeoPoint;
-import com.atakmap.coremap.maps.coords.GeoPointMetaData;
 
 import java.util.List;
 
@@ -35,15 +45,34 @@ public class SARTakMapController {
     private final SearchTeamMarkerOverlay teamMarkerOverlay;
     private final SearchTrackManager trackManager;
     private final SearchTrackOverlay trackOverlay;
+    private final AtakTrackBridge atakTrackBridge;
     private final SearchLineManager searchLineManager;
     private final SearchLineOverlay searchLineOverlay;
+    private final PluginHealthManager healthManager;
+    private final IdentityManager identityManager;
+    private final LocationCaptureManager locationCaptureManager;
+    private final AtakTeamContactDataSource teamContactDataSource;
+    private final SearchTeamStateStore teamStateStore;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
+    private String atakContactSummary = "ATAK contacts not scanned yet";
 
     public SARTakMapController(MapView mapView, Context pluginContext) {
         this.mapView = mapView;
         this.converter = new GridCoordinateConverter();
-        SearchGridStateStore stateStore = new SearchGridStateStore(pluginContext);
+        // ATAK plugin contexts are suitable for resources/layout inflation, but
+        // runtime files belong under ATAK's writable app context.
+        Context runtimeContext = mapView.getContext();
+        DatabaseHelper databaseHelper = DatabaseHelper.getInstance(runtimeContext);
+        SearcherRepository searcherRepository = new SearcherRepository(
+                databaseHelper);
+        TrackSessionRepository trackSessionRepository =
+                new TrackSessionRepository(databaseHelper);
+        LocationRepository locationRepository = new LocationRepository(
+                databaseHelper);
+        SearchGridStateStore stateStore = new SearchGridStateStore(runtimeContext);
         this.assignmentManager = new SearchPartyAssignmentManager();
+        this.teamStateStore = new SearchTeamStateStore(runtimeContext);
+        this.teamStateStore.load(assignmentManager);
         this.gridManager = new SearchGridManager(converter, stateStore);
         this.gridOverlay = new SearchGridOverlay(mapView, converter,
                 assignmentManager);
@@ -51,9 +80,23 @@ public class SARTakMapController {
                 assignmentManager);
         this.teamMarkerOverlay = new SearchTeamMarkerOverlay(mapView,
                 assignmentManager, searchLineManager);
-        this.trackManager = new SearchTrackManager();
+        this.trackManager = new SearchTrackManager(trackSessionRepository,
+                locationRepository);
         this.trackOverlay = new SearchTrackOverlay(mapView);
+        this.atakTrackBridge = new AtakTrackBridge(mapView);
         this.searchLineOverlay = new SearchLineOverlay(mapView);
+        this.healthManager = new PluginHealthManager();
+        this.identityManager = new IdentityManager(runtimeContext, mapView,
+                searcherRepository);
+        this.teamContactDataSource = new AtakTeamContactDataSource(mapView);
+        this.locationCaptureManager = new LocationCaptureManager(mapView,
+                identityManager, trackManager, healthManager,
+                new LocationCaptureManager.Listener() {
+                    @Override
+                    public void onLocationCaptured() {
+                        refreshOverlay();
+                    }
+                });
         this.mapEventListener = new MapEventDispatcher.MapEventDispatchListener() {
             @Override
             public void onMapEvent(MapEvent event) {
@@ -61,8 +104,9 @@ public class SARTakMapController {
             }
         };
         registerMapListeners();
+        initialiseRuntime();
         teamMarkerOverlay.render();
-        trackOverlay.render();
+        trackOverlay.render(trackManager.getTrackPoints());
     }
 
     public boolean toggleGridOverlay() {
@@ -75,8 +119,11 @@ public class SARTakMapController {
     }
 
     public SearchGridCell selectCurrentCell() {
-        SearchGridCell cell = gridManager.selectCellAt(getCurrentUserPoint());
-        searchLineManager.updateLeaderPosition(cell, getCurrentUserPoint());
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint == null)
+            return gridManager.getSelectedCell();
+        SearchGridCell cell = gridManager.selectCellAt(currentPoint);
+        searchLineManager.updateLeaderPosition(cell, currentPoint);
         arrangeTeamMembers();
         refreshOverlay();
         return cell;
@@ -84,7 +131,10 @@ public class SARTakMapController {
 
     public void startSearchLine() {
         SearchGridCell cell = ensureSelectedCell();
-        searchLineManager.start(cell, getCurrentUserPoint());
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint == null)
+            return;
+        searchLineManager.start(cell, currentPoint);
         refreshOverlay();
     }
 
@@ -152,12 +202,14 @@ public class SARTakMapController {
         assignmentManager.addMockMember();
         arrangeTeamMembers();
         refreshOverlay();
+        teamStateStore.save(assignmentManager);
     }
 
     public void decreaseTeamSize() {
         assignmentManager.removeLastLaneMember();
         arrangeTeamMembers();
         refreshOverlay();
+        teamStateStore.save(assignmentManager);
     }
 
     public int getTeamSize() {
@@ -180,6 +232,7 @@ public class SARTakMapController {
     }
 
     public String getTeamRosterSummary() {
+        syncSelfTeamMemberFromAtak();
         return assignmentManager.describeTeamRoster();
     }
 
@@ -192,7 +245,45 @@ public class SARTakMapController {
     }
 
     public List<SearchTeamMember> getTeamMembers() {
+        syncSelfTeamMemberFromAtak();
+        refreshTeamContactsInternal();
         return assignmentManager.getVisibleMembers();
+    }
+
+    public void updateTeamSetup(String teamName, String teamId) {
+        assignmentManager.setTeamDetails(teamName, teamId);
+        teamStateStore.save(assignmentManager);
+        refreshOverlay();
+    }
+
+    public boolean addTeamMemberFromSetup(String uniqueId, String callsign) {
+        SearchTeamMember member = assignmentManager.addTeamMember(uniqueId,
+                callsign);
+        refreshTeamContactsInternal();
+        arrangeTeamMembers();
+        refreshOverlay();
+        teamStateStore.save(assignmentManager);
+        return member != null;
+    }
+
+    public boolean removeTeamMemberFromSetup(String uniqueId) {
+        boolean removed = assignmentManager.removeTeamMember(uniqueId);
+        arrangeTeamMembers();
+        refreshOverlay();
+        if (removed)
+            teamStateStore.save(assignmentManager);
+        return removed;
+    }
+
+    public String refreshAtakTeamContacts() {
+        refreshTeamContactsInternal();
+        arrangeTeamMembers();
+        refreshOverlay();
+        return atakContactSummary;
+    }
+
+    public String getAtakContactSummary() {
+        return atakContactSummary;
     }
 
     public void setTeamMarkerVisibilityMode(TeamMarkerVisibilityMode mode) {
@@ -294,21 +385,32 @@ public class SARTakMapController {
     }
 
     public boolean toggleTrackRecording() {
-        return trackManager.toggleRecording();
+        boolean recording = trackManager.toggleRecording();
+        atakTrackBridge.setTracking(recording);
+        return recording;
     }
 
     public boolean toggleTrackVisibility() {
         boolean visible = trackManager.toggleVisible();
-        trackOverlay.setVisible(visible);
+        atakTrackBridge.setVisible(visible);
+        trackOverlay.setVisible(visible
+                && !atakTrackBridge.hasAtakTrackTrail());
+        trackOverlay.render(trackManager.getTrackPoints());
         return visible;
     }
 
+    public void clearTrackHistory() {
+        trackManager.clearCurrentTrack();
+        atakTrackBridge.clearVisibleTrack();
+        trackOverlay.render(trackManager.getTrackPoints());
+    }
+
     public String getTrackStatusSummary() {
-        return trackManager.getStatusSummary();
+        return atakTrackBridge.getStatusSummary(trackManager);
     }
 
     public String getTrackDetailsSummary() {
-        return trackManager.getDetailsSummary();
+        return atakTrackBridge.getDetailsSummary(trackManager);
     }
 
     public boolean isTrackRecording() {
@@ -323,7 +425,28 @@ public class SARTakMapController {
         return gridOverlay.isVisible();
     }
 
+    public String getPluginHealthSummary() {
+        refreshLocationAvailability();
+        return healthManager.getSummary();
+    }
+
+    public String getIdentitySummary() {
+        return identityManager.getIdentitySummary();
+    }
+
+    public String getGpsSummary() {
+        refreshLocationAvailability();
+        return healthManager.getLocationMessage();
+    }
+
+    public boolean isGpsActive() {
+        refreshLocationAvailability();
+        return healthManager.isLocationActive();
+    }
+
     public void dispose() {
+        locationCaptureManager.stop();
+        healthManager.stop();
         unregisterMapListeners();
         gridOverlay.setVisible(false);
         teamMarkerOverlay.setVisible(false);
@@ -332,12 +455,17 @@ public class SARTakMapController {
     }
 
     private void refreshOverlay() {
-        searchLineManager.updateLeaderPosition(gridManager.getSelectedCell(),
-                getCurrentUserPoint());
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint != null)
+            searchLineManager.updateLeaderPosition(gridManager
+                    .getSelectedCell(), currentPoint);
         arrangeTeamMembers();
         gridOverlay.render(gridManager);
         searchLineOverlay.render(searchLineManager);
         teamMarkerOverlay.render();
+        trackOverlay.setVisible(trackManager.isVisible()
+                && !atakTrackBridge.hasAtakTrackTrail());
+        trackOverlay.render(trackManager.getTrackPoints());
     }
 
     private void arrangeTeamMembers() {
@@ -345,6 +473,8 @@ public class SARTakMapController {
         if (cell == null)
             return;
         GeoPoint leaderPoint = getCurrentUserPoint();
+        if (leaderPoint == null)
+            return;
         double lineNorthing = searchLineManager.getArrangementNorthing(cell,
                 leaderPoint);
         assignmentManager.arrangeMembersForCell(cell, converter, leaderPoint,
@@ -353,22 +483,65 @@ public class SARTakMapController {
 
     private SearchGridCell ensureSelectedCell() {
         SearchGridCell cell = gridManager.getSelectedCell();
-        if (cell == null)
-            cell = gridManager.selectCellAt(getCurrentUserPoint());
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (cell == null && currentPoint != null)
+            cell = gridManager.selectCellAt(currentPoint);
         return cell;
     }
 
     private GeoPoint getCurrentUserPoint() {
-        if (mapView.getSelfMarker() != null
-                && mapView.getSelfMarker().getPoint() != null
-                && mapView.getSelfMarker().getPoint().isValid())
-            return mapView.getSelfMarker().getPoint();
+        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
+        if (snapshot.isAvailable())
+            return snapshot.getPoint();
+        healthManager.recordLocationFailure(snapshot.getMessage());
+        return null;
+    }
 
-        GeoPointMetaData center = mapView.getCenterPoint();
-        if (center != null && center.get() != null && center.get().isValid())
-            return center.get();
+    private void initialiseRuntime() {
+        healthManager.start();
+        healthManager.setStorageReady(true, "Local storage ready");
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        healthManager.setIdentityResolved(identity.isResolved(),
+                identity.getMessage());
+        if (identity.isResolved()) {
+            assignmentManager.setSelfIdentity(identity.getUid(),
+                    identity.getCallsign());
+            trackManager.startOrResume(identity.getUid(),
+                    identity.getCallsign());
+            healthManager.setTrackingActive(trackManager.isRecording());
+        } else {
+            healthManager.setTrackingActive(false);
+        }
+        locationCaptureManager.start();
+    }
 
-        return new GeoPoint(-27.4705, 153.0260);
+    private void refreshLocationAvailability() {
+        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
+        if (snapshot.isAvailable()) {
+            healthManager.recordLocationSuccess(snapshot.getTimestamp(),
+                    snapshot.getPoint().getCE(), snapshot.getSource());
+        } else {
+            healthManager.recordLocationFailure(snapshot.getMessage());
+        }
+    }
+
+    private void syncSelfTeamMemberFromAtak() {
+        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
+        assignmentManager.updateSelfFromAtak(snapshot,
+                gridManager.getSelectedCell());
+        if (!snapshot.isAvailable())
+            healthManager.recordLocationFailure(snapshot.getMessage());
+    }
+
+    private void refreshTeamContactsInternal() {
+        GeoPoint selfPoint = null;
+        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
+        if (snapshot.isAvailable())
+            selfPoint = snapshot.getPoint();
+        assignmentManager.updateFromAtakContacts(teamContactDataSource
+                .getContacts(), selfPoint, converter);
+        atakContactSummary = teamContactDataSource.describeLastScan(
+                assignmentManager.getLastAtakMatchedMembers());
     }
 
     private void registerMapListeners() {

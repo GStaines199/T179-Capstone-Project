@@ -15,7 +15,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         if (INSTANCE == null) {
             synchronized (DatabaseHelper.class) {
                 if (INSTANCE == null) {
-                    INSTANCE = new DatabaseHelper(context.getApplicationContext());
+                    Context safeContext = context.getApplicationContext() != null
+                            ? context.getApplicationContext()
+                            : context;
+                    INSTANCE = new DatabaseHelper(safeContext);
                 }
             }
         }

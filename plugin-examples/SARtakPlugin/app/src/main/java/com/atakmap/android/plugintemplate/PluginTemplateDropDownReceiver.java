@@ -8,6 +8,8 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
@@ -55,11 +57,18 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button markerModeAllButton;
     private final Button trackRecordButton;
     private final Button trackVisibilityButton;
+    private final Button trackClearButton;
     private final Button startSearchLineButton;
     private final Button pauseSearchLineButton;
     private final Button toggleCallsignsButton;
     private final Button searchLineColourButton;
+    private final Button saveTeamSetupButton;
+    private final Button refreshAtakContactsButton;
     private final EditText searchLineToleranceInput;
+    private final EditText teamNameInput;
+    private final EditText teamIdInput;
+    private final EditText memberUidInput;
+    private final EditText memberCallsignInput;
     private final View homeTabContent;
     private final View gridTabContent;
     private final View teamTabContent;
@@ -76,16 +85,28 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView homeSearchLineValue;
     private final TextView searchLineStatusValue;
     private final TextView searchLineMembersValue;
+    private final TextView pluginHealthValue;
+    private final TextView identityValue;
+    private final TextView homeGpsValue;
     private final TextView gridProgressValue;
     private final TextView teamSizeValue;
     private final TextView teamNameValue;
     private final LinearLayout teamMemberCardsContainer;
     private final TextView teamMarkerVisibilityValue;
+    private final TextView atakContactStatusValue;
     private final TextView teamAlertsValue;
     private final TextView homeAlertsValue;
     private final TextView currentRoleValue;
     private final TextView trackStatusValue;
     private final TextView trackDetailsValue;
+    private final Handler uiRefreshHandler = new Handler(Looper.getMainLooper());
+    private final Runnable uiRefreshRunnable = new Runnable() {
+        @Override
+        public void run() {
+            refreshGridUi();
+            uiRefreshHandler.postDelayed(this, 2000L);
+        }
+    };
     private boolean leaderView = true;
     private boolean suppressToleranceUpdate;
 
@@ -122,6 +143,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.track_record_button);
         trackVisibilityButton = templateView
                 .findViewById(R.id.track_visibility_button);
+        trackClearButton = templateView.findViewById(R.id.track_clear_button);
         startSearchLineButton = templateView
                 .findViewById(R.id.start_search_line_button);
         pauseSearchLineButton = templateView
@@ -130,8 +152,17 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.toggle_callsigns_button);
         searchLineColourButton = templateView
                 .findViewById(R.id.search_line_colour_button);
+        saveTeamSetupButton = templateView
+                .findViewById(R.id.save_team_setup_button);
+        refreshAtakContactsButton = templateView
+                .findViewById(R.id.refresh_atak_contacts_button);
         searchLineToleranceInput = templateView
                 .findViewById(R.id.search_line_tolerance_input);
+        teamNameInput = templateView.findViewById(R.id.team_name_input);
+        teamIdInput = templateView.findViewById(R.id.team_id_input);
+        memberUidInput = templateView.findViewById(R.id.member_uid_input);
+        memberCallsignInput = templateView
+                .findViewById(R.id.member_callsign_input);
         homeTabContent = templateView.findViewById(R.id.home_tab_content);
         gridTabContent = templateView.findViewById(R.id.grid_tab_content);
         teamTabContent = templateView.findViewById(R.id.team_tab_content);
@@ -152,6 +183,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.search_line_status_value);
         searchLineMembersValue = templateView
                 .findViewById(R.id.search_line_members_value);
+        pluginHealthValue = templateView.findViewById(
+                R.id.plugin_health_value);
+        identityValue = templateView.findViewById(R.id.identity_value);
+        homeGpsValue = templateView.findViewById(R.id.home_gps_value);
         gridProgressValue = templateView.findViewById(R.id.grid_progress_value);
         teamSizeValue = templateView.findViewById(R.id.team_size_value);
         teamNameValue = templateView.findViewById(R.id.team_name_value);
@@ -159,6 +194,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.team_member_cards_container);
         teamMarkerVisibilityValue = templateView
                 .findViewById(R.id.team_marker_visibility_value);
+        atakContactStatusValue = templateView
+                .findViewById(R.id.atak_contact_status_value);
         teamAlertsValue = templateView.findViewById(R.id.team_alerts_value);
         homeAlertsValue = templateView.findViewById(R.id.home_alerts_value);
         currentRoleValue = templateView.findViewById(R.id.current_role_value);
@@ -178,9 +215,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         toggleCallsignsButton.setOnClickListener(this);
         trackRecordButton.setOnClickListener(this);
         trackVisibilityButton.setOnClickListener(this);
+        trackClearButton.setOnClickListener(this);
         startSearchLineButton.setOnClickListener(this);
         pauseSearchLineButton.setOnClickListener(this);
         searchLineColourButton.setOnClickListener(this);
+        saveTeamSetupButton.setOnClickListener(this);
+        refreshAtakContactsButton.setOnClickListener(this);
         setupToleranceInput();
         templateView.findViewById(R.id.select_current_cell_button)
                 .setOnClickListener(this);
@@ -194,6 +234,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .setOnClickListener(this);
         templateView.findViewById(R.id.team_size_plus_button)
                 .setOnClickListener(this);
+        initialiseTeamInputs();
         showTab(TAB_HOME);
         refreshRoleUi();
         refreshGridUi();
@@ -251,6 +292,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             Toast.makeText(getMapView().getContext(), visible
                     ? "Track shown on map"
                     : "Track hidden from map", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.track_clear_button) {
+            mapController.clearTrackHistory();
+            Toast.makeText(getMapView().getContext(),
+                    "Track history cleared", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.start_search_line_button) {
             if (mapController.isSearchLineStarted()) {
                 mapController.endSearchLine();
@@ -265,6 +310,15 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             handlePauseResumeSearchLine();
         } else if (id == R.id.search_line_colour_button) {
             showLineColourDialog();
+        } else if (id == R.id.save_team_setup_button) {
+            mapController.updateTeamSetup(getText(teamNameInput),
+                    getText(teamIdInput));
+            Toast.makeText(getMapView().getContext(),
+                    "Team setup saved", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.refresh_atak_contacts_button) {
+            Toast.makeText(getMapView().getContext(),
+                    mapController.refreshAtakTeamContacts(),
+                    Toast.LENGTH_SHORT).show();
         } else if (id == R.id.select_current_cell_button) {
             mapController.selectCurrentCell();
             Toast.makeText(getMapView().getContext(),
@@ -277,9 +331,29 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         } else if (id == R.id.clear_cell_button) {
             mapController.clearSelectedStatus();
         } else if (id == R.id.team_size_minus_button) {
-            mapController.decreaseTeamSize();
+            String uid = getText(memberUidInput);
+            boolean removed = uid.length() > 0
+                    && mapController.removeTeamMemberFromSetup(uid);
+            if (!removed)
+                mapController.decreaseTeamSize();
+            Toast.makeText(getMapView().getContext(), removed
+                    ? "Member removed"
+                    : "Removed last assigned lane member",
+                    Toast.LENGTH_SHORT).show();
         } else if (id == R.id.team_size_plus_button) {
-            mapController.increaseTeamSize();
+            String uid = getText(memberUidInput);
+            if (uid.length() == 0) {
+                mapController.increaseTeamSize();
+                Toast.makeText(getMapView().getContext(),
+                        "Demo member added", Toast.LENGTH_SHORT).show();
+            } else {
+                boolean added = mapController.addTeamMemberFromSetup(uid,
+                        getText(memberCallsignInput));
+                Toast.makeText(getMapView().getContext(), added
+                        ? "Member added to team"
+                        : "Enter a member UID",
+                        Toast.LENGTH_SHORT).show();
+            }
         }
 
         refreshGridUi();
@@ -333,12 +407,21 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeSearchLineValue.setText(searchLineSummary);
         searchLineStatusValue.setText(searchLineSummary);
         searchLineMembersValue.setText(searchLineMembers);
+        pluginHealthValue.setText(mapController.getPluginHealthSummary());
+        identityValue.setText(mapController.getIdentitySummary());
+        homeGpsValue.setText(mapController.getGpsSummary());
+        homeGpsValue.setTextColor(mapController.isGpsActive()
+                ? Color.rgb(66, 195, 106)
+                : Color.rgb(216, 84, 76));
         gridProgressValue.setText(mapController.getGridProgressSummary());
         teamSizeValue.setText(String.valueOf(mapController.getTeamSize()));
         teamNameValue.setText(mapController.getTeamName() + " | "
                 + mapController.getTeamId());
+        setInputTextIfIdle(teamNameInput, mapController.getTeamName());
+        setInputTextIfIdle(teamIdInput, mapController.getTeamId());
         teamMarkerVisibilityValue.setText("Showing: "
                 + mapController.getTeamMarkerVisibilityLabel());
+        atakContactStatusValue.setText(mapController.getAtakContactSummary());
         renderTeamMemberCards();
         teamAlertsValue.setText(alertSummary);
         homeAlertsValue.setText(alertSummary);
@@ -431,6 +514,25 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 }
             }
         });
+    }
+
+    private void initialiseTeamInputs() {
+        teamNameInput.setText(mapController.getTeamName());
+        teamIdInput.setText(mapController.getTeamId());
+    }
+
+    private void setInputTextIfIdle(EditText input, String value) {
+        if (input == null || input.hasFocus())
+            return;
+        String next = value == null ? "" : value;
+        if (!next.contentEquals(input.getText()))
+            input.setText(next);
+    }
+
+    private String getText(EditText input) {
+        if (input == null || input.getText() == null)
+            return "";
+        return input.getText().toString().trim();
     }
 
     private void handlePauseResumeSearchLine() {
@@ -604,6 +706,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             Log.d(TAG, "showing plugin drop down");
             showDropDown(templateView, HALF_WIDTH, FULL_HEIGHT, FULL_WIDTH,
                     HALF_HEIGHT, false, this);
+            startUiRefresh();
         }
     }
 
@@ -613,6 +716,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
     @Override
     public void onDropDownVisible(boolean v) {
+        if (v)
+            startUiRefresh();
+        else
+            stopUiRefresh();
     }
 
     @Override
@@ -621,6 +728,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
     @Override
     public void onDropDownClose() {
+        stopUiRefresh();
+    }
+
+    private void startUiRefresh() {
+        uiRefreshHandler.removeCallbacks(uiRefreshRunnable);
+        uiRefreshHandler.post(uiRefreshRunnable);
+    }
+
+    private void stopUiRefresh() {
+        uiRefreshHandler.removeCallbacks(uiRefreshRunnable);
     }
 
 }

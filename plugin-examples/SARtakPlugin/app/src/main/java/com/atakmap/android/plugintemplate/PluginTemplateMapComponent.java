@@ -28,8 +28,9 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
         super.onCreate(context, intent, view);
         pluginContext = context;
 
-        // Initialise database
-        database = DatabaseHelper.getInstance(context);
+        // Store SARtak runtime data in ATAK's app context. The plugin resource
+        // context may not have its own writable databases directory.
+        database = DatabaseHelper.getInstance(view.getContext());
 
         ddr = new PluginTemplateDropDownReceiver(view, context);
 

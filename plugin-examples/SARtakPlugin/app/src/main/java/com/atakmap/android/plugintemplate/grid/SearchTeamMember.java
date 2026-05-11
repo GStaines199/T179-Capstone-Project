@@ -37,6 +37,7 @@ public class SearchTeamMember {
     private String lastPing;
     private String distanceFromYou;
     private String distanceFromSearchLine;
+    private boolean liveAtakContact;
 
     public SearchTeamMember(String uniqueId, String callsign, TeamRole role,
             String colorName, int displayColor,
@@ -112,6 +113,10 @@ public class SearchTeamMember {
         return connectionStatus;
     }
 
+    public void setConnectionStatus(ConnectionStatus connectionStatus) {
+        this.connectionStatus = connectionStatus;
+    }
+
     public int getLaneNumber() {
         return laneNumber;
     }
@@ -144,17 +149,58 @@ public class SearchTeamMember {
         return distanceFromSearchLine;
     }
 
+    public boolean hasLiveAtakContact() {
+        return liveAtakContact;
+    }
+
+    public void setLiveAtakContact(boolean liveAtakContact) {
+        this.liveAtakContact = liveAtakContact;
+    }
+
     public void updatePosition(double latitude, double longitude,
             double headingDegrees,
             String gpsCoordinates, String currentGridCell,
             String distanceFromYou, String distanceFromSearchLine) {
+        updatePosition(latitude, longitude, headingDegrees, gpsCoordinates,
+                this.altitude, currentGridCell, this.lastPing,
+                distanceFromYou, distanceFromSearchLine);
+    }
+
+    public void updatePosition(double latitude, double longitude,
+            double headingDegrees, String gpsCoordinates, String altitude,
+            String currentGridCell, String lastPing, String distanceFromYou,
+            String distanceFromSearchLine) {
         this.latitude = latitude;
         this.longitude = longitude;
         this.headingDegrees = headingDegrees;
         this.gpsCoordinates = gpsCoordinates;
+        this.altitude = altitude;
+        this.currentGridCell = currentGridCell;
+        this.lastPing = lastPing;
+        this.distanceFromYou = distanceFromYou;
+        this.distanceFromSearchLine = distanceFromSearchLine;
+        this.liveAtakContact = true;
+    }
+
+    public void updateMapPosition(double latitude, double longitude,
+            double headingDegrees, String currentGridCell,
+            String distanceFromYou, String distanceFromSearchLine) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.headingDegrees = headingDegrees;
         this.currentGridCell = currentGridCell;
         this.distanceFromYou = distanceFromYou;
         this.distanceFromSearchLine = distanceFromSearchLine;
+    }
+
+    public void markLocationUnavailable(String message) {
+        gpsCoordinates = message;
+        altitude = message;
+        currentGridCell = message;
+        lastPing = message;
+        distanceFromYou = message;
+        distanceFromSearchLine = message;
+        liveAtakContact = false;
     }
 
     public String getRoleLabel() {

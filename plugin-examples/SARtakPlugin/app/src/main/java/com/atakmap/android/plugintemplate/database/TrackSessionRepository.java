@@ -46,6 +46,18 @@ public class TrackSessionRepository {
         return sessionId;
     }
 
+    public long getSessionStartTimestamp(String sessionId) {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor cursor = db.query("track_sessions",
+                new String[]{"start_timestamp"},
+                "session_id = ?", new String[]{sessionId},
+                null, null, null, "1");
+        long timestamp = 0L;
+        if (cursor.moveToFirst()) timestamp = cursor.getLong(0);
+        cursor.close();
+        return timestamp;
+    }
+
     public void closeSession(String sessionId, long endTimestamp) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -53,6 +65,11 @@ public class TrackSessionRepository {
         values.put("end_timestamp", endTimestamp);
         db.update("track_sessions", values,
                 "session_id = ?", new String[]{sessionId});
+    }
+
+    public void deleteSession(String sessionId) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.delete("track_sessions", "session_id = ?", new String[]{sessionId});
     }
 
     public void incrementPointCount(String sessionId) {

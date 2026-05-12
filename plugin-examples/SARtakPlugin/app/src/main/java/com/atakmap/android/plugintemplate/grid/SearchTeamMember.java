@@ -22,7 +22,7 @@ public class SearchTeamMember {
 
     private final String uniqueId;
     private final String callsign;
-    private final TeamRole role;
+    private TeamRole role;
     private final String colorName;
     private final int displayColor;
     private double latitude;
@@ -75,6 +75,10 @@ public class SearchTeamMember {
 
     public TeamRole getRole() {
         return role;
+    }
+
+    public void setRole(TeamRole role) {
+        this.role = role;
     }
 
     public boolean isTeamLeader() {

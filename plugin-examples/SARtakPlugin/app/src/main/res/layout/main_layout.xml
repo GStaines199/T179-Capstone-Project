@@ -56,29 +56,6 @@
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/sartak_panel"
-            android:orientation="horizontal">
-
-            <TextView
-                style="@style/SARtakLabel"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:layout_weight="1"
-                android:text="@string/view_mode_label" />
-
-            <Button
-                android:id="@+id/role_toggle_button"
-                style="@style/SARtakActionButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/leader_view" />
-        </LinearLayout>
-
-        <LinearLayout
             android:id="@+id/home_tab_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -115,14 +92,14 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/searcher_callsign" />
+                        android:text="@string/atak_role_label" />
 
                     <TextView
                         android:id="@+id/current_role_value"
                         style="@style/SARtakStatusValue"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/leader_view" />
+                        android:text="@string/member_view" />
                 </LinearLayout>
 
                 <TextView
@@ -645,6 +622,20 @@
                     android:background="@drawable/sartak_status_yellow"
                     android:padding="6dp"
                     android:text="@string/team_member_two" />
+
+                <TextView
+                    style="@style/SARtakLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/invites_requests" />
+
+                <LinearLayout
+                    android:id="@+id/invites_requests_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
             </LinearLayout>
 
             <LinearLayout
@@ -758,7 +749,8 @@
                     android:hint="@string/team_name_hint"
                     android:singleLine="true"
                     android:textColor="@color/sartak_text_primary"
-                    android:textColorHint="@color/sartak_text_secondary" />
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
 
                 <EditText
                     android:id="@+id/team_id_input"
@@ -768,7 +760,8 @@
                     android:hint="@string/team_id_hint"
                     android:singleLine="true"
                     android:textColor="@color/sartak_text_primary"
-                    android:textColorHint="@color/sartak_text_secondary" />
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
 
                 <Button
                     android:id="@+id/save_team_setup_button"
@@ -786,7 +779,8 @@
                     android:hint="@string/member_uid_hint"
                     android:singleLine="true"
                     android:textColor="@color/sartak_text_primary"
-                    android:textColorHint="@color/sartak_text_secondary" />
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
 
                 <EditText
                     android:id="@+id/member_callsign_input"
@@ -796,7 +790,8 @@
                     android:hint="@string/member_callsign_hint"
                     android:singleLine="true"
                     android:textColor="@color/sartak_text_primary"
-                    android:textColorHint="@color/sartak_text_secondary" />
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -810,7 +805,8 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/remove_member" />
+                        android:text="@string/remove_member"
+                        android:visibility="gone" />
 
                     <Button
                         android:id="@+id/team_size_plus_button"

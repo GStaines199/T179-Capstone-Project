@@ -25,12 +25,12 @@ public class SearchPartyAssignmentManager {
             "Blue", "Green", "Yellow", "Red", "Purple"
     };
 
-    private String teamId = "TEAM-ALPHA-001";
-    private String teamName = "Team Alpha";
+    private String teamId = "";
+    private String teamName = "";
     private String selfMemberId = "TL-A-001";
     private final List<SearchTeamMember> members = new ArrayList<>();
-    private int mockMemberCounter = 1;
     private int lastAtakMatchedMembers;
+    private boolean teamCreated;
 
     public SearchPartyAssignmentManager() {
         members.add(new SearchTeamMember("TL-A-001", "Alpha Lead",
@@ -58,7 +58,17 @@ public class SearchPartyAssignmentManager {
         return lastAtakMatchedMembers;
     }
 
+    public boolean isTeamCreated() {
+        return teamCreated;
+    }
+
+    public void setTeamCreated(boolean teamCreated) {
+        this.teamCreated = teamCreated;
+    }
+
     public List<SearchTeamMember> getVisibleMembers() {
+        if (!teamCreated)
+            return Collections.emptyList();
         List<SearchTeamMember> visibleMembers = new ArrayList<>();
         for (SearchTeamMember member : members) {
             if (member.getMembershipStatus()
@@ -69,6 +79,8 @@ public class SearchPartyAssignmentManager {
     }
 
     public List<SearchTeamMember> getLaneMembers() {
+        if (!teamCreated)
+            return Collections.emptyList();
         List<SearchTeamMember> laneMembers = new ArrayList<>();
         for (SearchTeamMember member : members) {
             if (member.contributesLane())
@@ -95,18 +107,27 @@ public class SearchPartyAssignmentManager {
         return Math.max(1, getLaneMembers().size());
     }
 
-    public void addMockMember() {
-        String number = mockMemberCounter < 10 ? "0" + mockMemberCounter
-                : String.valueOf(mockMemberCounter);
-        addTeamMember("A-S" + number, "Searcher " + number);
-        mockMemberCounter++;
-    }
-
     public void setTeamDetails(String teamName, String teamId) {
         if (teamName != null && teamName.trim().length() > 0)
             this.teamName = teamName.trim();
         if (teamId != null && teamId.trim().length() > 0)
             this.teamId = teamId.trim();
+    }
+
+    public void createTeam(String teamName, String teamId) {
+        setTeamDetails(teamName, teamId);
+        teamCreated = true;
+        SearchTeamMember self = findMemberById(selfMemberId);
+        if (self != null)
+            self.setRole(SearchTeamMember.TeamRole.TEAM_LEADER);
+    }
+
+    public void joinTeam(String teamName, String teamId) {
+        setTeamDetails(teamName, teamId);
+        teamCreated = true;
+        SearchTeamMember self = findMemberById(selfMemberId);
+        if (self != null)
+            self.setRole(SearchTeamMember.TeamRole.SEARCHER);
     }
 
     public void setSelfIdentity(String uid, String callsign) {
@@ -140,34 +161,42 @@ public class SearchPartyAssignmentManager {
         }
     }
 
-    public SearchTeamMember addTeamMember(String uniqueId, String callsign) {
-        String uid = uniqueId == null ? "" : uniqueId.trim();
-        if (uid.length() == 0)
+    public SearchTeamMember addTeamMember(
+            AtakTeamContactDataSource.ContactSnapshot contact,
+            GeoPoint selfPoint, GridCoordinateConverter converter) {
+        if (contact == null || contact.getUid() == null
+                || contact.getUid().trim().length() == 0)
             return null;
 
+        String uid = contact.getUid().trim();
         SearchTeamMember existing = findAnyMemberById(uid);
         if (existing != null) {
             existing.setMembershipStatus(
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
-            if (!existing.isTeamLeader())
-                existing.setConnectionStatus(
-                        SearchTeamMember.ConnectionStatus.RECONNECTING);
+            updateMemberFromContact(existing, contact, selfPoint, converter);
             return existing;
         }
 
         int colorIndex = Math.max(0, getLaneMemberCount() - 1)
                 % SEARCHER_COLORS.length;
-        String label = callsign == null || callsign.trim().length() == 0
-                ? uid : callsign.trim();
+        String label = contact.getCallsign() == null
+                || contact.getCallsign().trim().length() == 0
+                ? uid : contact.getCallsign().trim();
         SearchTeamMember member = new SearchTeamMember(uid, label,
                 SearchTeamMember.TeamRole.SEARCHER,
                 SEARCHER_COLOR_NAMES[colorIndex], SEARCHER_COLORS[colorIndex],
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
-                SearchTeamMember.ConnectionStatus.RECONNECTING,
-                getLaneMemberCount() + 1, -27.4705, 153.0260, 0.0,
-                "Awaiting ATAK peer", "Awaiting ATAK peer", "Unassigned",
-                "Awaiting ATAK peer", "Awaiting ATAK peer",
-                "Awaiting ATAK peer");
+                SearchTeamMember.ConnectionStatus.CONNECTED,
+                getLaneMemberCount() + 1,
+                contact.getPoint().getLatitude(),
+                contact.getPoint().getLongitude(),
+                contact.getHeadingDegrees(), formatGeo(contact.getPoint()),
+                formatAltitude(contact.getPoint()),
+                converter.cellIdForPoint(contact.getPoint()),
+                formatLastPing(contact.getTimestamp()),
+                formatDistanceFromSelf(selfPoint, contact.getPoint()),
+                "Not measured");
+        member.setLiveAtakContact(true);
         members.add(member);
         return member;
     }
@@ -221,15 +250,7 @@ public class SearchPartyAssignmentManager {
             }
 
             lastAtakMatchedMembers++;
-            GeoPoint point = contact.getPoint();
-            member.setConnectionStatus(
-                    SearchTeamMember.ConnectionStatus.CONNECTED);
-            member.updatePosition(point.getLatitude(), point.getLongitude(),
-                    contact.getHeadingDegrees(), formatGeo(point),
-                    formatAltitude(point), converter.cellIdForPoint(point),
-                    formatLastPing(contact.getTimestamp()),
-                    formatDistanceFromSelf(selfPoint, point),
-                    member.getDistanceFromSearchLine());
+            updateMemberFromContact(member, contact, selfPoint, converter);
         }
     }
 
@@ -361,6 +382,19 @@ public class SearchPartyAssignmentManager {
                 return contact;
         }
         return null;
+    }
+
+    private void updateMemberFromContact(SearchTeamMember member,
+            AtakTeamContactDataSource.ContactSnapshot contact,
+            GeoPoint selfPoint, GridCoordinateConverter converter) {
+        GeoPoint point = contact.getPoint();
+        member.setConnectionStatus(SearchTeamMember.ConnectionStatus.CONNECTED);
+        member.updatePosition(point.getLatitude(), point.getLongitude(),
+                contact.getHeadingDegrees(), formatGeo(point),
+                formatAltitude(point), converter.cellIdForPoint(point),
+                formatLastPing(contact.getTimestamp()),
+                formatDistanceFromSelf(selfPoint, point),
+                member.getDistanceFromSearchLine());
     }
 
     private String formatDistanceFromSelf(GeoPoint selfPoint,

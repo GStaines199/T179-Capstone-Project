@@ -46,6 +46,7 @@
     <string name="team_size_increase">Add</string>
     <string name="team_roster">Team Roster</string>
     <string name="team_alerts">Connection Alerts</string>
+    <string name="invites_requests">Invites / Requests</string>
     <string name="messages_heading">Messages / Alerts</string>
     <string name="message_latest">Team Lead: Hold current line. Continue east to fence track.</string>
     <string name="track_heading">My Track Log</string>
@@ -54,9 +55,9 @@
     <string name="tab_grid">Grid</string>
     <string name="tab_team">Team</string>
     <string name="tab_track">Track</string>
-    <string name="view_mode_label">Presentation Mode</string>
-    <string name="leader_view">Leader View</string>
-    <string name="member_view">Member View</string>
+    <string name="atak_role_label">ATAK Role</string>
+    <string name="leader_view">Team Leader</string>
+    <string name="member_view">Team Member</string>
     <string name="current_operation">Current Operation</string>
     <string name="current_grid_info">Current Grid Info</string>
     <string name="current_search_cell">Current Search Cell</string>
@@ -69,7 +70,7 @@
     <string name="team_id_hint">Team ID / callsign</string>
     <string name="member_uid_hint">Member ATAK UID</string>
     <string name="member_callsign_hint">Member callsign (optional)</string>
-    <string name="save_team_setup">Save Team Setup</string>
+    <string name="save_team_setup">Edit Team Setup</string>
     <string name="refresh_atak_contacts">Refresh ATAK Contacts</string>
     <string name="other_teams">Other Teams</string>
     <string name="other_team_dropdown">Team Bravo - expand</string>

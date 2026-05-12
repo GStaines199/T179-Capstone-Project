@@ -1,6 +1,8 @@
 package com.atakmap.android.plugintemplate;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.atakmap.android.maps.MapEvent;
 import com.atakmap.android.maps.MapEventDispatcher;
@@ -26,11 +28,14 @@ import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 import com.atakmap.android.plugintemplate.grid.SearchTrackOverlay;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
 import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
+import com.atakmap.android.plugintemplate.runtime.AtakRoleResolver;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
 import com.atakmap.android.plugintemplate.runtime.AtakTrackBridge;
 import com.atakmap.android.plugintemplate.runtime.IdentityManager;
 import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
+import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
+import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import java.util.List;
@@ -52,9 +57,13 @@ public class SARTakMapController {
     private final IdentityManager identityManager;
     private final LocationCaptureManager locationCaptureManager;
     private final AtakTeamContactDataSource teamContactDataSource;
+    private final SearchTeamCotWorkflow teamCotWorkflow;
     private final SearchTeamStateStore teamStateStore;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
+    private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
+    private final Runnable backgroundRunnable;
     private String atakContactSummary = "ATAK contacts not scanned yet";
+    private AtakRoleResolver.Role currentRole = AtakRoleResolver.Role.TEAM_MEMBER;
 
     public SARTakMapController(MapView mapView, Context pluginContext) {
         this.mapView = mapView;
@@ -89,6 +98,8 @@ public class SARTakMapController {
         this.identityManager = new IdentityManager(runtimeContext, mapView,
                 searcherRepository);
         this.teamContactDataSource = new AtakTeamContactDataSource(mapView);
+        this.teamCotWorkflow = new SearchTeamCotWorkflow(mapView,
+                identityManager);
         this.locationCaptureManager = new LocationCaptureManager(mapView,
                 identityManager, trackManager, healthManager,
                 new LocationCaptureManager.Listener() {
@@ -103,8 +114,16 @@ public class SARTakMapController {
                 refreshOverlay();
             }
         };
+        this.backgroundRunnable = new Runnable() {
+            @Override
+            public void run() {
+                runBackgroundTeamRefresh();
+                backgroundHandler.postDelayed(this, 5000L);
+            }
+        };
         registerMapListeners();
         initialiseRuntime();
+        startBackgroundRefresh();
         teamMarkerOverlay.render();
         trackOverlay.render(trackManager.getTrackPoints());
     }
@@ -199,10 +218,7 @@ public class SARTakMapController {
     }
 
     public void increaseTeamSize() {
-        assignmentManager.addMockMember();
-        arrangeTeamMembers();
-        refreshOverlay();
-        teamStateStore.save(assignmentManager);
+        refreshAtakTeamContacts();
     }
 
     public void decreaseTeamSize() {
@@ -237,33 +253,178 @@ public class SARTakMapController {
     }
 
     public String getTeamName() {
-        return assignmentManager.getTeamName();
+        return assignmentManager.getTeamName().length() == 0
+                ? "No SARtak team" : assignmentManager.getTeamName();
     }
 
     public String getTeamId() {
-        return assignmentManager.getTeamId();
+        return assignmentManager.getTeamId().length() == 0
+                ? getFixedLeaderTeamId() : assignmentManager.getTeamId();
+    }
+
+    public String getSelfMemberId() {
+        return assignmentManager.getSelfMemberId();
     }
 
     public List<SearchTeamMember> getTeamMembers() {
+        if (!assignmentManager.isTeamCreated())
+            return assignmentManager.getVisibleMembers();
         syncSelfTeamMemberFromAtak();
         refreshTeamContactsInternal();
         return assignmentManager.getVisibleMembers();
     }
 
-    public void updateTeamSetup(String teamName, String teamId) {
-        assignmentManager.setTeamDetails(teamName, teamId);
+    public boolean isTeamCreated() {
+        return assignmentManager.isTeamCreated();
+    }
+
+    public void createTeam(String teamName) {
+        assignmentManager.createTeam(teamName, getFixedLeaderTeamId());
+        teamStateStore.save(assignmentManager);
+        teamCotWorkflow.advertiseTeam(assignmentManager.getTeamId(),
+                assignmentManager.getTeamName());
+        refreshOverlay();
+    }
+
+    public void requestJoinTeam(SearchTeamCotMessage team) {
+        teamCotWorkflow.requestJoin(team);
+    }
+
+    public void cancelJoinRequest(SearchTeamCotMessage request) {
+        teamCotWorkflow.cancelJoinRequest(request);
+    }
+
+    public void inviteTeamMember(String uniqueId) {
+        if (!assignmentManager.isTeamCreated())
+            return;
+        AtakTeamContactDataSource.ContactSnapshot contact = findContact(uniqueId);
+        if (contact == null)
+            return;
+        teamCotWorkflow.inviteMember(assignmentManager.getTeamId(),
+                assignmentManager.getTeamName(), contact.getUid(),
+                contact.getCallsign());
+    }
+
+    public void cancelInvite(SearchTeamCotMessage invite) {
+        teamCotWorkflow.cancelInvite(invite);
+    }
+
+    public void respondToJoinRequest(SearchTeamCotMessage request,
+            boolean accepted) {
+        teamCotWorkflow.respondToJoin(request, accepted);
+        if (accepted) {
+            AtakTeamContactDataSource.ContactSnapshot contact = findContact(
+                    request.getSenderUid());
+            if (contact != null)
+                assignmentManager.addTeamMember(contact,
+                        getAvailableSelfPoint(), converter);
+            teamStateStore.save(assignmentManager);
+            refreshOverlay();
+        }
+    }
+
+    public void acceptJoinResponse(SearchTeamCotMessage response) {
+        assignmentManager.joinTeam(response.getTeamName(),
+                response.getTeamId());
         teamStateStore.save(assignmentManager);
         refreshOverlay();
     }
 
-    public boolean addTeamMemberFromSetup(String uniqueId, String callsign) {
-        SearchTeamMember member = assignmentManager.addTeamMember(uniqueId,
-                callsign);
-        refreshTeamContactsInternal();
+    public void respondToInvite(SearchTeamCotMessage invite,
+            boolean accepted) {
+        teamCotWorkflow.respondToInvite(invite, accepted);
+        if (accepted) {
+            assignmentManager.joinTeam(invite.getTeamName(),
+                    invite.getTeamId());
+            teamStateStore.save(assignmentManager);
+            refreshOverlay();
+        }
+    }
+
+    public boolean acceptInviteResponse(SearchTeamCotMessage response) {
+        if (!SearchTeamCotMessage.ACTION_INVITE_ACCEPT.equals(
+                response.getAction()))
+            return false;
+        boolean added = addTeamMemberFromContact(response.getSenderUid());
+        if (added)
+            teamStateStore.save(assignmentManager);
+        return added;
+    }
+
+    public List<SearchTeamCotMessage> getActiveTeamAdvertisements() {
+        List<SearchTeamCotMessage> teams = new java.util.ArrayList<>(
+                teamCotWorkflow.getTeamAdvertisements());
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        for (AtakTeamContactDataSource.ContactSnapshot contact
+                : teamContactDataSource.getContacts()) {
+            if (!contact.isTeamLead()
+                    || contact.getUid().equals(identity.getUid()))
+                continue;
+            String teamId = "TEAM-" + contact.getUid();
+            if (containsTeam(teams, teamId))
+                continue;
+            teams.add(new SearchTeamCotMessage("sartak-fallback-team-"
+                    + contact.getUid(), SearchTeamCotMessage.ACTION_ADVERTISE,
+                    teamId, contact.getCallsign() + " Team",
+                    contact.getUid(), contact.getCallsign(), contact.getUid(),
+                    contact.getCallsign(), "", ""));
+        }
+        return dedupeTeams(teams);
+    }
+
+    public List<SearchTeamCotMessage> getPendingJoinRequests() {
+        if (!assignmentManager.isTeamCreated())
+            return java.util.Collections.emptyList();
+        return teamCotWorkflow.getJoinRequests(assignmentManager.getTeamId());
+    }
+
+    public List<SearchTeamCotMessage> getJoinResponsesForMe() {
+        return teamCotWorkflow.getJoinResponsesForMe();
+    }
+
+    public List<SearchTeamCotMessage> getInvitesForMe() {
+        return teamCotWorkflow.getInvitesForMe();
+    }
+
+    public List<SearchTeamCotMessage> getInviteResponsesForLeader() {
+        if (!assignmentManager.isTeamCreated())
+            return java.util.Collections.emptyList();
+        return teamCotWorkflow.getInviteResponsesForLeader();
+    }
+
+    public List<SearchTeamCotMessage> getOutgoingInvites() {
+        if (!assignmentManager.isTeamCreated())
+            return java.util.Collections.emptyList();
+        return teamCotWorkflow.getOutgoingInvites(assignmentManager.getTeamId());
+    }
+
+    public List<SearchTeamCotMessage> getOutgoingJoinRequests() {
+        return teamCotWorkflow.getOutgoingJoinRequests();
+    }
+
+    public void updateTeamSetup(String teamName) {
+        assignmentManager.setTeamDetails(teamName, assignmentManager
+                .getTeamId());
+        teamStateStore.save(assignmentManager);
+        refreshOverlay();
+    }
+
+    public boolean addTeamMemberFromContact(String uniqueId) {
+        if (!assignmentManager.isTeamCreated())
+            return false;
+        AtakTeamContactDataSource.ContactSnapshot contact = findContact(uniqueId);
+        if (contact == null)
+            return false;
+        SearchTeamMember member = assignmentManager.addTeamMember(contact,
+                getAvailableSelfPoint(), converter);
         arrangeTeamMembers();
         refreshOverlay();
         teamStateStore.save(assignmentManager);
         return member != null;
+    }
+
+    public List<AtakTeamContactDataSource.ContactSnapshot> getAvailableContacts() {
+        return teamContactDataSource.getContacts();
     }
 
     public boolean removeTeamMemberFromSetup(String uniqueId) {
@@ -276,14 +437,33 @@ public class SARTakMapController {
     }
 
     public String refreshAtakTeamContacts() {
+        if (isLeaderRole() && assignmentManager.isTeamCreated())
+            teamCotWorkflow.advertiseTeam(assignmentManager.getTeamId(),
+                    assignmentManager.getTeamName());
         refreshTeamContactsInternal();
         arrangeTeamMembers();
         refreshOverlay();
         return atakContactSummary;
     }
 
+    public void advertiseTeamIfDue() {
+        if (isLeaderRole() && assignmentManager.isTeamCreated())
+            teamCotWorkflow.advertiseTeamIfDue(assignmentManager.getTeamId(),
+                    assignmentManager.getTeamName());
+    }
+
     public String getAtakContactSummary() {
         return atakContactSummary;
+    }
+
+    public boolean isLeaderRole() {
+        currentRole = AtakRoleResolver.resolve(mapView);
+        return currentRole == AtakRoleResolver.Role.TEAM_LEADER;
+    }
+
+    public String getRoleLabel() {
+        currentRole = AtakRoleResolver.resolve(mapView);
+        return AtakRoleResolver.label(currentRole);
     }
 
     public void setTeamMarkerVisibilityMode(TeamMarkerVisibilityMode mode) {
@@ -447,6 +627,8 @@ public class SARTakMapController {
     public void dispose() {
         locationCaptureManager.stop();
         healthManager.stop();
+        teamCotWorkflow.dispose();
+        backgroundHandler.removeCallbacks(backgroundRunnable);
         unregisterMapListeners();
         gridOverlay.setVisible(false);
         teamMarkerOverlay.setVisible(false);
@@ -466,6 +648,19 @@ public class SARTakMapController {
         trackOverlay.setVisible(trackManager.isVisible()
                 && !atakTrackBridge.hasAtakTrackTrail());
         trackOverlay.render(trackManager.getTrackPoints());
+    }
+
+    private void startBackgroundRefresh() {
+        backgroundHandler.removeCallbacks(backgroundRunnable);
+        backgroundHandler.postDelayed(backgroundRunnable, 5000L);
+    }
+
+    private void runBackgroundTeamRefresh() {
+        advertiseTeamIfDue();
+        if (assignmentManager.isTeamCreated())
+            refreshTeamContactsInternal();
+        refreshLocationAvailability();
+        refreshOverlay();
     }
 
     private void arrangeTeamMembers() {
@@ -506,6 +701,9 @@ public class SARTakMapController {
         if (identity.isResolved()) {
             assignmentManager.setSelfIdentity(identity.getUid(),
                     identity.getCallsign());
+            if (assignmentManager.isTeamCreated())
+                assignmentManager.setTeamDetails(assignmentManager
+                        .getTeamName(), getFixedLeaderTeamId());
             trackManager.startOrResume(identity.getUid(),
                     identity.getCallsign());
             healthManager.setTrackingActive(trackManager.isRecording());
@@ -534,14 +732,62 @@ public class SARTakMapController {
     }
 
     private void refreshTeamContactsInternal() {
-        GeoPoint selfPoint = null;
-        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
-        if (snapshot.isAvailable())
-            selfPoint = snapshot.getPoint();
+        if (!assignmentManager.isTeamCreated()) {
+            atakContactSummary = isLeaderRole()
+                    ? "Create a SARtak team before adding members."
+                    : "Join a SARtak team to show team info.";
+            return;
+        }
         assignmentManager.updateFromAtakContacts(teamContactDataSource
-                .getContacts(), selfPoint, converter);
+                .getContacts(), getAvailableSelfPoint(), converter);
         atakContactSummary = teamContactDataSource.describeLastScan(
                 assignmentManager.getLastAtakMatchedMembers());
+    }
+
+    private AtakTeamContactDataSource.ContactSnapshot findContact(
+            String uniqueId) {
+        if (uniqueId == null)
+            return null;
+        for (AtakTeamContactDataSource.ContactSnapshot contact
+                : teamContactDataSource.getContacts()) {
+            if (uniqueId.equals(contact.getUid()))
+                return contact;
+        }
+        return null;
+    }
+
+    private boolean containsTeam(List<SearchTeamCotMessage> teams,
+            String teamId) {
+        for (SearchTeamCotMessage team : teams) {
+            if (teamId.equals(team.getTeamId()))
+                return true;
+        }
+        return false;
+    }
+
+    private List<SearchTeamCotMessage> dedupeTeams(
+            List<SearchTeamCotMessage> teams) {
+        java.util.LinkedHashMap<String, SearchTeamCotMessage> byTeam =
+                new java.util.LinkedHashMap<>();
+        for (SearchTeamCotMessage team : teams) {
+            String key = team.getTeamId() == null
+                    || team.getTeamId().length() == 0
+                            ? team.getLeaderUid() : team.getTeamId();
+            byTeam.put(key, team);
+        }
+        return new java.util.ArrayList<>(byTeam.values());
+    }
+
+    private GeoPoint getAvailableSelfPoint() {
+        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
+        return snapshot.isAvailable() ? snapshot.getPoint() : null;
+    }
+
+    private String getFixedLeaderTeamId() {
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String uid = identity != null && identity.isResolved()
+                ? identity.getUid() : MapView.getDeviceUid();
+        return "TEAM-" + uid;
     }
 
     private void registerMapListeners() {

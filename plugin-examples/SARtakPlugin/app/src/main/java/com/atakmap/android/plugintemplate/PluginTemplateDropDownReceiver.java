@@ -24,11 +24,16 @@ import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
+import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.plugin.R;
 import com.atakmap.android.dropdown.DropDown.OnStateListener;
 import com.atakmap.android.dropdown.DropDownReceiver;
 
 import com.atakmap.coremap.log.Log;
+
+import java.util.HashSet;
+import java.util.Set;
 
 public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         OnStateListener, View.OnClickListener {
@@ -49,7 +54,6 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button gridTabButton;
     private final Button teamTabButton;
     private final Button trackTabButton;
-    private final Button roleToggleButton;
     private final Button toggleSearchAreaButton;
     private final Button markerModeMeButton;
     private final Button markerModeTeamButton;
@@ -92,6 +96,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView teamSizeValue;
     private final TextView teamNameValue;
     private final LinearLayout teamMemberCardsContainer;
+    private final LinearLayout invitesRequestsContainer;
     private final TextView teamMarkerVisibilityValue;
     private final TextView atakContactStatusValue;
     private final TextView teamAlertsValue;
@@ -100,6 +105,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView trackStatusValue;
     private final TextView trackDetailsValue;
     private final Handler uiRefreshHandler = new Handler(Looper.getMainLooper());
+    private final Set<String> handledTeamMessages = new HashSet<>();
+    private final Set<String> resolvedTeamMessages = new HashSet<>();
     private final Runnable uiRefreshRunnable = new Runnable() {
         @Override
         public void run() {
@@ -128,7 +135,6 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         gridTabButton = templateView.findViewById(R.id.grid_tab_button);
         teamTabButton = templateView.findViewById(R.id.team_tab_button);
         trackTabButton = templateView.findViewById(R.id.track_tab_button);
-        roleToggleButton = templateView.findViewById(R.id.role_toggle_button);
         toggleSearchAreaButton = templateView
                 .findViewById(R.id.toggle_search_area_button);
         markerModeMeButton = templateView
@@ -192,6 +198,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         teamNameValue = templateView.findViewById(R.id.team_name_value);
         teamMemberCardsContainer = templateView
                 .findViewById(R.id.team_member_cards_container);
+        invitesRequestsContainer = templateView
+                .findViewById(R.id.invites_requests_container);
         teamMarkerVisibilityValue = templateView
                 .findViewById(R.id.team_marker_visibility_value);
         atakContactStatusValue = templateView
@@ -206,7 +214,6 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         gridTabButton.setOnClickListener(this);
         teamTabButton.setOnClickListener(this);
         trackTabButton.setOnClickListener(this);
-        roleToggleButton.setOnClickListener(this);
         toggleSearchAreaButton.setOnClickListener(this);
         markerModeMeButton.setOnClickListener(this);
         markerModeTeamButton.setOnClickListener(this);
@@ -258,12 +265,6 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             showTab(TAB_TEAM);
         } else if (id == R.id.track_tab_button) {
             showTab(TAB_TRACK);
-        } else if (id == R.id.role_toggle_button) {
-            leaderView = !leaderView;
-            refreshRoleUi();
-            Toast.makeText(getMapView().getContext(), leaderView
-                    ? "Leader presentation view"
-                    : "Member presentation view", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.toggle_search_area_button) {
             boolean visible = mapController.toggleGridOverlay();
             Toast.makeText(getMapView().getContext(), visible
@@ -311,10 +312,14 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         } else if (id == R.id.search_line_colour_button) {
             showLineColourDialog();
         } else if (id == R.id.save_team_setup_button) {
-            mapController.updateTeamSetup(getText(teamNameInput),
-                    getText(teamIdInput));
-            Toast.makeText(getMapView().getContext(),
-                    "Team setup saved", Toast.LENGTH_SHORT).show();
+            if (leaderView) {
+                if (mapController.isTeamCreated())
+                    showTeamSetupDialog();
+                else
+                    showCreateTeamDialog();
+            } else {
+                showJoinTeamDialog();
+            }
         } else if (id == R.id.refresh_atak_contacts_button) {
             Toast.makeText(getMapView().getContext(),
                     mapController.refreshAtakTeamContacts(),
@@ -331,29 +336,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         } else if (id == R.id.clear_cell_button) {
             mapController.clearSelectedStatus();
         } else if (id == R.id.team_size_minus_button) {
-            String uid = getText(memberUidInput);
-            boolean removed = uid.length() > 0
-                    && mapController.removeTeamMemberFromSetup(uid);
-            if (!removed)
-                mapController.decreaseTeamSize();
-            Toast.makeText(getMapView().getContext(), removed
-                    ? "Member removed"
-                    : "Removed last assigned lane member",
+            Toast.makeText(getMapView().getContext(),
+                    "Use the X on a member card to remove them.",
                     Toast.LENGTH_SHORT).show();
         } else if (id == R.id.team_size_plus_button) {
-            String uid = getText(memberUidInput);
-            if (uid.length() == 0) {
-                mapController.increaseTeamSize();
-                Toast.makeText(getMapView().getContext(),
-                        "Demo member added", Toast.LENGTH_SHORT).show();
-            } else {
-                boolean added = mapController.addTeamMemberFromSetup(uid,
-                        getText(memberCallsignInput));
-                Toast.makeText(getMapView().getContext(), added
-                        ? "Member added to team"
-                        : "Enter a member UID",
-                        Toast.LENGTH_SHORT).show();
-            }
+            showAddMemberDialog();
         }
 
         refreshGridUi();
@@ -372,15 +359,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
     private void refreshRoleUi() {
-        roleToggleButton.setText(leaderView
-                ? R.string.leader_view
-                : R.string.member_view);
-        currentRoleValue.setText(leaderView
-                ? R.string.leader_view
-                : R.string.member_view);
+        leaderView = mapController.isLeaderRole();
+        currentRoleValue.setText(mapController.getRoleLabel());
 
-        int leaderVisibility = leaderView ? View.VISIBLE : View.GONE;
-        leaderTeamControls.setVisibility(leaderVisibility);
+        leaderTeamControls.setVisibility(View.VISIBLE);
+        int leaderVisibility = leaderView && mapController.isTeamCreated()
+                ? View.VISIBLE : View.GONE;
         otherTeamsSection.setVisibility(leaderVisibility);
         gridStatusControls.setVisibility(leaderVisibility);
         searchLineControls.setVisibility(leaderVisibility);
@@ -388,6 +372,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
     private void refreshGridUi() {
+        refreshRoleUi();
         toggleSearchAreaButton.setText(mapController.isGridOverlayVisible()
                 ? R.string.hide_lanes
                 : R.string.show_lanes);
@@ -414,19 +399,33 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 ? Color.rgb(66, 195, 106)
                 : Color.rgb(216, 84, 76));
         gridProgressValue.setText(mapController.getGridProgressSummary());
-        teamSizeValue.setText(String.valueOf(mapController.getTeamSize()));
-        teamNameValue.setText(mapController.getTeamName() + " | "
-                + mapController.getTeamId());
+        teamSizeValue.setText(mapController.isTeamCreated()
+                ? String.valueOf(mapController.getTeamSize()) : "0");
+        teamNameValue.setText(mapController.isTeamCreated()
+                ? mapController.getTeamName() + " | " + mapController
+                        .getTeamId()
+                : (leaderView ? "No team created" : "Not in a team"));
+        saveTeamSetupButton.setText(leaderView
+                ? (mapController.isTeamCreated() ? "Edit Team Setup"
+                        : "Create Team")
+                : "Join Team");
+        refreshAtakContactsButton.setVisibility(leaderView
+                && mapController.isTeamCreated() ? View.VISIBLE : View.GONE);
+        templateView.findViewById(R.id.team_size_plus_button).setVisibility(
+                leaderView && mapController.isTeamCreated()
+                        ? View.VISIBLE : View.GONE);
         setInputTextIfIdle(teamNameInput, mapController.getTeamName());
         setInputTextIfIdle(teamIdInput, mapController.getTeamId());
         teamMarkerVisibilityValue.setText("Showing: "
                 + mapController.getTeamMarkerVisibilityLabel());
         atakContactStatusValue.setText(mapController.getAtakContactSummary());
         renderTeamMemberCards();
+        renderInvitesAndRequests();
         teamAlertsValue.setText(alertSummary);
         homeAlertsValue.setText(alertSummary);
         trackStatusValue.setText(mapController.getTrackStatusSummary());
         trackDetailsValue.setText(mapController.getTrackDetailsSummary());
+        pollTeamCotMessages();
         trackRecordButton.setText(mapController.isTrackRecording()
                 ? R.string.track_pause
                 : R.string.track_resume);
@@ -516,6 +515,265 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         });
     }
 
+    private void showTeamSetupDialog() {
+        final EditText input = new EditText(getMapView().getContext());
+        input.setSingleLine(true);
+        input.setText(mapController.getTeamName());
+        input.setSelection(input.getText().length());
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Edit team setup")
+                .setMessage("Team ID is fixed to this leader device:\n"
+                        + mapController.getTeamId())
+                .setView(input)
+                .setPositiveButton("Save",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.updateTeamSetup(input.getText()
+                                        .toString().trim());
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showCreateTeamDialog() {
+        final EditText input = new EditText(getMapView().getContext());
+        input.setSingleLine(true);
+        input.setHint("Team name");
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Create Team")
+                .setMessage("Team ID will be generated from this leader device:\n"
+                        + mapController.getTeamId())
+                .setView(input)
+                .setPositiveButton("Create",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                String name = input.getText().toString()
+                                        .trim();
+                                if (name.length() == 0)
+                                    name = "SAR Team";
+                                mapController.createTeam(name);
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showJoinTeamDialog() {
+        final java.util.List<SearchTeamCotMessage> teams = mapController
+                .getActiveTeamAdvertisements();
+        if (teams.isEmpty()) {
+            Toast.makeText(getMapView().getContext(),
+                    "No active SARtak teams visible yet",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] labels = new String[teams.size()];
+        for (int i = 0; i < teams.size(); i++)
+            labels[i] = teams.get(i).getDisplayLabel();
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Join Team")
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        SearchTeamCotMessage team = teams.get(which);
+                        mapController.requestJoinTeam(team);
+                        Toast.makeText(getMapView().getContext(),
+                                "Join request sent to "
+                                        + team.getLeaderCallsign(),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .show();
+    }
+
+    private void pollTeamCotMessages() {
+        mapController.advertiseTeamIfDue();
+
+        if (leaderView && mapController.isTeamCreated()) {
+            for (SearchTeamCotMessage request
+                    : mapController.getPendingJoinRequests()) {
+                if (handledTeamMessages.add(request.getUid()))
+                    showJoinRequestDialog(request);
+            }
+            for (SearchTeamCotMessage response
+                    : mapController.getInviteResponsesForLeader()) {
+                if (handledTeamMessages.add(response.getUid()))
+                    handleInviteResponse(response);
+            }
+        }
+
+        if (!leaderView) {
+            for (SearchTeamCotMessage invite : mapController.getInvitesForMe()) {
+                if (handledTeamMessages.add(invite.getUid()))
+                    showTeamInviteDialog(invite);
+            }
+            for (SearchTeamCotMessage response
+                    : mapController.getJoinResponsesForMe()) {
+                if (handledTeamMessages.add(response.getUid()))
+                    handleJoinResponse(response);
+            }
+        }
+    }
+
+    private void showJoinRequestDialog(final SearchTeamCotMessage request) {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Join request")
+                .setMessage(request.getSenderCallsign()
+                        + " would like to join "
+                        + request.getTeamName())
+                .setPositiveButton("Accept",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.respondToJoinRequest(request,
+                                        true);
+                                resolvedTeamMessages.add(request.getUid());
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Decline",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.respondToJoinRequest(request,
+                                        false);
+                                resolvedTeamMessages.add(request.getUid());
+                                refreshGridUi();
+                            }
+                        })
+                .show();
+    }
+
+    private void showTeamInviteDialog(final SearchTeamCotMessage invite) {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Team invite")
+                .setMessage(invite.getLeaderCallsign()
+                        + " would like you to join "
+                        + invite.getTeamName())
+                .setPositiveButton("Accept",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.respondToInvite(invite, true);
+                                resolvedTeamMessages.add(invite.getUid());
+                                Toast.makeText(getMapView().getContext(),
+                                        "Joined " + invite.getTeamName(),
+                                        Toast.LENGTH_LONG).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Decline",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.respondToInvite(invite, false);
+                                resolvedTeamMessages.add(invite.getUid());
+                                refreshGridUi();
+                            }
+                        })
+                .show();
+    }
+
+    private void handleJoinResponse(SearchTeamCotMessage response) {
+        if (SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(
+                response.getAction())) {
+            mapController.acceptJoinResponse(response);
+            Toast.makeText(getMapView().getContext(),
+                    "Joined " + response.getTeamName(), Toast.LENGTH_LONG)
+                    .show();
+            refreshGridUi();
+        } else if (SearchTeamCotMessage.ACTION_JOIN_DECLINE.equals(
+                response.getAction())) {
+            Toast.makeText(getMapView().getContext(),
+                    "Join request declined by "
+                            + response.getLeaderCallsign(),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void handleInviteResponse(SearchTeamCotMessage response) {
+        if (SearchTeamCotMessage.ACTION_INVITE_ACCEPT.equals(
+                response.getAction())) {
+            boolean added = mapController.acceptInviteResponse(response);
+            resolvedTeamMessages.add(response.getUid());
+            Toast.makeText(getMapView().getContext(),
+                    added ? response.getSenderCallsign() + " joined the team"
+                            : response.getSenderCallsign()
+                                    + " accepted, but ATAK contact is not visible",
+                    Toast.LENGTH_LONG).show();
+            refreshGridUi();
+        } else if (SearchTeamCotMessage.ACTION_INVITE_DECLINE.equals(
+                response.getAction())) {
+            resolvedTeamMessages.add(response.getUid());
+            Toast.makeText(getMapView().getContext(),
+                    response.getSenderCallsign() + " declined the invite",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showAddMemberDialog() {
+        final java.util.List<AtakTeamContactDataSource.ContactSnapshot>
+                contacts = mapController.getAvailableContacts();
+        if (contacts.isEmpty()) {
+            Toast.makeText(getMapView().getContext(),
+                    "No connected ATAK devices visible yet",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String[] labels = new String[contacts.size()];
+        for (int i = 0; i < contacts.size(); i++)
+            labels[i] = contacts.get(i).getDisplayLabel();
+
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Add connected member")
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        AtakTeamContactDataSource.ContactSnapshot contact =
+                                contacts.get(which);
+                        confirmAddMember(contact);
+                    }
+                })
+                .show();
+    }
+
+    private void confirmAddMember(
+            final AtakTeamContactDataSource.ContactSnapshot contact) {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Invite " + contact.getCallsign() + "?")
+                .setMessage("ATAK UID:\n" + contact.getUid()
+                        + "\n\nAn invite will be sent to this device. They "
+                        + "must accept before SARtak adds them to the team.")
+                .setPositiveButton("Send Invite",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.inviteTeamMember(
+                                        contact.getUid());
+                                Toast.makeText(getMapView().getContext(),
+                                        "Invite sent to "
+                                                + contact.getCallsign(),
+                                        Toast.LENGTH_LONG).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     private void initialiseTeamInputs() {
         teamNameInput.setText(mapController.getTeamName());
         teamIdInput.setText(mapController.getTeamId());
@@ -591,6 +849,206 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
     }
 
+    private void renderInvitesAndRequests() {
+        invitesRequestsContainer.removeAllViews();
+        int count = 0;
+        if (leaderView && mapController.isTeamCreated()) {
+            java.util.List<SearchTeamCotMessage> responses = mapController
+                    .getInviteResponsesForLeader();
+            for (SearchTeamCotMessage request
+                    : mapController.getPendingJoinRequests()) {
+                if (resolvedTeamMessages.contains(request.getUid()))
+                    continue;
+                invitesRequestsContainer.addView(createJoinRequestCard(request));
+                count++;
+            }
+            for (SearchTeamCotMessage invite : mapController
+                    .getOutgoingInvites()) {
+                if (resolvedTeamMessages.contains(invite.getUid())
+                        || hasInviteResponse(invite, responses))
+                    continue;
+                invitesRequestsContainer.addView(createOutgoingInviteCard(invite));
+                count++;
+            }
+        } else if (!leaderView) {
+            for (SearchTeamCotMessage invite : mapController.getInvitesForMe()) {
+                if (resolvedTeamMessages.contains(invite.getUid()))
+                    continue;
+                invitesRequestsContainer.addView(createIncomingInviteCard(invite));
+                count++;
+            }
+            for (SearchTeamCotMessage request
+                    : mapController.getOutgoingJoinRequests()) {
+                if (resolvedTeamMessages.contains(request.getUid()))
+                    continue;
+                invitesRequestsContainer.addView(
+                        createOutgoingJoinRequestCard(request));
+                count++;
+            }
+        }
+
+        if (count == 0)
+            invitesRequestsContainer.addView(createCardText(
+                    "No pending invites or requests", 13, false));
+    }
+
+    private View createJoinRequestCard(final SearchTeamCotMessage request) {
+        LinearLayout card = createActionCard();
+        card.addView(createCardText(request.getSenderCallsign()
+                + " wants to join " + request.getTeamName(), 14, true));
+        card.addView(createCardText("UID: " + request.getSenderUid(),
+                12, false));
+        card.addView(createDecisionButtons("Accept", "Decline",
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        mapController.respondToJoinRequest(request, true);
+                        resolvedTeamMessages.add(request.getUid());
+                        refreshGridUi();
+                    }
+                },
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        mapController.respondToJoinRequest(request, false);
+                        resolvedTeamMessages.add(request.getUid());
+                        refreshGridUi();
+                    }
+                }));
+        return card;
+    }
+
+    private View createIncomingInviteCard(final SearchTeamCotMessage invite) {
+        LinearLayout card = createActionCard();
+        card.addView(createCardText(invite.getLeaderCallsign()
+                + " invited you to " + invite.getTeamName(), 14, true));
+        card.addView(createCardText("Team ID: " + invite.getTeamId(),
+                12, false));
+        card.addView(createDecisionButtons("Accept", "Decline",
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        mapController.respondToInvite(invite, true);
+                        resolvedTeamMessages.add(invite.getUid());
+                        refreshGridUi();
+                    }
+                },
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        mapController.respondToInvite(invite, false);
+                        resolvedTeamMessages.add(invite.getUid());
+                        refreshGridUi();
+                    }
+                }));
+        return card;
+    }
+
+    private View createOutgoingInviteCard(final SearchTeamCotMessage invite) {
+        LinearLayout card = createActionCard();
+        String target = invite.getTargetCallsign().length() > 0
+                ? invite.getTargetCallsign() : invite.getTargetUid();
+        card.addView(createCardText("Invite sent to " + target, 14, true));
+        card.addView(createCardText("Waiting for accept / decline", 12, false));
+        card.addView(createCancelButton("Cancel invite",
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        mapController.cancelInvite(invite);
+                        resolvedTeamMessages.add(invite.getUid());
+                        Toast.makeText(getMapView().getContext(),
+                                "Invite cancelled", Toast.LENGTH_SHORT).show();
+                        refreshGridUi();
+                    }
+                }));
+        return card;
+    }
+
+    private View createOutgoingJoinRequestCard(
+            final SearchTeamCotMessage request) {
+        LinearLayout card = createActionCard();
+        card.addView(createCardText("Request sent to "
+                + request.getLeaderCallsign(), 14, true));
+        card.addView(createCardText("Waiting to join "
+                + request.getTeamName(), 12, false));
+        card.addView(createCancelButton("Cancel request",
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        mapController.cancelJoinRequest(request);
+                        resolvedTeamMessages.add(request.getUid());
+                        Toast.makeText(getMapView().getContext(),
+                                "Join request cancelled", Toast.LENGTH_SHORT)
+                                .show();
+                        refreshGridUi();
+                    }
+                }));
+        return card;
+    }
+
+    private Button createCancelButton(String label,
+            View.OnClickListener listener) {
+        Button button = new Button(pluginContext);
+        button.setText(label);
+        button.setOnClickListener(listener);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(6), 0, 0);
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    private LinearLayout createActionCard() {
+        LinearLayout card = new LinearLayout(pluginContext);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(8), dp(8), dp(8), dp(8));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(43, 48, 52));
+        background.setStroke(dp(1), Color.rgb(216, 182, 76));
+        card.setBackground(background);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, dp(6));
+        card.setLayoutParams(params);
+        return card;
+    }
+
+    private LinearLayout createDecisionButtons(String positiveLabel,
+            String negativeLabel, View.OnClickListener positive,
+            View.OnClickListener negative) {
+        LinearLayout row = new LinearLayout(pluginContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(6), 0, 0);
+
+        Button positiveButton = new Button(pluginContext);
+        positiveButton.setText(positiveLabel);
+        positiveButton.setOnClickListener(positive);
+        row.addView(positiveButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        Button negativeButton = new Button(pluginContext);
+        negativeButton.setText(negativeLabel);
+        negativeButton.setOnClickListener(negative);
+        LinearLayout.LayoutParams negativeParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        negativeParams.setMargins(dp(6), 0, 0, 0);
+        row.addView(negativeButton, negativeParams);
+        return row;
+    }
+
+    private boolean hasInviteResponse(SearchTeamCotMessage invite,
+            java.util.List<SearchTeamCotMessage> responses) {
+        for (SearchTeamCotMessage response : responses) {
+            if (invite.getTargetUid().equals(response.getSenderUid())
+                    || invite.getTargetCallsign().equalsIgnoreCase(
+                            response.getSenderCallsign()))
+                return true;
+        }
+        return false;
+    }
+
     private View createTeamMemberCard(SearchTeamMember member) {
         LinearLayout card = new LinearLayout(pluginContext);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -649,6 +1107,21 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 12, true);
         status.setTextColor(getConnectionColor(member));
         header.addView(status);
+        if (leaderView && !member.getUniqueId().equals(
+                mapController.getSelfMemberId())) {
+            Button removeButton = new Button(pluginContext);
+            removeButton.setText("X");
+            removeButton.setTextColor(Color.rgb(242, 245, 247));
+            removeButton.setTextSize(12);
+            removeButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    showRemoveMemberDialog(member);
+                }
+            });
+            header.addView(removeButton, new LinearLayout.LayoutParams(
+                    dp(42), dp(36)));
+        }
         card.addView(header);
 
         card.addView(createCardText("ID: " + member.getUniqueId()
@@ -665,6 +1138,25 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         card.addView(createCardText("Membership: "
                 + member.getMembershipStatus().name(), 12, false));
         return card;
+    }
+
+    private void showRemoveMemberDialog(final SearchTeamMember member) {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Remove " + member.getCallsign() + "?")
+                .setMessage("Are you sure you want to remove "
+                        + member.getCallsign() + " from this SARtak team?")
+                .setPositiveButton("Confirm",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.removeTeamMemberFromSetup(
+                                        member.getUniqueId());
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private TextView createCardText(String text, int sizeSp, boolean bold) {

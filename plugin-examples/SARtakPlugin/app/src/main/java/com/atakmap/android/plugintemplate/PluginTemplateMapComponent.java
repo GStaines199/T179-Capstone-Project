@@ -6,9 +6,11 @@ import android.content.Intent;
 import com.atakmap.android.ipc.AtakBroadcast.DocumentedIntentFilter;
 
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.cot.detail.CotDetailManager;
 import com.atakmap.android.dropdown.DropDownMapComponent;
 
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
+import com.atakmap.android.plugintemplate.runtime.SearchTeamCotDetailHandler;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.android.plugintemplate.plugin.R;
 
@@ -21,6 +23,7 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
     private PluginTemplateDropDownReceiver ddr;
 
     private DatabaseHelper database;
+    private SearchTeamCotDetailHandler teamCotDetailHandler;
 
     public void onCreate(final Context context, Intent intent,
                          final MapView view) {
@@ -31,6 +34,10 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
         // Store SARtak runtime data in ATAK's app context. The plugin resource
         // context may not have its own writable databases directory.
         database = DatabaseHelper.getInstance(view.getContext());
+        teamCotDetailHandler = new SearchTeamCotDetailHandler();
+        CotDetailManager.getInstance().registerHandler(
+                SearchTeamCotDetailHandler.DETAIL_NAME,
+                teamCotDetailHandler);
 
         ddr = new PluginTemplateDropDownReceiver(view, context);
 

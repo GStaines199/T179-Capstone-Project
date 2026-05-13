@@ -291,6 +291,10 @@ public class SARTakMapController {
             teamCotWorkflow.removeTeam(assignmentManager.getTeamId(),
                     assignmentManager.getTeamName());
         }
+        leaveTeam();
+    }
+
+    public void leaveTeam() {
         assignmentManager.clearTeam();
         teamStateStore.clear();
         refreshTeamContactsInternal();
@@ -337,6 +341,7 @@ public class SARTakMapController {
     public void acceptJoinResponse(SearchTeamCotMessage response) {
         assignmentManager.joinTeam(response.getTeamName(),
                 response.getTeamId());
+        addLeaderFromContact(response.getLeaderUid());
         teamStateStore.save(assignmentManager);
         refreshOverlay();
     }
@@ -347,6 +352,7 @@ public class SARTakMapController {
         if (accepted) {
             assignmentManager.joinTeam(invite.getTeamName(),
                     invite.getTeamId());
+            addLeaderFromContact(invite.getLeaderUid());
             teamStateStore.save(assignmentManager);
             refreshOverlay();
         }
@@ -419,6 +425,20 @@ public class SARTakMapController {
         refreshOverlay();
         teamStateStore.save(assignmentManager);
         return member != null;
+    }
+
+    private boolean addLeaderFromContact(String leaderUid) {
+        AtakTeamContactDataSource.ContactSnapshot contact = findContact(
+                leaderUid);
+        if (contact == null)
+            return false;
+        SearchTeamMember leader = assignmentManager.addTeamMember(contact,
+                getAvailableSelfPoint(), converter);
+        if (leader == null)
+            return false;
+        leader.setRole(SearchTeamMember.TeamRole.TEAM_LEADER);
+        arrangeTeamMembers();
+        return true;
     }
 
     public List<AtakTeamContactDataSource.ContactSnapshot> getAvailableContacts() {

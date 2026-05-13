@@ -322,7 +322,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 else
                     showCreateTeamDialog();
             } else {
-                showJoinTeamDialog();
+                if (mapController.isTeamCreated())
+                    showLeaveTeamDialog();
+                else
+                    showJoinTeamDialog();
             }
         } else if (id == R.id.remove_team_button) {
             showRemoveTeamDialog();
@@ -427,7 +430,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         saveTeamSetupButton.setText(leaderView
                 ? (teamCreated ? "Edit Team Setup"
                         : "Create Team")
-                : "Join Team");
+                : (teamCreated ? "Leave Team" : "Join Team"));
         refreshAtakContactsButton.setVisibility(leaderView
                 && teamCreated ? View.VISIBLE : View.GONE);
         removeTeamButton.setVisibility(leaderView && teamCreated
@@ -640,6 +643,27 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                                 Toast.LENGTH_SHORT).show();
                     }
                 })
+                .show();
+    }
+
+    private void showLeaveTeamDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Leave Team")
+                .setMessage("Leave " + mapController.getTeamName()
+                        + "? You can join another SARtak team afterwards.")
+                .setPositiveButton("Leave",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.leaveTeam();
+                                Toast.makeText(getMapView().getContext(),
+                                        "Left team", Toast.LENGTH_SHORT)
+                                        .show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 

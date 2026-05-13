@@ -34,6 +34,8 @@ import com.atakmap.android.plugintemplate.runtime.AtakTrackBridge;
 import com.atakmap.android.plugintemplate.runtime.IdentityManager;
 import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
+import com.atakmap.android.plugintemplate.runtime.SearchLineCotMessage;
+import com.atakmap.android.plugintemplate.runtime.SearchLineCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.coremap.maps.coords.GeoPoint;
@@ -58,6 +60,7 @@ public class SARTakMapController {
     private final LocationCaptureManager locationCaptureManager;
     private final AtakTeamContactDataSource teamContactDataSource;
     private final SearchTeamCotWorkflow teamCotWorkflow;
+    private final SearchLineCotWorkflow searchLineCotWorkflow;
     private final SearchTeamStateStore teamStateStore;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
     private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
@@ -99,6 +102,8 @@ public class SARTakMapController {
                 searcherRepository);
         this.teamContactDataSource = new AtakTeamContactDataSource(mapView);
         this.teamCotWorkflow = new SearchTeamCotWorkflow(mapView,
+                identityManager);
+        this.searchLineCotWorkflow = new SearchLineCotWorkflow(mapView,
                 identityManager);
         this.locationCaptureManager = new LocationCaptureManager(mapView,
                 identityManager, trackManager, healthManager,
@@ -151,46 +156,55 @@ public class SARTakMapController {
     public void startSearchLine() {
         SearchGridCell cell = ensureSelectedCell();
         GeoPoint currentPoint = getCurrentUserPoint();
-        if (currentPoint == null)
+        if (cell == null || currentPoint == null)
             return;
         searchLineManager.start(cell, currentPoint);
+        publishSearchLine(SearchLineCotMessage.ACTION_START);
         refreshOverlay();
     }
 
     public void endSearchLine() {
         searchLineManager.end();
+        publishSearchLine(SearchLineCotMessage.ACTION_END);
         refreshOverlay();
     }
 
     public void pauseSearchLine() {
         searchLineManager.pause();
+        publishSearchLine(SearchLineCotMessage.ACTION_PAUSE);
         refreshOverlay();
     }
 
     public boolean resumeSearchLine() {
         boolean resumed = searchLineManager.resume();
+        if (resumed)
+            publishSearchLine(SearchLineCotMessage.ACTION_RESUME);
         refreshOverlay();
         return resumed;
     }
 
     public void forceResumeSearchLine() {
         searchLineManager.forceResume();
+        publishSearchLine(SearchLineCotMessage.ACTION_RESUME);
         refreshOverlay();
     }
 
     public String cycleSearchLineColor() {
         String label = searchLineManager.cycleColor().getLabel();
+        publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
         return label;
     }
 
     public void setSearchLineColor(SearchLineColorOption colorOption) {
         searchLineManager.setColorOption(colorOption);
+        publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
     }
 
     public void setSearchLineTolerance(double toleranceMeters) {
         searchLineManager.setReturnMarkToleranceMeters(toleranceMeters);
+        publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
     }
 
@@ -711,6 +725,7 @@ public class SARTakMapController {
         locationCaptureManager.stop();
         healthManager.stop();
         teamCotWorkflow.dispose();
+        searchLineCotWorkflow.dispose();
         backgroundHandler.removeCallbacks(backgroundRunnable);
         unregisterMapListeners();
         gridOverlay.setVisible(false);
@@ -720,8 +735,10 @@ public class SARTakMapController {
     }
 
     private void refreshOverlay() {
+        applyRemoteSearchLineIfAvailable();
         GeoPoint currentPoint = getCurrentUserPoint();
-        if (currentPoint != null)
+        if (currentPoint != null && isLeaderRole()
+                && !searchLineManager.isRemoteControlled())
             searchLineManager.updateLeaderPosition(gridManager
                     .getSelectedCell(), currentPoint);
         arrangeTeamMembers();
@@ -731,6 +748,7 @@ public class SARTakMapController {
         trackOverlay.setVisible(trackManager.isVisible()
                 && !atakTrackBridge.hasAtakTrackTrail());
         trackOverlay.render(trackManager.getTrackPoints());
+        publishSearchLineUpdateIfDue();
     }
 
     private void startBackgroundRefresh() {
@@ -742,8 +760,38 @@ public class SARTakMapController {
         advertiseTeamIfDue();
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
+        applyRemoteSearchLineIfAvailable();
         refreshLocationAvailability();
         refreshOverlay();
+    }
+
+    private void publishSearchLine(String action) {
+        if (!isLeaderRole() || !assignmentManager.isTeamCreated())
+            return;
+        if (SearchLineCotMessage.ACTION_UPDATE.equals(action)
+                && searchLineManager.isPaused())
+            action = SearchLineCotMessage.ACTION_PAUSE;
+        searchLineCotWorkflow.publishNow(action, assignmentManager.getTeamId(),
+                searchLineManager);
+    }
+
+    private void publishSearchLineUpdateIfDue() {
+        if (!isLeaderRole() || !assignmentManager.isTeamCreated()
+                || !searchLineManager.isStarted()
+                || searchLineManager.isRemoteControlled())
+            return;
+        searchLineCotWorkflow.publishUpdateIfDue(assignmentManager.getTeamId(),
+                searchLineManager);
+    }
+
+    private void applyRemoteSearchLineIfAvailable() {
+        if (isLeaderRole() || !assignmentManager.isTeamCreated())
+            return;
+        SearchLineCotMessage message = searchLineCotWorkflow
+                .getLatestForTeam(assignmentManager.getTeamId());
+        if (message == null)
+            return;
+        searchLineManager.applyRemote(message);
     }
 
     private void arrangeTeamMembers() {

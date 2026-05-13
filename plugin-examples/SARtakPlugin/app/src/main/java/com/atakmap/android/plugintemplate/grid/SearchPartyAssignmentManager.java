@@ -224,6 +224,43 @@ public class SearchPartyAssignmentManager {
         return member;
     }
 
+    public SearchTeamMember addConfirmedRosterMember(String uid,
+            String callsign, SearchTeamMember.TeamRole role) {
+        if (uid == null || uid.trim().length() == 0)
+            return null;
+
+        String trimmedUid = uid.trim();
+        SearchTeamMember existing = findAnyMemberById(trimmedUid);
+        if (existing != null) {
+            existing.setMembershipStatus(
+                    SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
+            existing.setRole(role);
+            if (!existing.hasLiveAtakContact())
+                existing.markLocationUnavailable("ATAK contact pending");
+            return existing;
+        }
+
+        int colorIndex = Math.max(0, getLaneMemberCount() - 1)
+                % SEARCHER_COLORS.length;
+        String label = callsign == null || callsign.trim().length() == 0
+                ? trimmedUid : callsign.trim();
+        String colorName = role == SearchTeamMember.TeamRole.TEAM_LEADER
+                ? "White" : SEARCHER_COLOR_NAMES[colorIndex];
+        int displayColor = role == SearchTeamMember.TeamRole.TEAM_LEADER
+                ? COLOR_WHITE : SEARCHER_COLORS[colorIndex];
+        SearchTeamMember member = new SearchTeamMember(trimmedUid, label, role,
+                colorName, displayColor,
+                SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
+                SearchTeamMember.ConnectionStatus.STALE,
+                getLaneMemberCount() + 1, 0.0, 0.0, 0.0,
+                "ATAK contact pending", "ATAK contact pending",
+                "ATAK contact pending", "ATAK contact pending",
+                "ATAK contact pending", "ATAK contact pending");
+        member.setLiveAtakContact(false);
+        members.add(member);
+        return member;
+    }
+
     public boolean removeTeamMember(String uniqueId) {
         SearchTeamMember member = findMemberById(uniqueId);
         if (member == null || member.getUniqueId().equals(selfMemberId))

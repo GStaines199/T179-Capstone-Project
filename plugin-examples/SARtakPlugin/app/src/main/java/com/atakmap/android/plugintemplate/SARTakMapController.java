@@ -329,10 +329,15 @@ public class SARTakMapController {
         teamCotWorkflow.respondToJoin(request, accepted);
         if (accepted) {
             AtakTeamContactDataSource.ContactSnapshot contact = findContact(
-                    request.getSenderUid());
-            if (contact != null)
+                    request.getSenderUid(), request.getSenderCallsign());
+            if (contact != null) {
                 assignmentManager.addTeamMember(contact,
                         getAvailableSelfPoint(), converter);
+            } else {
+                assignmentManager.addConfirmedRosterMember(
+                        request.getSenderUid(), request.getSenderCallsign(),
+                        SearchTeamMember.TeamRole.SEARCHER);
+            }
             teamStateStore.save(assignmentManager);
             refreshOverlay();
         }
@@ -341,7 +346,8 @@ public class SARTakMapController {
     public void acceptJoinResponse(SearchTeamCotMessage response) {
         assignmentManager.joinTeam(response.getTeamName(),
                 response.getTeamId());
-        addLeaderFromContact(response.getLeaderUid());
+        addLeaderFromContact(response.getLeaderUid(),
+                response.getLeaderCallsign());
         teamStateStore.save(assignmentManager);
         refreshOverlay();
     }
@@ -352,7 +358,8 @@ public class SARTakMapController {
         if (accepted) {
             assignmentManager.joinTeam(invite.getTeamName(),
                     invite.getTeamId());
-            addLeaderFromContact(invite.getLeaderUid());
+            addLeaderFromContact(invite.getLeaderUid(),
+                    invite.getLeaderCallsign());
             teamStateStore.save(assignmentManager);
             refreshOverlay();
         }
@@ -427,11 +434,17 @@ public class SARTakMapController {
         return member != null;
     }
 
-    private boolean addLeaderFromContact(String leaderUid) {
+    private boolean addLeaderFromContact(String leaderUid,
+            String leaderCallsign) {
         AtakTeamContactDataSource.ContactSnapshot contact = findContact(
-                leaderUid);
-        if (contact == null)
-            return false;
+                leaderUid, leaderCallsign);
+        if (contact == null) {
+            SearchTeamMember fallback = assignmentManager
+                    .addConfirmedRosterMember(leaderUid, leaderCallsign,
+                            SearchTeamMember.TeamRole.TEAM_LEADER);
+            arrangeTeamMembers();
+            return fallback != null;
+        }
         SearchTeamMember leader = assignmentManager.addTeamMember(contact,
                 getAvailableSelfPoint(), converter);
         if (leader == null)
@@ -444,10 +457,12 @@ public class SARTakMapController {
     private boolean addTeamMemberFromResponse(SearchTeamCotMessage response) {
         AtakTeamContactDataSource.ContactSnapshot contact = findContact(
                 response.getSenderUid(), response.getSenderCallsign());
-        if (contact == null)
-            return false;
-        SearchTeamMember member = assignmentManager.addTeamMember(contact,
-                getAvailableSelfPoint(), converter);
+        SearchTeamMember member = contact == null
+                ? assignmentManager.addConfirmedRosterMember(
+                        response.getSenderUid(), response.getSenderCallsign(),
+                        SearchTeamMember.TeamRole.SEARCHER)
+                : assignmentManager.addTeamMember(contact,
+                        getAvailableSelfPoint(), converter);
         arrangeTeamMembers();
         refreshOverlay();
         return member != null;

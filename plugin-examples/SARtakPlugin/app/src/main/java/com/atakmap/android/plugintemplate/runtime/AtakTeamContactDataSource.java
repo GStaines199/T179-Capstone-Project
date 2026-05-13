@@ -138,8 +138,9 @@ public class AtakTeamContactDataSource {
                     point = null;
 
                 String role = marker == null ? "ATAK contact"
-                        : safe(marker.getMetaString("atakRoleType",
-                                marker.getMetaString("teamRole",
+                        : safe(firstNonEmpty(
+                                safeMetaString(marker, "atakRoleType", ""),
+                                safeMetaString(marker, "teamRole",
                                         "ATAK contact")));
                 lastCandidateCount++;
                 lastContactModelCount++;
@@ -180,8 +181,9 @@ public class AtakTeamContactDataSource {
             if (point == null || !point.isValid())
                 continue;
             String callsign = getMarkerCallsign(marker, uid);
-            String role = safe(marker.getMetaString("atakRoleType",
-                    marker.getMetaString("teamRole", "ATAK user marker")));
+            String role = safe(firstNonEmpty(
+                    safeMetaString(marker, "atakRoleType", ""),
+                    safeMetaString(marker, "teamRole", "ATAK user marker")));
             lastCandidateCount++;
             lastUserMarkerCount++;
             contacts.put(uid, new ContactSnapshot(uid, callsign, point,
@@ -202,7 +204,7 @@ public class AtakTeamContactDataSource {
     private boolean isSartakItem(MapItem item) {
         String uid = safe(item.getUID());
         return uid.startsWith("sartak-")
-                || "sartak".equals(item.getMetaString("entry", ""));
+                || "sartak".equals(safeMetaString(item, "entry", ""));
     }
 
     private boolean looksLikeGeneratedId(String value) {
@@ -224,7 +226,7 @@ public class AtakTeamContactDataSource {
     }
 
     private String getMarkerCallsign(Marker marker, String uid) {
-        String callsign = safe(marker.getMetaString("callsign",
+        String callsign = safe(safeMetaString(marker, "callsign",
                 marker.getTitle()));
         if (callsign.length() == 0 || looksLikeGeneratedId(callsign))
             callsign = uid;
@@ -235,13 +237,13 @@ public class AtakTeamContactDataSource {
         if (marker == null)
             return "Ungrouped ATAK";
         String group = firstNonEmpty(
-                marker.getMetaString("__groupName", ""),
-                marker.getMetaString("team", ""),
-                marker.getMetaString("atakTeam", ""),
-                marker.getMetaString("teamColor", ""),
-                marker.getMetaString("groupName", ""),
-                marker.getMetaString("locationTeam", ""),
-                marker.getMetaString("__group", ""));
+                safeMetaString(marker, "__groupName", ""),
+                safeMetaString(marker, "team", ""),
+                safeMetaString(marker, "atakTeam", ""),
+                safeMetaString(marker, "teamColor", ""),
+                safeMetaString(marker, "groupName", ""),
+                safeMetaString(marker, "locationTeam", ""),
+                safeMetaString(marker, "__group", ""));
         if (group.length() == 0)
             return "Ungrouped ATAK";
         return group.toLowerCase().endsWith("team") ? group : group + " Team";
@@ -279,6 +281,22 @@ public class AtakTeamContactDataSource {
 
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String safeMetaString(MapItem item, String key, String fallback) {
+        if (item == null || key == null)
+            return safe(fallback);
+        try {
+            return safe(item.getMetaString(key, fallback));
+        } catch (ClassCastException ignored) {
+            // Some ATAK metadata keys, notably teamColor on certain contact
+            // markers, are stored as numeric values. MapItem#getMetaString
+            // throws instead of converting, so treat that key as unavailable
+            // and continue scanning rather than crashing ATAK.
+            return safe(fallback);
+        } catch (Exception ignored) {
+            return safe(fallback);
+        }
     }
 
     private String firstNonEmpty(String... values) {

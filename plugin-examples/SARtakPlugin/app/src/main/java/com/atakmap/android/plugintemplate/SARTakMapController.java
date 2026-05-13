@@ -286,6 +286,17 @@ public class SARTakMapController {
         refreshOverlay();
     }
 
+    public void removeTeam() {
+        if (assignmentManager.isTeamCreated()) {
+            teamCotWorkflow.removeTeam(assignmentManager.getTeamId(),
+                    assignmentManager.getTeamName());
+        }
+        assignmentManager.clearTeam();
+        teamStateStore.clear();
+        refreshTeamContactsInternal();
+        refreshOverlay();
+    }
+
     public void requestJoinTeam(SearchTeamCotMessage team) {
         teamCotWorkflow.requestJoin(team);
     }
@@ -352,24 +363,11 @@ public class SARTakMapController {
     }
 
     public List<SearchTeamCotMessage> getActiveTeamAdvertisements() {
-        List<SearchTeamCotMessage> teams = new java.util.ArrayList<>(
-                teamCotWorkflow.getTeamAdvertisements());
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        for (AtakTeamContactDataSource.ContactSnapshot contact
-                : teamContactDataSource.getContacts()) {
-            if (!contact.isTeamLead()
-                    || contact.getUid().equals(identity.getUid()))
-                continue;
-            String teamId = "TEAM-" + contact.getUid();
-            if (containsTeam(teams, teamId))
-                continue;
-            teams.add(new SearchTeamCotMessage("sartak-fallback-team-"
-                    + contact.getUid(), SearchTeamCotMessage.ACTION_ADVERTISE,
-                    teamId, contact.getCallsign() + " Team",
-                    contact.getUid(), contact.getCallsign(), contact.getUid(),
-                    contact.getCallsign(), "", ""));
-        }
-        return dedupeTeams(teams);
+        // Only show teams that have explicitly advertised over the SARtak CoT
+        // workflow. A visible ATAK contact is not enough to prove that a SARtak
+        // team exists, and inventing one makes member devices join fake teams.
+        return dedupeTeams(new java.util.ArrayList<>(teamCotWorkflow
+                .getTeamAdvertisements()));
     }
 
     public List<SearchTeamCotMessage> getPendingJoinRequests() {
@@ -424,7 +422,32 @@ public class SARTakMapController {
     }
 
     public List<AtakTeamContactDataSource.ContactSnapshot> getAvailableContacts() {
-        return teamContactDataSource.getContacts();
+        java.util.List<AtakTeamContactDataSource.ContactSnapshot> available =
+                new java.util.ArrayList<>();
+        String selfUid = assignmentManager.getSelfMemberId();
+        for (AtakTeamContactDataSource.ContactSnapshot contact
+                : teamContactDataSource.getContacts()) {
+            if (contact.getUid() == null || contact.getUid().equals(selfUid))
+                continue;
+            if (assignmentManager.findMemberById(contact.getUid()) != null)
+                continue;
+            available.add(contact);
+        }
+        java.util.Collections.sort(available,
+                new java.util.Comparator<AtakTeamContactDataSource.ContactSnapshot>() {
+                    @Override
+                    public int compare(
+                            AtakTeamContactDataSource.ContactSnapshot first,
+                            AtakTeamContactDataSource.ContactSnapshot second) {
+                        int group = first.getAtakGroupName()
+                                .compareToIgnoreCase(second.getAtakGroupName());
+                        if (group != 0)
+                            return group;
+                        return first.getCallsign().compareToIgnoreCase(
+                                second.getCallsign());
+                    }
+                });
+        return available;
     }
 
     public boolean removeTeamMemberFromSetup(String uniqueId) {
@@ -450,6 +473,7 @@ public class SARTakMapController {
         if (isLeaderRole() && assignmentManager.isTeamCreated())
             teamCotWorkflow.advertiseTeamIfDue(assignmentManager.getTeamId(),
                     assignmentManager.getTeamName());
+        teamCotWorkflow.republishPendingMessagesIfDue();
     }
 
     public String getAtakContactSummary() {
@@ -472,6 +496,10 @@ public class SARTakMapController {
 
     public String getTeamMarkerVisibilityLabel() {
         return teamMarkerOverlay.getVisibilityMode().getLabel();
+    }
+
+    public TeamMarkerVisibilityMode getTeamMarkerVisibilityMode() {
+        return teamMarkerOverlay.getVisibilityMode();
     }
 
     public String getConnectionAlertSummary() {
@@ -591,6 +619,14 @@ public class SARTakMapController {
 
     public String getTrackDetailsSummary() {
         return atakTrackBridge.getDetailsSummary(trackManager);
+    }
+
+    public boolean hasAtakTrackTrail() {
+        return atakTrackBridge.hasAtakTrackTrail();
+    }
+
+    public boolean hasVisibleTrackData() {
+        return hasAtakTrackTrail() || !trackManager.getTrackPoints().isEmpty();
     }
 
     public boolean isTrackRecording() {
@@ -754,15 +790,6 @@ public class SARTakMapController {
                 return contact;
         }
         return null;
-    }
-
-    private boolean containsTeam(List<SearchTeamCotMessage> teams,
-            String teamId) {
-        for (SearchTeamCotMessage team : teams) {
-            if (teamId.equals(team.getTeamId()))
-                return true;
-        }
-        return false;
     }
 
     private List<SearchTeamCotMessage> dedupeTeams(

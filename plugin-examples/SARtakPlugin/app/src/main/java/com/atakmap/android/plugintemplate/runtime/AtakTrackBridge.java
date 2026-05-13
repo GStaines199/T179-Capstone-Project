@@ -63,18 +63,20 @@ public class AtakTrackBridge {
     }
 
     public String getStatusSummary(SearchTrackManager fallbackTrackManager) {
-        String atakStatus = hasAtakTrackTrail()
-                ? "ATAK Track History detected - using ATAK trail display"
-                : "ATAK Track History not active - SARtak fallback track";
-        return atakStatus + "\nFallback recorder: "
+        if (hasAtakTrackTrail()) {
+            return "Using ATAK Track History\nSARtak controls mirror the ATAK self trail where available";
+        }
+        return "ATAK Track History unavailable\n"
                 + fallbackTrackManager.getStatusSummary();
     }
 
     public String getDetailsSummary(SearchTrackManager fallbackTrackManager) {
         StringBuilder builder = new StringBuilder();
         builder.append(getAtakDetails());
-        builder.append("\n\nSARtak fallback\n");
-        builder.append(fallbackTrackManager.getDetailsSummary());
+        if (!hasAtakTrackTrail()) {
+            builder.append("\n\nSARtak local track\n");
+            builder.append(fallbackTrackManager.getDetailsSummary());
+        }
         return builder.toString();
     }
 

@@ -38,6 +38,7 @@ public class SearchTeamMember {
     private String distanceFromYou;
     private String distanceFromSearchLine;
     private boolean liveAtakContact;
+    private String atakGroupName = "Ungrouped ATAK";
 
     public SearchTeamMember(String uniqueId, String callsign, TeamRole role,
             String colorName, int displayColor,
@@ -155,6 +156,16 @@ public class SearchTeamMember {
 
     public boolean hasLiveAtakContact() {
         return liveAtakContact;
+    }
+
+    public String getAtakGroupName() {
+        return atakGroupName;
+    }
+
+    public void setAtakGroupName(String atakGroupName) {
+        this.atakGroupName = atakGroupName == null
+                || atakGroupName.trim().length() == 0
+                        ? "Ungrouped ATAK" : atakGroupName.trim();
     }
 
     public void setLiveAtakContact(boolean liveAtakContact) {

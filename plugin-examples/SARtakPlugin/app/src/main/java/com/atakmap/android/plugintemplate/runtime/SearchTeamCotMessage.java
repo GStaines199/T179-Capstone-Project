@@ -11,6 +11,7 @@ public class SearchTeamCotMessage {
     public static final String ACTION_JOIN_ACCEPT = "join_accept";
     public static final String ACTION_JOIN_DECLINE = "join_decline";
     public static final String ACTION_JOIN_CANCEL = "join_cancel";
+    public static final String ACTION_TEAM_REMOVED = "team_removed";
 
     private final String uid;
     private final String action;

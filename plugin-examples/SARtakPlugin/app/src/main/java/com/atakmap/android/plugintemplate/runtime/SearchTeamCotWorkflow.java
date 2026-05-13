@@ -1,10 +1,14 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 
 import com.atakmap.android.contact.Contact;
 import com.atakmap.android.contact.Contacts;
 import com.atakmap.android.cot.CotMapComponent;
+import com.atakmap.android.maps.MapData;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
@@ -17,6 +21,7 @@ import com.atakmap.coremap.cot.event.CotPoint;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -26,8 +31,13 @@ import java.util.Map;
 
 public class SearchTeamCotWorkflow {
 
+    private static final String ATAK_CIV_PACKAGE = "com.atakmap.app.civ";
     private static final String GROUP_NAME = "SARtak Team CoT";
     private static final long ADVERTISE_INTERVAL_MS = 10000L;
+    private static final long PENDING_REPUBLISH_INTERVAL_MS = 5000L;
+    private static final long ADVERTISEMENT_MAX_AGE_MS = 30000L;
+    private static final long PENDING_MESSAGE_MAX_AGE_MS = 60000L;
+    private static final long TEAM_REMOVED_MAX_AGE_MS = 10 * 60 * 1000L;
 
     private final MapView mapView;
     private final IdentityManager identityManager;
@@ -43,12 +53,14 @@ public class SearchTeamCotWorkflow {
             };
     private MapGroup messageGroup;
     private long lastAdvertiseTime;
+    private long lastPendingRepublishTime;
 
     public SearchTeamCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
         this.mapView = mapView;
         this.identityManager = identityManager;
         registerDirectCotProcessor();
+        purgeLegacyMessageMarkers();
     }
 
     public void dispose() {
@@ -71,6 +83,47 @@ public class SearchTeamCotWorkflow {
         if (now - lastAdvertiseTime < ADVERTISE_INTERVAL_MS)
             return;
         advertiseTeam(teamId, teamName);
+    }
+
+    public void removeTeam(String teamId, String teamName) {
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        publish(SearchTeamCotMessage.ACTION_TEAM_REMOVED, teamId, teamName,
+                identity.getUid(), identity.getCallsign(), "", "");
+        clearLocalMessagesForTeam(teamId);
+    }
+
+    public void republishPendingMessagesIfDue() {
+        long now = System.currentTimeMillis();
+        if (now - lastPendingRepublishTime < PENDING_REPUBLISH_INTERVAL_MS)
+            return;
+        lastPendingRepublishTime = now;
+
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        List<SearchTeamCotMessage> toRepublish = new ArrayList<>();
+        synchronized (directMessages) {
+            for (SearchTeamCotMessage message : directMessages.values()) {
+                if (!identity.getUid().equals(message.getSenderUid()))
+                    continue;
+                if (SearchTeamCotMessage.ACTION_JOIN_REQUEST.equals(
+                        message.getAction())
+                        || SearchTeamCotMessage.ACTION_INVITE.equals(
+                                message.getAction())) {
+                    toRepublish.add(message);
+                }
+            }
+        }
+        for (SearchTeamCotMessage message : toRepublish) {
+            if (SearchTeamCotMessage.ACTION_JOIN_REQUEST.equals(
+                    message.getAction())
+                    && isCancelled(SearchTeamCotMessage.ACTION_JOIN_CANCEL,
+                            message))
+                continue;
+            if (SearchTeamCotMessage.ACTION_INVITE.equals(message.getAction())
+                    && isCancelled(SearchTeamCotMessage.ACTION_INVITE_CANCEL,
+                            message))
+                continue;
+            dispatch(message);
+        }
     }
 
     public void requestJoin(SearchTeamCotMessage team) {
@@ -127,7 +180,12 @@ public class SearchTeamCotWorkflow {
             if (!identity.getUid().equals(message.getLeaderUid()))
                 filtered.add(message);
         }
-        return dedupeByTeam(filtered);
+        List<SearchTeamCotMessage> active = new ArrayList<>();
+        for (SearchTeamCotMessage message : dedupeByTeam(filtered)) {
+            if (!isTeamRemoved(message))
+                active.add(message);
+        }
+        return active;
     }
 
     public List<SearchTeamCotMessage> getJoinRequests(String teamId) {
@@ -204,33 +262,16 @@ public class SearchTeamCotWorkflow {
                 identity.getUid(), identity.getCallsign(), targetUid,
                 targetCallsign);
         directMessages.put(message.getUid(), message);
-        addLocalMessageMarker(message);
+        dispatch(message);
+    }
+
+    private void dispatch(SearchTeamCotMessage message) {
         CotEvent event = createCotEvent(message);
         if (event != null) {
             CotMapComponent.getExternalDispatcher().dispatchToBroadcast(event);
-            dispatchToTargetContact(event, targetUid, targetCallsign);
+            dispatchToTargetContact(event, message.getTargetUid(),
+                    message.getTargetCallsign());
         }
-    }
-
-    private void addLocalMessageMarker(SearchTeamCotMessage message) {
-        Marker marker = new Marker(getPublishPoint(), message.getUid());
-        marker.setType("b-m-p-s-p-loc");
-        marker.setTitle("SARtak " + message.getAction());
-        marker.setMetaString("entry", "sartak");
-        marker.setMetaString("sartak.kind", "team-cot-message");
-        set(marker, "action", message.getAction());
-        set(marker, "teamId", message.getTeamId());
-        set(marker, "teamName", message.getTeamName());
-        set(marker, "leaderUid", message.getLeaderUid());
-        set(marker, "leaderCallsign", message.getLeaderCallsign());
-        set(marker, "senderUid", message.getSenderUid());
-        set(marker, "senderCallsign", message.getSenderCallsign());
-        set(marker, "targetUid", message.getTargetUid());
-        set(marker, "targetCallsign", message.getTargetCallsign());
-        set(marker, "created", String.valueOf(System.currentTimeMillis()));
-        marker.setMetaBoolean("archive", false);
-        marker.setMetaBoolean("removable", true);
-        ensureGroup().addItem(marker);
     }
 
     private List<SearchTeamCotMessage> getMessages(String action,
@@ -250,6 +291,8 @@ public class SearchTeamCotWorkflow {
         for (SearchTeamCotMessage message : messages.values()) {
             if (targetUid != null && targetUid.length() > 0
                     && !targetUid.equals(message.getTargetUid()))
+                continue;
+            if (isExpired(message))
                 continue;
             filtered.add(message);
         }
@@ -271,6 +314,9 @@ public class SearchTeamCotWorkflow {
             String itemTarget = item.getMetaString(meta("targetUid"), "");
             if (targetUid != null && targetUid.length() > 0
                     && !targetUid.equals(itemTarget))
+                continue;
+            String created = item.getMetaString(meta("created"), "");
+            if (isExpired(itemAction, created, item.getUID()))
                 continue;
             messages.add(new SearchTeamCotMessage(item.getUID(), itemAction,
                     item.getMetaString(meta("teamId"), ""),
@@ -313,6 +359,19 @@ public class SearchTeamCotWorkflow {
         return false;
     }
 
+    private boolean isTeamRemoved(SearchTeamCotMessage team) {
+        for (SearchTeamCotMessage removed : getMessages(
+                SearchTeamCotMessage.ACTION_TEAM_REMOVED, "")) {
+            if (team.getTeamId().equals(removed.getTeamId())
+                    && sameMember(team.getLeaderUid(),
+                            team.getLeaderCallsign(),
+                            removed.getLeaderUid(),
+                            removed.getLeaderCallsign()))
+                return true;
+        }
+        return false;
+    }
+
     private boolean isMatchingCancel(String cancelAction,
             SearchTeamCotMessage original, SearchTeamCotMessage cancel) {
         if (!original.getTeamId().equals(cancel.getTeamId()))
@@ -346,6 +405,7 @@ public class SearchTeamCotWorkflow {
         CoordinatedTime now = new CoordinatedTime();
         CotDetail root = new CotDetail();
         CotDetail detail = new CotDetail(SearchTeamCotDetailHandler.DETAIL_NAME);
+        detail.setAttribute("messageUid", message.getUid());
         detail.setAttribute("action", message.getAction());
         detail.setAttribute("teamId", message.getTeamId());
         detail.setAttribute("teamName", message.getTeamName());
@@ -357,10 +417,16 @@ public class SearchTeamCotWorkflow {
         detail.setAttribute("targetCallsign", message.getTargetCallsign());
         detail.setAttribute("created", String.valueOf(System.currentTimeMillis()));
         root.addChild(detail);
+        addStandardContactDetails(root, message);
 
         CotEvent event = new CotEvent();
-        event.setUID(message.getUid());
-        event.setType("b-m-p-s-p-loc");
+        // Use the sender device UID as the CoT event UID. FreeTAKServer treats
+        // new CoT UIDs as trackable contacts/connections, so putting SARtak's
+        // per-message UID here creates ghost "devices" on the server. The
+        // stable ATAK device remains the contact; the SARtak message id lives
+        // inside the custom detail instead.
+        event.setUID(message.getSenderUid());
+        event.setType(getSelfCotType());
         event.setTime(now);
         event.setStart(now);
         event.setStale(now.addMinutes(5));
@@ -368,6 +434,32 @@ public class SearchTeamCotWorkflow {
         event.setPoint(new CotPoint(getPublishPoint()));
         event.setDetail(root);
         return event;
+    }
+
+    private void addStandardContactDetails(CotDetail root,
+            SearchTeamCotMessage message) {
+        String callsign = firstNonEmpty(message.getSenderCallsign(),
+                getSelfCallsign());
+        if (callsign.length() > 0) {
+            CotDetail contact = new CotDetail("contact");
+            contact.setAttribute("callsign", callsign);
+            root.addChild(contact);
+
+            // ATAK/WinTAK use this Droid value on normal SA/PPLI messages when
+            // presenting contacts in team/contact views.
+            CotDetail uid = new CotDetail("uid");
+            uid.setAttribute("Droid", callsign);
+            root.addChild(uid);
+        }
+
+        String teamName = getSelfTeamName();
+        if (teamName.length() == 0)
+            return;
+
+        CotDetail group = new CotDetail("__group");
+        group.setAttribute("name", teamName);
+        group.setAttribute("role", getSelfTeamRole());
+        root.addChild(group);
     }
 
     private void registerDirectCotProcessor() {
@@ -394,6 +486,8 @@ public class SearchTeamCotWorkflow {
     private boolean receiveCotEvent(CotEvent event) {
         SearchTeamCotMessage message = fromCotEvent(event);
         if (message == null)
+            return false;
+        if (isExpired(message))
             return false;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (!identity.getUid().equals(message.getSenderUid()))
@@ -437,7 +531,9 @@ public class SearchTeamCotWorkflow {
                 SearchTeamCotDetailHandler.DETAIL_NAME);
         if (detail == null)
             return null;
-        return new SearchTeamCotMessage(event.getUID(),
+        String messageUid = value(detail, "messageUid");
+        return new SearchTeamCotMessage(messageUid.length() == 0
+                ? event.getUID() : messageUid,
                 value(detail, "action"), value(detail, "teamId"),
                 value(detail, "teamName"), value(detail, "leaderUid"),
                 value(detail, "leaderCallsign"), value(detail, "senderUid"),
@@ -450,6 +546,45 @@ public class SearchTeamCotWorkflow {
         return value == null ? "" : value;
     }
 
+    private boolean isExpired(SearchTeamCotMessage message) {
+        return isExpired(message.getAction(), "", message.getUid());
+    }
+
+    private boolean isExpired(String action, String createdValue, String uid) {
+        long created = parseTimestamp(createdValue);
+        if (created <= 0L)
+            created = parseTimestampFromUid(uid);
+        if (created <= 0L)
+            return false;
+        long age = System.currentTimeMillis() - created;
+        if (SearchTeamCotMessage.ACTION_ADVERTISE.equals(action))
+            return age > ADVERTISEMENT_MAX_AGE_MS;
+        if (SearchTeamCotMessage.ACTION_JOIN_REQUEST.equals(action)
+                || SearchTeamCotMessage.ACTION_INVITE.equals(action))
+            return age > PENDING_MESSAGE_MAX_AGE_MS;
+        if (SearchTeamCotMessage.ACTION_TEAM_REMOVED.equals(action))
+            return age > TEAM_REMOVED_MAX_AGE_MS;
+        return false;
+    }
+
+    private long parseTimestamp(String value) {
+        try {
+            return value == null || value.length() == 0
+                    ? 0L : Long.parseLong(value);
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    private long parseTimestampFromUid(String uid) {
+        if (uid == null)
+            return 0L;
+        int index = uid.lastIndexOf('-');
+        if (index < 0 || index + 1 >= uid.length())
+            return 0L;
+        return parseTimestamp(uid.substring(index + 1));
+    }
+
     private GeoPoint getPublishPoint() {
         AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
         if (snapshot.isAvailable())
@@ -459,8 +594,131 @@ public class SearchTeamCotWorkflow {
                 : new GeoPoint(0.0, 0.0);
     }
 
-    private void set(Marker marker, String key, String value) {
-        marker.setMetaString(meta(key), value == null ? "" : value);
+    private String getSelfCotType() {
+        Marker self = mapView == null ? null : mapView.getSelfMarker();
+        String type = self == null ? "" : self.getType();
+        if (type != null && type.startsWith("a-"))
+            return type;
+        return "a-f-G-U-C";
+    }
+
+    private String getSelfCallsign() {
+        Marker self = mapView == null ? null : mapView.getSelfMarker();
+        if (self == null)
+            return "";
+        return firstNonEmpty(self.getMetaString("callsign", ""),
+                self.getTitle(), mapView.getDeviceCallsign());
+    }
+
+    private String getSelfTeamName() {
+        Marker self = mapView == null ? null : mapView.getSelfMarker();
+        String fromSelf = self == null ? "" : firstNonEmpty(
+                self.getMetaString("__groupName", ""),
+                self.getMetaString("team", ""),
+                self.getMetaString("atakTeam", ""),
+                self.getMetaString("teamColor", ""),
+                self.getMetaString("groupName", ""),
+                self.getMetaString("locationTeam", ""));
+        if (fromSelf.length() > 0)
+            return fromSelf;
+
+        MapData data = mapView == null ? null : mapView.getMapData();
+        if (data != null) {
+            String fromMapData = firstNonEmpty(
+                    data.getString("__groupName", ""),
+                    data.getString("team", ""),
+                    data.getString("atakTeam", ""),
+                    data.getString("teamColor", ""),
+                    data.getString("groupName", ""),
+                    data.getString("locationTeam", ""));
+            if (fromMapData.length() > 0)
+                return fromMapData;
+        }
+
+        return firstNonEmpty(getPreferenceValue("locationTeam"),
+                getPreferenceValue("__groupName"),
+                getPreferenceValue("team"),
+                getPreferenceValue("atakTeam"),
+                getPreferenceValue("teamColor"),
+                getPreferenceValue("groupName"));
+    }
+
+    private String getSelfTeamRole() {
+        Marker self = mapView == null ? null : mapView.getSelfMarker();
+        String fromSelf = self == null ? "" : firstNonEmpty(
+                self.getMetaString("__groupRole", ""),
+                self.getMetaString("atakRoleType", ""),
+                self.getMetaString("atakRole", ""),
+                self.getMetaString("teamRole", ""),
+                self.getMetaString("role", ""));
+        if (fromSelf.length() > 0)
+            return fromSelf;
+
+        MapData data = mapView == null ? null : mapView.getMapData();
+        if (data != null) {
+            String fromMapData = firstNonEmpty(
+                    data.getString("__groupRole", ""),
+                    data.getString("atakRoleType", ""),
+                    data.getString("atakRole", ""),
+                    data.getString("teamRole", ""),
+                    data.getString("role", ""));
+            if (fromMapData.length() > 0)
+                return fromMapData;
+        }
+
+        String fromPrefs = firstNonEmpty(getPreferenceValue("atakRoleType"),
+                getPreferenceValue("atakRole"),
+                getPreferenceValue("teamRole"),
+                getPreferenceValue("__groupRole"),
+                getPreferenceValue("role"));
+        return fromPrefs.length() == 0 ? "Team Member" : fromPrefs;
+    }
+
+    private String getPreferenceValue(String key) {
+        Context context = mapView == null ? null : mapView.getContext();
+        String value = getPreferenceValue(context, key);
+        if (value.length() > 0)
+            return value;
+        Context applicationContext = context == null ? null
+                : context.getApplicationContext();
+        if (applicationContext != null && applicationContext != context) {
+            value = getPreferenceValue(applicationContext, key);
+            if (value.length() > 0)
+                return value;
+        }
+        try {
+            Context atakContext = context == null ? null
+                    : context.createPackageContext(ATAK_CIV_PACKAGE,
+                            Context.CONTEXT_IGNORE_SECURITY);
+            return getPreferenceValue(atakContext, key);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String getPreferenceValue(Context context, String key) {
+        if (context == null || key == null || key.length() == 0)
+            return "";
+        try {
+            SharedPreferences preferences = PreferenceManager
+                    .getDefaultSharedPreferences(context);
+            return safe(preferences.getString(key, ""));
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String firstNonEmpty(String... values) {
+        for (String value : values) {
+            String safe = safe(value);
+            if (safe.length() > 0)
+                return safe;
+        }
+        return "";
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private String meta(String key) {
@@ -476,6 +734,57 @@ public class SearchTeamCotWorkflow {
         messageGroup.setVisible(false);
         messageGroup.setMetaBoolean("addToObjList", false);
         return messageGroup;
+    }
+
+    private void clearLocalMessagesForTeam(String teamId) {
+        if (teamId == null || teamId.length() == 0)
+            return;
+        MapGroup group = ensureGroup();
+        Collection<MapItem> items = group.getItems();
+        if (items == null)
+            return;
+        List<MapItem> toRemove = new ArrayList<>();
+        for (MapItem item : items) {
+            if (teamId.equals(item.getMetaString(meta("teamId"), "")))
+                toRemove.add(item);
+        }
+        for (MapItem item : toRemove)
+            group.removeItem(item);
+    }
+
+    private void purgeLegacyMessageMarkers() {
+        if (mapView == null || mapView.getRootGroup() == null)
+            return;
+        Collection<MapItem> items = mapView.getRootGroup().getItemsRecursive();
+        if (items == null)
+            return;
+        List<MapItem> toRemove = new ArrayList<>();
+        for (MapItem item : items) {
+            String uid = item.getUID() == null ? "" : item.getUID();
+            String title = item instanceof Marker
+                    && ((Marker) item).getTitle() != null
+                            ? ((Marker) item).getTitle() : "";
+            if (uid.startsWith("sartak-team-")
+                    || title.startsWith("SARtak ")
+                    || "team-cot-message".equals(item.getMetaString(
+                            "sartak.kind", ""))) {
+                toRemove.add(item);
+            }
+        }
+        for (MapItem item : toRemove)
+            removeFromMap(item);
+    }
+
+    private void removeFromMap(MapItem item) {
+        try {
+            Method method = item.getClass().getMethod("removeFromGroup");
+            method.invoke(item);
+        } catch (Exception ignored) {
+            try {
+                ensureGroup().removeItem(item);
+            } catch (Exception ignoredAgain) {
+            }
+        }
     }
 
     private List<SearchTeamCotMessage> dedupeByTarget(

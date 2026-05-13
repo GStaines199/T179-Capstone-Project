@@ -15,6 +15,7 @@ public class SearchTeamCotDetailHandler implements MarkerDetailHandler {
         if (!marker.hasMetaValue(META_PREFIX + "action"))
             return;
         CotDetail sartak = new CotDetail(DETAIL_NAME);
+        copy(marker, sartak, "messageUid");
         copy(marker, sartak, "action");
         copy(marker, sartak, "teamId");
         copy(marker, sartak, "teamName");
@@ -31,8 +32,7 @@ public class SearchTeamCotDetailHandler implements MarkerDetailHandler {
     @Override
     public void toMarkerMetadata(Marker marker, CotEvent event,
             CotDetail detail) {
-        marker.setMetaString("entry", "sartak");
-        marker.setMetaString("sartak.kind", "team-cot-message");
+        restore(marker, detail, "messageUid");
         restore(marker, detail, "action");
         restore(marker, detail, "teamId");
         restore(marker, detail, "teamName");

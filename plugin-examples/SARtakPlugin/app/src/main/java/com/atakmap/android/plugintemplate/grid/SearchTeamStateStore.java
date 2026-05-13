@@ -50,4 +50,13 @@ public class SearchTeamStateStore {
                 .putStringSet(KEY_MEMBERS, members)
                 .apply();
     }
+
+    public void clear() {
+        preferences.edit()
+                .remove(KEY_TEAM_NAME)
+                .remove(KEY_TEAM_ID)
+                .remove(KEY_MEMBERS)
+                .putBoolean(KEY_TEAM_CREATED, false)
+                .apply();
+    }
 }

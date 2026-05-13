@@ -130,6 +130,23 @@ public class SearchPartyAssignmentManager {
             self.setRole(SearchTeamMember.TeamRole.SEARCHER);
     }
 
+    public void clearTeam() {
+        teamId = "";
+        teamName = "";
+        teamCreated = false;
+        for (SearchTeamMember member : members) {
+            if (member.getUniqueId().equals(selfMemberId)) {
+                member.setRole(SearchTeamMember.TeamRole.TEAM_LEADER);
+                member.setLaneNumber(1);
+                member.setMembershipStatus(
+                        SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
+            } else {
+                member.setMembershipStatus(
+                        SearchTeamMember.MembershipStatus.REMOVED);
+            }
+        }
+    }
+
     public void setSelfIdentity(String uid, String callsign) {
         if (uid == null || uid.trim().length() == 0)
             return;
@@ -173,10 +190,13 @@ public class SearchPartyAssignmentManager {
         if (existing != null) {
             existing.setMembershipStatus(
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
+            existing.setAtakGroupName(contact.getAtakGroupName());
             updateMemberFromContact(existing, contact, selfPoint, converter);
             return existing;
         }
 
+        GeoPoint contactPoint = contact.getPoint();
+        boolean hasLocation = contactPoint != null && contactPoint.isValid();
         int colorIndex = Math.max(0, getLaneMemberCount() - 1)
                 % SEARCHER_COLORS.length;
         String label = contact.getCallsign() == null
@@ -186,17 +206,20 @@ public class SearchPartyAssignmentManager {
                 SearchTeamMember.TeamRole.SEARCHER,
                 SEARCHER_COLOR_NAMES[colorIndex], SEARCHER_COLORS[colorIndex],
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
-                SearchTeamMember.ConnectionStatus.CONNECTED,
+                hasLocation ? SearchTeamMember.ConnectionStatus.CONNECTED
+                        : SearchTeamMember.ConnectionStatus.STALE,
                 getLaneMemberCount() + 1,
-                contact.getPoint().getLatitude(),
-                contact.getPoint().getLongitude(),
+                hasLocation ? contactPoint.getLatitude() : 0.0,
+                hasLocation ? contactPoint.getLongitude() : 0.0,
                 contact.getHeadingDegrees(), formatGeo(contact.getPoint()),
                 formatAltitude(contact.getPoint()),
-                converter.cellIdForPoint(contact.getPoint()),
+                hasLocation ? converter.cellIdForPoint(contactPoint)
+                        : "No GPS Signal",
                 formatLastPing(contact.getTimestamp()),
                 formatDistanceFromSelf(selfPoint, contact.getPoint()),
-                "Not measured");
-        member.setLiveAtakContact(true);
+                hasLocation ? "Not measured" : "No GPS Signal");
+        member.setLiveAtakContact(hasLocation);
+        member.setAtakGroupName(contact.getAtakGroupName());
         members.add(member);
         return member;
     }
@@ -304,20 +327,17 @@ public class SearchPartyAssignmentManager {
                     : laneCursor;
             laneCursor++;
             member.setLaneNumber(laneIndex + 1);
-            if (member.hasLiveAtakContact())
+            if (!member.hasLiveAtakContact())
                 continue;
 
-            double easting = cell.getWest() + laneWidth * (laneIndex + 0.5);
-            double offset = searchLineOffset(variationCursor++);
-            double northing = clamp(lineNorthing + offset, cell.getSouth(),
-                    cell.getNorth());
-            GeoPoint point = converter.toGeoPoint(cell.getZoneDescriptor(),
-                    easting, northing);
-            member.updateMapPosition(point.getLatitude(), point.getLongitude(),
-                    0.0, cell.getId(),
-                    formatDistance(distance(leaderUtm, UTMPoint
-                            .fromGeoPoint(point))),
-                    formatLineOffset(northing - lineNorthing));
+            UTMPoint memberPoint = UTMPoint.fromGeoPoint(new GeoPoint(
+                    member.getLatitude(), member.getLongitude()));
+            member.updateMapPosition(member.getLatitude(),
+                    member.getLongitude(), member.getHeadingDegrees(),
+                    cell.getId(), formatDistance(distance(leaderUtm,
+                            memberPoint)),
+                    formatLineOffset(memberPoint.getNorthing()
+                            - lineNorthing));
         }
     }
 
@@ -388,6 +408,13 @@ public class SearchPartyAssignmentManager {
             AtakTeamContactDataSource.ContactSnapshot contact,
             GeoPoint selfPoint, GridCoordinateConverter converter) {
         GeoPoint point = contact.getPoint();
+        if (point == null || !point.isValid()) {
+            member.setAtakGroupName(contact.getAtakGroupName());
+            member.markLocationUnavailable("No GPS Signal");
+            member.setConnectionStatus(SearchTeamMember.ConnectionStatus.STALE);
+            return;
+        }
+        member.setAtakGroupName(contact.getAtakGroupName());
         member.setConnectionStatus(SearchTeamMember.ConnectionStatus.CONNECTED);
         member.updatePosition(point.getLatitude(), point.getLongitude(),
                 contact.getHeadingDegrees(), formatGeo(point),
@@ -430,6 +457,8 @@ public class SearchPartyAssignmentManager {
     }
 
     private String formatGeo(GeoPoint point) {
+        if (point == null || !point.isValid())
+            return "No GPS Signal";
         return String.format(Locale.US, "%.6f, %.6f", point.getLatitude(),
                 point.getLongitude());
     }

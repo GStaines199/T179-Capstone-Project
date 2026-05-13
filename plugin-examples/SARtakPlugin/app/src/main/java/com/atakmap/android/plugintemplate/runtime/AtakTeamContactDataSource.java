@@ -16,11 +16,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Reads team/contact-like map markers already known to ATAK.
+ * Reads connected peer/contact records already known to ATAK.
  *
  * This does not create a separate SARtak network. ATAK remains responsible for
- * receiving CoT/peer data. SARtak only scans the map model and copies matching
- * contact positions into the SARtak team panel and optional SAR overlay marker.
+ * receiving CoT/peer data through its configured TAK server or peer links.
+ * SARtak reads ATAK's Contacts model first, then falls back to only strict ATAK
+ * user-position markers when ATAK has drawn a peer on the map but has not
+ * exposed it through Contacts yet.
  */
 public class AtakTeamContactDataSource {
 
@@ -31,15 +33,18 @@ public class AtakTeamContactDataSource {
         private final double headingDegrees;
         private final long timestamp;
         private final String role;
+        private final String atakGroupName;
 
         ContactSnapshot(String uid, String callsign, GeoPoint point,
-                double headingDegrees, long timestamp, String role) {
+                double headingDegrees, long timestamp, String role,
+                String atakGroupName) {
             this.uid = uid;
             this.callsign = callsign;
             this.point = point;
             this.headingDegrees = headingDegrees;
             this.timestamp = timestamp;
             this.role = role;
+            this.atakGroupName = atakGroupName;
         }
 
         public String getUid() {
@@ -66,6 +71,10 @@ public class AtakTeamContactDataSource {
             return role;
         }
 
+        public String getAtakGroupName() {
+            return atakGroupName;
+        }
+
         public boolean isTeamLead() {
             String normalized = role == null ? "" : role.toLowerCase();
             return normalized.contains("lead")
@@ -73,13 +82,15 @@ public class AtakTeamContactDataSource {
         }
 
         public String getDisplayLabel() {
-            return callsign + " - " + role + "\n" + uid;
+            return callsign + " - " + role + "\nATAK group: "
+                    + atakGroupName + "\n" + uid;
         }
     }
 
     private final MapView mapView;
     private int lastCandidateCount;
-    private int lastIgnoredMarkerCount;
+    private int lastContactModelCount;
+    private int lastUserMarkerCount;
 
     public AtakTeamContactDataSource(MapView mapView) {
         this.mapView = mapView;
@@ -88,9 +99,10 @@ public class AtakTeamContactDataSource {
     public List<ContactSnapshot> getContacts() {
         Map<String, ContactSnapshot> contacts = new LinkedHashMap<>();
         lastCandidateCount = 0;
-        lastIgnoredMarkerCount = 0;
+        lastContactModelCount = 0;
+        lastUserMarkerCount = 0;
         collectAtakContacts(contacts);
-        collectMapContactMarkers(contacts);
+        collectAtakUserMarkers(contacts);
         return new ArrayList<>(contacts.values());
     }
 
@@ -111,36 +123,41 @@ public class AtakTeamContactDataSource {
                 String callsign = safe(individual.getName());
                 if (callsign.length() == 0)
                     callsign = uid;
-                if (looksLikeGeneratedId(callsign))
+                if (looksLikeGeneratedId(callsign)
+                        || looksLikePseudoContact(uid, callsign))
                     continue;
 
+                Marker marker = null;
                 MapItem mapItem = individual.getMapItem();
-                if (!(mapItem instanceof Marker))
-                    continue;
-                Marker marker = (Marker) mapItem;
-                if (isSartakItem(marker))
-                    continue;
-                GeoPoint point = marker.getPoint();
-                if (point == null || !point.isValid())
-                    continue;
+                if (mapItem instanceof Marker
+                        && !isSartakItem(mapItem)) {
+                    marker = (Marker) mapItem;
+                }
+                GeoPoint point = marker == null ? null : marker.getPoint();
+                if (point != null && !point.isValid())
+                    point = null;
 
-                String role = safe(marker.getMetaString("atakRoleType",
-                        marker.getMetaString("teamRole", "ATAK contact")));
+                String role = marker == null ? "ATAK contact"
+                        : safe(marker.getMetaString("atakRoleType",
+                                marker.getMetaString("teamRole",
+                                        "ATAK contact")));
                 lastCandidateCount++;
+                lastContactModelCount++;
                 contacts.put(uid, new ContactSnapshot(uid, callsign, point,
-                        getHeading(marker), getTimestamp(marker), role));
+                        marker == null ? 0.0 : getHeading(marker),
+                        marker == null ? 0L : getTimestamp(marker), role,
+                        getAtakGroupName(marker)));
             }
         } catch (Exception ignored) {
-            // ATAK contacts are the preferred source, but some startup states do
-            // not expose the contact list yet. Marker scanning below remains a
-            // conservative fallback.
+            // ATAK may not expose its Contacts singleton during early plugin
+            // startup. In that case SARtak reports no contacts rather than
+            // scanning unrelated map markers and presenting false devices.
         }
     }
 
-    private void collectMapContactMarkers(Map<String, ContactSnapshot> contacts) {
+    private void collectAtakUserMarkers(Map<String, ContactSnapshot> contacts) {
         if (mapView == null || mapView.getRootGroup() == null)
             return;
-
         MapGroup rootGroup = mapView.getRootGroup();
         Collection<MapItem> items = rootGroup.getItemsRecursive();
         if (items == null)
@@ -150,41 +167,35 @@ public class AtakTeamContactDataSource {
         for (MapItem item : items) {
             if (!(item instanceof Marker) || isSartakItem(item))
                 continue;
-
             Marker marker = (Marker) item;
             String uid = safe(marker.getUID());
-            if (uid.length() == 0 || uid.equals(selfUid))
+            if (uid.length() == 0 || uid.equals(selfUid)
+                    || contacts.containsKey(uid)
+                    || looksLikePseudoContact(uid, marker.getTitle()))
+                continue;
+            if (!isAtakUserPosition(marker))
                 continue;
 
             GeoPoint point = marker.getPoint();
             if (point == null || !point.isValid())
                 continue;
-
-            String callsign = safe(marker.getMetaString("callsign",
-                    marker.getTitle()));
-            if (callsign.length() == 0)
-                callsign = uid;
+            String callsign = getMarkerCallsign(marker, uid);
             String role = safe(marker.getMetaString("atakRoleType",
-                    marker.getMetaString("teamRole", "ATAK contact")));
-
-            if (!looksLikeContact(marker, callsign))
-                continue;
-
+                    marker.getMetaString("teamRole", "ATAK user marker")));
             lastCandidateCount++;
-            if (!contacts.containsKey(uid))
-                contacts.put(uid, new ContactSnapshot(uid, callsign, point,
-                        getHeading(marker), getTimestamp(marker), role));
+            lastUserMarkerCount++;
+            contacts.put(uid, new ContactSnapshot(uid, callsign, point,
+                    getHeading(marker), getTimestamp(marker), role,
+                    getAtakGroupName(marker)));
         }
     }
 
     public String describeLastScan(int matchedRosterMembers) {
         if (lastCandidateCount == 0)
-            return lastIgnoredMarkerCount == 0
-                    ? "No ATAK peer/contact markers visible yet"
-                    : "No ATAK peer/contact markers visible yet (ignored "
-                            + lastIgnoredMarkerCount
-                            + " non-contact map markers)";
-        return lastCandidateCount + " ATAK contact marker(s) visible, "
+            return "No ATAK server/peer contacts visible yet";
+        return lastCandidateCount + " ATAK peer(s) visible ("
+                + lastContactModelCount + " contact model, "
+                + lastUserMarkerCount + " map user marker), "
                 + matchedRosterMembers + " matched to this SARtak team";
     }
 
@@ -192,32 +203,6 @@ public class AtakTeamContactDataSource {
         String uid = safe(item.getUID());
         return uid.startsWith("sartak-")
                 || "sartak".equals(item.getMetaString("entry", ""));
-    }
-
-    private boolean looksLikeContact(Marker marker, String callsign) {
-        String type = safe(marker.getType());
-        boolean hasAtakRole = marker.hasMetaValue("atakRoleType")
-                || safe(marker.getMetaString("atakRoleType", "")).length() > 0;
-        boolean hasContactUpdate = marker.hasMetaValue("lastUpdateTime")
-                || marker.hasMetaValue("locationTime")
-                || marker.hasMetaValue("trackHeading")
-                || marker.hasMetaValue("course");
-        boolean isAtakContactType = type.startsWith("a-");
-
-        // ATAK's own contact/user list sample keys off atakRoleType. Keep this
-        // as the strongest signal, but some server/emulator contact markers do
-        // not expose that metadata to plugins. In that case, accept ATAK user
-        // CoT types only when the title/callsign looks human-readable.
-        if (callsign.length() > 0 && hasAtakRole
-                && (isAtakContactType || hasContactUpdate))
-            return true;
-        if (callsign.length() > 0 && isAtakContactType
-                && !looksLikeGeneratedId(callsign)
-                && !callsign.equals(marker.getUID()))
-            return true;
-
-        lastIgnoredMarkerCount++;
-        return false;
     }
 
     private boolean looksLikeGeneratedId(String value) {
@@ -228,6 +213,50 @@ public class AtakTeamContactDataSource {
                 + "[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
                 || normalized.startsWith("sartak-team-")
                 || normalized.startsWith("ANDROID-");
+    }
+
+    private boolean isAtakUserPosition(Marker marker) {
+        String type = safe(marker.getType());
+        return type.equals("a-f-G-U-C")
+                || type.startsWith("a-f-G-U-C-")
+                || type.equals("a-f-G-U-C-I")
+                || type.startsWith("a-f-G-U-C-I-");
+    }
+
+    private String getMarkerCallsign(Marker marker, String uid) {
+        String callsign = safe(marker.getMetaString("callsign",
+                marker.getTitle()));
+        if (callsign.length() == 0 || looksLikeGeneratedId(callsign))
+            callsign = uid;
+        return callsign;
+    }
+
+    private String getAtakGroupName(Marker marker) {
+        if (marker == null)
+            return "Ungrouped ATAK";
+        String group = firstNonEmpty(
+                marker.getMetaString("__groupName", ""),
+                marker.getMetaString("team", ""),
+                marker.getMetaString("atakTeam", ""),
+                marker.getMetaString("teamColor", ""),
+                marker.getMetaString("groupName", ""),
+                marker.getMetaString("locationTeam", ""),
+                marker.getMetaString("__group", ""));
+        if (group.length() == 0)
+            return "Ungrouped ATAK";
+        return group.toLowerCase().endsWith("team") ? group : group + " Team";
+    }
+
+    private boolean looksLikePseudoContact(String uid, String callsign) {
+        String normalizedUid = safe(uid).toLowerCase();
+        String normalizedCallsign = safe(callsign).toLowerCase();
+        return normalizedUid.contains("server")
+                || normalizedCallsign.contains("server")
+                || normalizedCallsign.contains("chat room")
+                || normalizedCallsign.contains("chatroom")
+                || normalizedCallsign.contains("all chat")
+                || normalizedCallsign.equals("atak contacts")
+                || normalizedCallsign.equals("contacts");
     }
 
     private double getHeading(Marker marker) {
@@ -250,5 +279,14 @@ public class AtakTeamContactDataSource {
 
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String firstNonEmpty(String... values) {
+        for (String value : values) {
+            String safe = safe(value);
+            if (safe.length() > 0)
+                return safe;
+        }
+        return "";
     }
 }

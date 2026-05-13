@@ -99,6 +99,11 @@ public class SearchTeamMarkerOverlay {
         // plugin markers for other team members to avoid duplicate self-icons.
         if (assignmentManager.getSelfMemberId().equals(member.getUniqueId()))
             return false;
+        // Do not fabricate team-member positions. If ATAK has not supplied a
+        // live contact location, keep the member in the roster but do not draw
+        // a SARtak arrow on the map.
+        if (!member.hasLiveAtakContact())
+            return false;
         if (member.getUniqueId().equals(selectedMemberId))
             return true;
         switch (visibilityMode) {

@@ -67,6 +67,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button toggleCallsignsButton;
     private final Button searchLineColourButton;
     private final Button saveTeamSetupButton;
+    private final Button removeTeamButton;
     private final Button refreshAtakContactsButton;
     private final EditText searchLineToleranceInput;
     private final EditText teamNameInput;
@@ -160,6 +161,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.search_line_colour_button);
         saveTeamSetupButton = templateView
                 .findViewById(R.id.save_team_setup_button);
+        removeTeamButton = templateView
+                .findViewById(R.id.remove_team_button);
         refreshAtakContactsButton = templateView
                 .findViewById(R.id.refresh_atak_contacts_button);
         searchLineToleranceInput = templateView
@@ -227,6 +230,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         pauseSearchLineButton.setOnClickListener(this);
         searchLineColourButton.setOnClickListener(this);
         saveTeamSetupButton.setOnClickListener(this);
+        removeTeamButton.setOnClickListener(this);
         refreshAtakContactsButton.setOnClickListener(this);
         setupToleranceInput();
         templateView.findViewById(R.id.select_current_cell_button)
@@ -320,6 +324,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             } else {
                 showJoinTeamDialog();
             }
+        } else if (id == R.id.remove_team_button) {
+            showRemoveTeamDialog();
         } else if (id == R.id.refresh_atak_contacts_button) {
             Toast.makeText(getMapView().getContext(),
                     mapController.refreshAtakTeamContacts(),
@@ -365,14 +371,27 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         leaderTeamControls.setVisibility(View.VISIBLE);
         int leaderVisibility = leaderView && mapController.isTeamCreated()
                 ? View.VISIBLE : View.GONE;
-        otherTeamsSection.setVisibility(leaderVisibility);
+        // Cross-team hierarchy is intentionally hidden until it is backed by
+        // confirmed SARtak/ATAK data. Showing placeholder teams caused users to
+        // trust information that was not actually connected.
+        otherTeamsSection.setVisibility(View.GONE);
         gridStatusControls.setVisibility(leaderVisibility);
         searchLineControls.setVisibility(leaderVisibility);
-        teamMarkerVisibilitySection.setVisibility(View.VISIBLE);
+        teamMarkerVisibilitySection.setVisibility(mapController.isTeamCreated()
+                ? View.VISIBLE : View.GONE);
     }
 
     private void refreshGridUi() {
         refreshRoleUi();
+        boolean teamCreated = mapController.isTeamCreated();
+        if (!leaderView
+                && (mapController.getTeamMarkerVisibilityMode()
+                        == TeamMarkerVisibilityMode.LEADERS
+                        || mapController.getTeamMarkerVisibilityMode()
+                                == TeamMarkerVisibilityMode.ALL_VISIBLE)) {
+            mapController.setTeamMarkerVisibilityMode(
+                    TeamMarkerVisibilityMode.MY_TEAM);
+        }
         toggleSearchAreaButton.setText(mapController.isGridOverlayVisible()
                 ? R.string.hide_lanes
                 : R.string.show_lanes);
@@ -399,25 +418,32 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 ? Color.rgb(66, 195, 106)
                 : Color.rgb(216, 84, 76));
         gridProgressValue.setText(mapController.getGridProgressSummary());
-        teamSizeValue.setText(mapController.isTeamCreated()
+        teamSizeValue.setText(teamCreated
                 ? String.valueOf(mapController.getTeamSize()) : "0");
-        teamNameValue.setText(mapController.isTeamCreated()
+        teamNameValue.setText(teamCreated
                 ? mapController.getTeamName() + " | " + mapController
                         .getTeamId()
                 : (leaderView ? "No team created" : "Not in a team"));
         saveTeamSetupButton.setText(leaderView
-                ? (mapController.isTeamCreated() ? "Edit Team Setup"
+                ? (teamCreated ? "Edit Team Setup"
                         : "Create Team")
                 : "Join Team");
         refreshAtakContactsButton.setVisibility(leaderView
-                && mapController.isTeamCreated() ? View.VISIBLE : View.GONE);
+                && teamCreated ? View.VISIBLE : View.GONE);
+        removeTeamButton.setVisibility(leaderView && teamCreated
+                ? View.VISIBLE : View.GONE);
         templateView.findViewById(R.id.team_size_plus_button).setVisibility(
-                leaderView && mapController.isTeamCreated()
+                leaderView && teamCreated
                         ? View.VISIBLE : View.GONE);
+        boolean hasSelectedCell = !"No cell selected".equals(mapController
+                .getSelectedCellId());
+        gridStatusControls.setVisibility(leaderView && teamCreated
+                && hasSelectedCell ? View.VISIBLE : View.GONE);
         setInputTextIfIdle(teamNameInput, mapController.getTeamName());
         setInputTextIfIdle(teamIdInput, mapController.getTeamId());
         teamMarkerVisibilityValue.setText("Showing: "
                 + mapController.getTeamMarkerVisibilityLabel());
+        updateMarkerVisibilityButtons();
         atakContactStatusValue.setText(mapController.getAtakContactSummary());
         renderTeamMemberCards();
         renderInvitesAndRequests();
@@ -432,13 +458,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         trackVisibilityButton.setText(mapController.isTrackVisible()
                 ? R.string.track_hide
                 : R.string.track_show);
+        trackClearButton.setVisibility(mapController.hasVisibleTrackData()
+                ? View.VISIBLE : View.GONE);
         startSearchLineButton.setText(mapController.isSearchLineStarted()
                 ? R.string.search_line_end
                 : R.string.search_line_start);
         pauseSearchLineButton.setText(mapController.isSearchLinePaused()
                 ? R.string.search_line_resume
                 : R.string.search_line_pause);
-        pauseSearchLineButton.setEnabled(mapController.isSearchLineStarted());
+        pauseSearchLineButton.setVisibility(mapController.isSearchLineStarted()
+                ? View.VISIBLE : View.GONE);
         toggleCallsignsButton.setText(mapController.isShowingTeamCallsigns()
                 ? R.string.hide_callsigns
                 : R.string.show_callsigns);
@@ -565,6 +594,27 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .show();
     }
 
+    private void showRemoveTeamDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Remove Team")
+                .setMessage("Remove " + mapController.getTeamName()
+                        + "? This clears the local SARtak team setup and lets this leader create a new team.")
+                .setPositiveButton("Remove",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.removeTeam();
+                                Toast.makeText(getMapView().getContext(),
+                                        "Team removed", Toast.LENGTH_SHORT)
+                                        .show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     private void showJoinTeamDialog() {
         final java.util.List<SearchTeamCotMessage> teams = mapController
                 .getActiveTeamAdvertisements();
@@ -620,6 +670,22 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     handleJoinResponse(response);
             }
         }
+    }
+
+    private void updateMarkerVisibilityButtons() {
+        TeamMarkerVisibilityMode mode = mapController
+                .getTeamMarkerVisibilityMode();
+        markerModeMeButton.setEnabled(mode != TeamMarkerVisibilityMode.ME_ONLY);
+        markerModeTeamButton.setEnabled(mode
+                != TeamMarkerVisibilityMode.MY_TEAM);
+        markerModeLeadersButton.setVisibility(leaderView
+                ? View.VISIBLE : View.GONE);
+        markerModeAllButton.setVisibility(leaderView
+                ? View.VISIBLE : View.GONE);
+        markerModeLeadersButton.setEnabled(mode
+                != TeamMarkerVisibilityMode.LEADERS);
+        markerModeAllButton.setEnabled(mode
+                != TeamMarkerVisibilityMode.ALL_VISIBLE);
     }
 
     private void showJoinRequestDialog(final SearchTeamCotMessage request) {
@@ -734,7 +800,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
         String[] labels = new String[contacts.size()];
         for (int i = 0; i < contacts.size(); i++)
-            labels[i] = contacts.get(i).getDisplayLabel();
+            labels[i] = addGroupBreakLabel(contacts, i);
 
         new AlertDialog.Builder(getMapView().getContext())
                 .setTitle("Add connected member")
@@ -747,6 +813,17 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     }
                 })
                 .show();
+    }
+
+    private String addGroupBreakLabel(
+            java.util.List<AtakTeamContactDataSource.ContactSnapshot> contacts,
+            int index) {
+        AtakTeamContactDataSource.ContactSnapshot contact = contacts.get(index);
+        String label = contact.getDisplayLabel();
+        if (index == 0 || !contact.getAtakGroupName().equals(
+                contacts.get(index - 1).getAtakGroupName()))
+            return "== " + contact.getAtakGroupName() + " ==\n" + label;
+        return label;
     }
 
     private void confirmAddMember(
@@ -1124,9 +1201,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
         card.addView(header);
 
-        card.addView(createCardText("ID: " + member.getUniqueId()
+                card.addView(createCardText("ID: " + member.getUniqueId()
                 + " | Colour: " + member.getColorName()
                 + " | " + member.getLaneLabel(), 13, false));
+        card.addView(createCardText("ATAK group: "
+                + member.getAtakGroupName(), 13, false));
         card.addView(createCardText("GPS: " + member.getGpsCoordinates()
                 + " | Alt: " + member.getAltitude(), 13, false));
         card.addView(createCardText("Grid: " + member.getCurrentGridCell()

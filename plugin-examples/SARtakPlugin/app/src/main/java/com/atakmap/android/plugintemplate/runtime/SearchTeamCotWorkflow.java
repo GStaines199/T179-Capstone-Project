@@ -194,7 +194,8 @@ public class SearchTeamCotWorkflow {
                 SearchTeamCotMessage.ACTION_JOIN_REQUEST, "")) {
             if (teamId.equals(message.getTeamId())
                     && !isCancelled(SearchTeamCotMessage.ACTION_JOIN_CANCEL,
-                            message))
+                            message)
+                    && !isJoinRequestResolved(message))
                 filtered.add(message);
         }
         return dedupeBySender(filtered);
@@ -212,7 +213,8 @@ public class SearchTeamCotWorkflow {
         for (SearchTeamCotMessage invite : scanForMe(
                 SearchTeamCotMessage.ACTION_INVITE)) {
             if (!isCancelled(SearchTeamCotMessage.ACTION_INVITE_CANCEL, invite))
-                filtered.add(invite);
+                if (!isInviteResolved(invite))
+                    filtered.add(invite);
         }
         return dedupeByTarget(filtered);
     }
@@ -232,7 +234,8 @@ public class SearchTeamCotWorkflow {
             if (teamId.equals(message.getTeamId())
                     && identity.getUid().equals(message.getSenderUid())
                     && !isCancelled(SearchTeamCotMessage.ACTION_INVITE_CANCEL,
-                            message))
+                            message)
+                    && !isInviteResolved(message))
                 filtered.add(message);
         }
         return dedupeByTarget(filtered);
@@ -245,7 +248,8 @@ public class SearchTeamCotWorkflow {
                 SearchTeamCotMessage.ACTION_JOIN_REQUEST, "")) {
             if (identity.getUid().equals(message.getSenderUid())
                     && !isCancelled(SearchTeamCotMessage.ACTION_JOIN_CANCEL,
-                            message))
+                            message)
+                    && !isJoinRequestResolved(message))
                 filtered.add(message);
         }
         return dedupeByTeam(filtered);
@@ -354,6 +358,54 @@ public class SearchTeamCotWorkflow {
             SearchTeamCotMessage original) {
         for (SearchTeamCotMessage cancel : getMessages(cancelAction, "")) {
             if (isMatchingCancel(cancelAction, original, cancel))
+                return true;
+        }
+        return false;
+    }
+
+    private boolean isJoinRequestResolved(SearchTeamCotMessage request) {
+        return hasMatchingJoinResponse(SearchTeamCotMessage.ACTION_JOIN_ACCEPT,
+                request)
+                || hasMatchingJoinResponse(
+                        SearchTeamCotMessage.ACTION_JOIN_DECLINE, request);
+    }
+
+    private boolean hasMatchingJoinResponse(String responseAction,
+            SearchTeamCotMessage request) {
+        for (SearchTeamCotMessage response : getMessages(responseAction, "")) {
+            if (request.getTeamId().equals(response.getTeamId())
+                    && sameMember(request.getSenderUid(),
+                            request.getSenderCallsign(),
+                            response.getTargetUid(),
+                            response.getTargetCallsign())
+                    && sameMember(request.getLeaderUid(),
+                            request.getLeaderCallsign(),
+                            response.getSenderUid(),
+                            response.getSenderCallsign()))
+                return true;
+        }
+        return false;
+    }
+
+    private boolean isInviteResolved(SearchTeamCotMessage invite) {
+        return hasMatchingInviteResponse(
+                SearchTeamCotMessage.ACTION_INVITE_ACCEPT, invite)
+                || hasMatchingInviteResponse(
+                        SearchTeamCotMessage.ACTION_INVITE_DECLINE, invite);
+    }
+
+    private boolean hasMatchingInviteResponse(String responseAction,
+            SearchTeamCotMessage invite) {
+        for (SearchTeamCotMessage response : getMessages(responseAction, "")) {
+            if (invite.getTeamId().equals(response.getTeamId())
+                    && sameMember(invite.getTargetUid(),
+                            invite.getTargetCallsign(),
+                            response.getSenderUid(),
+                            response.getSenderCallsign())
+                    && sameMember(invite.getSenderUid(),
+                            invite.getSenderCallsign(),
+                            response.getTargetUid(),
+                            response.getTargetCallsign()))
                 return true;
         }
         return false;

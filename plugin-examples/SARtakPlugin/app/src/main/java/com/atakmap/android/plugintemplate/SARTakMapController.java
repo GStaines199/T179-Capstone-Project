@@ -362,7 +362,7 @@ public class SARTakMapController {
         if (!SearchTeamCotMessage.ACTION_INVITE_ACCEPT.equals(
                 response.getAction()))
             return false;
-        boolean added = addTeamMemberFromContact(response.getSenderUid());
+        boolean added = addTeamMemberFromResponse(response);
         if (added)
             teamStateStore.save(assignmentManager);
         return added;
@@ -439,6 +439,18 @@ public class SARTakMapController {
         leader.setRole(SearchTeamMember.TeamRole.TEAM_LEADER);
         arrangeTeamMembers();
         return true;
+    }
+
+    private boolean addTeamMemberFromResponse(SearchTeamCotMessage response) {
+        AtakTeamContactDataSource.ContactSnapshot contact = findContact(
+                response.getSenderUid(), response.getSenderCallsign());
+        if (contact == null)
+            return false;
+        SearchTeamMember member = assignmentManager.addTeamMember(contact,
+                getAvailableSelfPoint(), converter);
+        arrangeTeamMembers();
+        refreshOverlay();
+        return member != null;
     }
 
     public List<AtakTeamContactDataSource.ContactSnapshot> getAvailableContacts() {
@@ -802,11 +814,23 @@ public class SARTakMapController {
 
     private AtakTeamContactDataSource.ContactSnapshot findContact(
             String uniqueId) {
+        return findContact(uniqueId, "");
+    }
+
+    private AtakTeamContactDataSource.ContactSnapshot findContact(
+            String uniqueId, String callsign) {
         if (uniqueId == null)
-            return null;
+            uniqueId = "";
+        if (callsign == null)
+            callsign = "";
+        String targetUid = uniqueId.trim();
+        String targetCallsign = callsign.trim();
         for (AtakTeamContactDataSource.ContactSnapshot contact
                 : teamContactDataSource.getContacts()) {
-            if (uniqueId.equals(contact.getUid()))
+            if (targetUid.length() > 0 && targetUid.equals(contact.getUid()))
+                return contact;
+            if (targetCallsign.length() > 0
+                    && targetCallsign.equalsIgnoreCase(contact.getCallsign()))
                 return contact;
         }
         return null;

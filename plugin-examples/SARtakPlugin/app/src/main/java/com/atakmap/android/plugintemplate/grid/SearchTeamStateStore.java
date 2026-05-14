@@ -30,8 +30,20 @@ public class SearchTeamStateStore {
         assignmentManager.setTeamCreated(preferences.getBoolean(
                 KEY_TEAM_CREATED, false));
 
-        // Member cards are intentionally not restored from UID-only storage.
-        // They reappear only after ATAK exposes a real connected contact again.
+        Set<String> members = preferences.getStringSet(KEY_MEMBERS,
+                new HashSet<String>());
+        if (members == null)
+            return;
+        for (String encoded : members) {
+            if (encoded == null)
+                continue;
+            String[] parts = encoded.split("\t", 2);
+            if (parts.length == 0 || parts[0].trim().length() == 0)
+                continue;
+            String callsign = parts.length > 1 ? parts[1] : parts[0];
+            assignmentManager.addConfirmedRosterMember(parts[0], callsign,
+                    SearchTeamMember.TeamRole.SEARCHER);
+        }
     }
 
     public void save(SearchPartyAssignmentManager assignmentManager) {

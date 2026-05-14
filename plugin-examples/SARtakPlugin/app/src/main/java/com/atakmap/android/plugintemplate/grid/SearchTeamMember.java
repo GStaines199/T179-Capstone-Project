@@ -218,6 +218,18 @@ public class SearchTeamMember {
         liveAtakContact = false;
     }
 
+    public void markPresenceSeen(String lastPingMessage) {
+        connectionStatus = ConnectionStatus.CONNECTED;
+        lastPing = lastPingMessage;
+        if (!liveAtakContact) {
+            gpsCoordinates = "ATAK contact pending";
+            altitude = "ATAK contact pending";
+            currentGridCell = "ATAK contact pending";
+            distanceFromYou = "ATAK contact pending";
+            distanceFromSearchLine = "ATAK contact pending";
+        }
+    }
+
     public String getRoleLabel() {
         return isTeamLeader() ? "Team Leader" : "Searcher";
     }

@@ -34,8 +34,10 @@ public class SearchTeamCotWorkflow {
     private static final String ATAK_CIV_PACKAGE = "com.atakmap.app.civ";
     private static final String GROUP_NAME = "SARtak Team CoT";
     private static final long ADVERTISE_INTERVAL_MS = 10000L;
+    private static final long PRESENCE_INTERVAL_MS = 10000L;
     private static final long PENDING_REPUBLISH_INTERVAL_MS = 5000L;
     private static final long ADVERTISEMENT_MAX_AGE_MS = 30000L;
+    private static final long PRESENCE_MAX_AGE_MS = 45000L;
     private static final long PENDING_MESSAGE_MAX_AGE_MS = 60000L;
     private static final long TEAM_REMOVED_MAX_AGE_MS = 10 * 60 * 1000L;
 
@@ -53,6 +55,7 @@ public class SearchTeamCotWorkflow {
             };
     private MapGroup messageGroup;
     private long lastAdvertiseTime;
+    private long lastPresenceTime;
     private long lastPendingRepublishTime;
 
     public SearchTeamCotWorkflow(MapView mapView,
@@ -90,6 +93,22 @@ public class SearchTeamCotWorkflow {
         publish(SearchTeamCotMessage.ACTION_TEAM_REMOVED, teamId, teamName,
                 identity.getUid(), identity.getCallsign(), "", "");
         clearLocalMessagesForTeam(teamId);
+    }
+
+    public void publishPresenceIfDue(String teamId, String teamName,
+            String leaderUid, String leaderCallsign) {
+        long now = System.currentTimeMillis();
+        if (now - lastPresenceTime < PRESENCE_INTERVAL_MS)
+            return;
+        publishPresence(teamId, teamName, leaderUid, leaderCallsign);
+    }
+
+    public void publishPresence(String teamId, String teamName,
+            String leaderUid, String leaderCallsign) {
+        publish(SearchTeamCotMessage.ACTION_PRESENCE, safe(teamId),
+                safe(teamName), safe(leaderUid), safe(leaderCallsign),
+                "", "");
+        lastPresenceTime = System.currentTimeMillis();
     }
 
     public void republishPendingMessagesIfDue() {
@@ -255,16 +274,29 @@ public class SearchTeamCotWorkflow {
         return dedupeByTeam(filtered);
     }
 
+    public List<SearchTeamCotMessage> getPresenceForTeam(String teamId) {
+        List<SearchTeamCotMessage> filtered = new ArrayList<>();
+        if (teamId == null || teamId.length() == 0)
+            return filtered;
+        for (SearchTeamCotMessage message : getMessages(
+                SearchTeamCotMessage.ACTION_PRESENCE, "")) {
+            if (teamId.equals(message.getTeamId()))
+                filtered.add(message);
+        }
+        return dedupeBySender(filtered);
+    }
+
     private void publish(String action, String teamId, String teamName,
             String leaderUid, String leaderCallsign, String targetUid,
             String targetCallsign) {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        long created = System.currentTimeMillis();
         SearchTeamCotMessage message = new SearchTeamCotMessage(
                 "sartak-team-" + action + "-" + teamId + "-"
-                        + identity.getUid() + "-" + System.currentTimeMillis(),
+                        + identity.getUid() + "-" + created,
                 action, teamId, teamName, leaderUid, leaderCallsign,
                 identity.getUid(), identity.getCallsign(), targetUid,
-                targetCallsign);
+                targetCallsign, created);
         directMessages.put(message.getUid(), message);
         dispatch(message);
     }
@@ -330,7 +362,8 @@ public class SearchTeamCotWorkflow {
                     item.getMetaString(meta("senderUid"), ""),
                     item.getMetaString(meta("senderCallsign"), ""),
                     itemTarget,
-                    item.getMetaString(meta("targetCallsign"), "")));
+                    item.getMetaString(meta("targetCallsign"), ""),
+                    parseTimestamp(created)));
         }
         return messages;
     }
@@ -467,7 +500,7 @@ public class SearchTeamCotWorkflow {
         detail.setAttribute("senderCallsign", message.getSenderCallsign());
         detail.setAttribute("targetUid", message.getTargetUid());
         detail.setAttribute("targetCallsign", message.getTargetCallsign());
-        detail.setAttribute("created", String.valueOf(System.currentTimeMillis()));
+        detail.setAttribute("created", String.valueOf(message.getCreated()));
         root.addChild(detail);
         addStandardContactDetails(root, message);
 
@@ -590,7 +623,8 @@ public class SearchTeamCotWorkflow {
                 value(detail, "teamName"), value(detail, "leaderUid"),
                 value(detail, "leaderCallsign"), value(detail, "senderUid"),
                 value(detail, "senderCallsign"), value(detail, "targetUid"),
-                value(detail, "targetCallsign"));
+                value(detail, "targetCallsign"),
+                parseTimestamp(value(detail, "created")));
     }
 
     private String value(CotDetail detail, String key) {
@@ -599,7 +633,8 @@ public class SearchTeamCotWorkflow {
     }
 
     private boolean isExpired(SearchTeamCotMessage message) {
-        return isExpired(message.getAction(), "", message.getUid());
+        return isExpired(message.getAction(), String.valueOf(
+                message.getCreated()), message.getUid());
     }
 
     private boolean isExpired(String action, String createdValue, String uid) {
@@ -611,6 +646,8 @@ public class SearchTeamCotWorkflow {
         long age = System.currentTimeMillis() - created;
         if (SearchTeamCotMessage.ACTION_ADVERTISE.equals(action))
             return age > ADVERTISEMENT_MAX_AGE_MS;
+        if (SearchTeamCotMessage.ACTION_PRESENCE.equals(action))
+            return age > PRESENCE_MAX_AGE_MS;
         if (SearchTeamCotMessage.ACTION_JOIN_REQUEST.equals(action)
                 || SearchTeamCotMessage.ACTION_INVITE.equals(action))
             return age > PENDING_MESSAGE_MAX_AGE_MS;

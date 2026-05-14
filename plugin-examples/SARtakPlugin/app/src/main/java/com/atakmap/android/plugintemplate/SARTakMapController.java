@@ -297,6 +297,7 @@ public class SARTakMapController {
         teamStateStore.save(assignmentManager);
         teamCotWorkflow.advertiseTeam(assignmentManager.getTeamId(),
                 assignmentManager.getTeamName());
+        publishTeamPresence();
         refreshOverlay();
     }
 
@@ -353,6 +354,7 @@ public class SARTakMapController {
                         SearchTeamMember.TeamRole.SEARCHER);
             }
             teamStateStore.save(assignmentManager);
+            publishTeamPresence();
             refreshOverlay();
         }
     }
@@ -363,6 +365,7 @@ public class SARTakMapController {
         addLeaderFromContact(response.getLeaderUid(),
                 response.getLeaderCallsign());
         teamStateStore.save(assignmentManager);
+        publishTeamPresence();
         refreshOverlay();
     }
 
@@ -375,6 +378,7 @@ public class SARTakMapController {
             addLeaderFromContact(invite.getLeaderUid(),
                     invite.getLeaderCallsign());
             teamStateStore.save(assignmentManager);
+            publishTeamPresence();
             refreshOverlay();
         }
     }
@@ -386,6 +390,8 @@ public class SARTakMapController {
         boolean added = addTeamMemberFromResponse(response);
         if (added)
             teamStateStore.save(assignmentManager);
+        if (added)
+            publishTeamPresence();
         return added;
     }
 
@@ -517,6 +523,8 @@ public class SARTakMapController {
         refreshOverlay();
         if (removed)
             teamStateStore.save(assignmentManager);
+        if (removed)
+            publishTeamPresence();
         return removed;
     }
 
@@ -534,6 +542,10 @@ public class SARTakMapController {
         if (isLeaderRole() && assignmentManager.isTeamCreated())
             teamCotWorkflow.advertiseTeamIfDue(assignmentManager.getTeamId(),
                     assignmentManager.getTeamName());
+        if (assignmentManager.isTeamCreated())
+            publishTeamPresenceIfDue();
+        else
+            teamCotWorkflow.publishPresenceIfDue("", "", "", "");
         teamCotWorkflow.republishPendingMessagesIfDue();
     }
 
@@ -869,10 +881,36 @@ public class SARTakMapController {
                     : "Join a SARtak team to show team info.";
             return;
         }
-        assignmentManager.updateFromAtakContacts(teamContactDataSource
-                .getContacts(), getAvailableSelfPoint(), converter);
+        List<AtakTeamContactDataSource.ContactSnapshot> contacts =
+                teamContactDataSource.getContacts();
+        assignmentManager.updateFromAtakContacts(contacts,
+                getAvailableSelfPoint(), converter);
+        boolean presenceChanged = assignmentManager.updateFromPresence(
+                teamCotWorkflow.getPresenceForTeam(assignmentManager
+                        .getTeamId()), contacts, getAvailableSelfPoint(),
+                converter);
+        if (presenceChanged)
+            teamStateStore.save(assignmentManager);
         atakContactSummary = teamContactDataSource.describeLastScan(
                 assignmentManager.getLastAtakMatchedMembers());
+    }
+
+    private void publishTeamPresence() {
+        if (!assignmentManager.isTeamCreated())
+            return;
+        teamCotWorkflow.publishPresence(assignmentManager.getTeamId(),
+                assignmentManager.getTeamName(),
+                assignmentManager.getLeaderUid(),
+                assignmentManager.getLeaderCallsign());
+    }
+
+    private void publishTeamPresenceIfDue() {
+        if (!assignmentManager.isTeamCreated())
+            return;
+        teamCotWorkflow.publishPresenceIfDue(assignmentManager.getTeamId(),
+                assignmentManager.getTeamName(),
+                assignmentManager.getLeaderUid(),
+                assignmentManager.getLeaderCallsign());
     }
 
     private AtakTeamContactDataSource.ContactSnapshot findContact(

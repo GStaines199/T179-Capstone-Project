@@ -7,6 +7,7 @@ import java.util.Locale;
 
 import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
 
@@ -52,6 +53,16 @@ public class SearchPartyAssignmentManager {
 
     public String getSelfMemberId() {
         return selfMemberId;
+    }
+
+    public String getLeaderUid() {
+        SearchTeamMember leader = getLeaderMember();
+        return leader == null ? "" : leader.getUniqueId();
+    }
+
+    public String getLeaderCallsign() {
+        SearchTeamMember leader = getLeaderMember();
+        return leader == null ? "" : leader.getCallsign();
     }
 
     public int getLastAtakMatchedMembers() {
@@ -275,6 +286,8 @@ public class SearchPartyAssignmentManager {
         if (self == null)
             return;
 
+        self.markPresenceSeen("SARtak ping now");
+
         if (snapshot == null || !snapshot.isAvailable()) {
             self.markLocationUnavailable("No GPS Signal");
             self.setConnectionStatus(SearchTeamMember.ConnectionStatus.STALE);
@@ -312,6 +325,41 @@ public class SearchPartyAssignmentManager {
             lastAtakMatchedMembers++;
             updateMemberFromContact(member, contact, selfPoint, converter);
         }
+    }
+
+    public boolean updateFromPresence(
+            List<SearchTeamCotMessage> presenceMessages,
+            List<AtakTeamContactDataSource.ContactSnapshot> contacts,
+            GeoPoint selfPoint, GridCoordinateConverter converter) {
+        boolean changed = false;
+        if (!teamCreated || presenceMessages == null)
+            return false;
+
+        for (SearchTeamCotMessage presence : presenceMessages) {
+            if (!teamId.equals(presence.getTeamId()))
+                continue;
+            if (selfMemberId.equals(presence.getSenderUid()))
+                continue;
+
+            SearchTeamMember.TeamRole role = sameMember(
+                    presence.getSenderUid(), presence.getSenderCallsign(),
+                    presence.getLeaderUid(), presence.getLeaderCallsign())
+                            ? SearchTeamMember.TeamRole.TEAM_LEADER
+                            : SearchTeamMember.TeamRole.SEARCHER;
+            AtakTeamContactDataSource.ContactSnapshot contact = findContact(
+                    presence.getSenderUid(), presence.getSenderCallsign(),
+                    contacts);
+            SearchTeamMember member = contact == null
+                    ? addConfirmedRosterMember(presence.getSenderUid(),
+                            presence.getSenderCallsign(), role)
+                    : addTeamMember(contact, selfPoint, converter);
+            if (member == null)
+                continue;
+            member.setRole(role);
+            member.markPresenceSeen(formatLastPing(presence.getCreated()));
+            changed = true;
+        }
+        return changed;
     }
 
     public void removeLastLaneMember() {
@@ -427,18 +475,43 @@ public class SearchPartyAssignmentManager {
         return null;
     }
 
+    private SearchTeamMember getLeaderMember() {
+        for (SearchTeamMember member : members) {
+            if (member.getMembershipStatus()
+                    != SearchTeamMember.MembershipStatus.REMOVED
+                    && member.isTeamLeader())
+                return member;
+        }
+        return findMemberById(selfMemberId);
+    }
+
     private AtakTeamContactDataSource.ContactSnapshot findContact(
             SearchTeamMember member,
+            List<AtakTeamContactDataSource.ContactSnapshot> contacts) {
+        return findContact(member.getUniqueId(), member.getCallsign(),
+                contacts);
+    }
+
+    private AtakTeamContactDataSource.ContactSnapshot findContact(String uid,
+            String callsign,
             List<AtakTeamContactDataSource.ContactSnapshot> contacts) {
         if (contacts == null)
             return null;
         for (AtakTeamContactDataSource.ContactSnapshot contact : contacts) {
-            if (member.getUniqueId().equals(contact.getUid())
-                    || member.getCallsign().equalsIgnoreCase(
-                            contact.getCallsign()))
+            if ((uid != null && uid.equals(contact.getUid()))
+                    || (callsign != null && callsign.equalsIgnoreCase(
+                            contact.getCallsign())))
                 return contact;
         }
         return null;
+    }
+
+    private boolean sameMember(String firstUid, String firstCallsign,
+            String secondUid, String secondCallsign) {
+        return (firstUid != null && firstUid.length() > 0
+                && firstUid.equals(secondUid))
+                || (firstCallsign != null && firstCallsign.length() > 0
+                && firstCallsign.equalsIgnoreCase(secondCallsign));
     }
 
     private void updateMemberFromContact(SearchTeamMember member,

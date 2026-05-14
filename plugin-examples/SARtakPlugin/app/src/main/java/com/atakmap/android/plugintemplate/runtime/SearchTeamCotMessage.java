@@ -12,6 +12,7 @@ public class SearchTeamCotMessage {
     public static final String ACTION_JOIN_DECLINE = "join_decline";
     public static final String ACTION_JOIN_CANCEL = "join_cancel";
     public static final String ACTION_TEAM_REMOVED = "team_removed";
+    public static final String ACTION_PRESENCE = "presence";
 
     private final String uid;
     private final String action;
@@ -23,11 +24,21 @@ public class SearchTeamCotMessage {
     private final String senderCallsign;
     private final String targetUid;
     private final String targetCallsign;
+    private final long created;
 
     public SearchTeamCotMessage(String uid, String action, String teamId,
             String teamName, String leaderUid, String leaderCallsign,
             String senderUid, String senderCallsign, String targetUid,
             String targetCallsign) {
+        this(uid, action, teamId, teamName, leaderUid, leaderCallsign,
+                senderUid, senderCallsign, targetUid, targetCallsign,
+                System.currentTimeMillis());
+    }
+
+    public SearchTeamCotMessage(String uid, String action, String teamId,
+            String teamName, String leaderUid, String leaderCallsign,
+            String senderUid, String senderCallsign, String targetUid,
+            String targetCallsign, long created) {
         this.uid = uid;
         this.action = action;
         this.teamId = teamId;
@@ -38,6 +49,7 @@ public class SearchTeamCotMessage {
         this.senderCallsign = senderCallsign;
         this.targetUid = targetUid;
         this.targetCallsign = targetCallsign;
+        this.created = created;
     }
 
     public String getUid() { return uid; }
@@ -50,6 +62,7 @@ public class SearchTeamCotMessage {
     public String getSenderCallsign() { return senderCallsign; }
     public String getTargetUid() { return targetUid; }
     public String getTargetCallsign() { return targetCallsign; }
+    public long getCreated() { return created; }
 
     public String getDisplayLabel() {
         return teamName + "\nLeader: " + leaderCallsign + "\n" + teamId;

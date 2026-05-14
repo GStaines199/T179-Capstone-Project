@@ -31,17 +31,22 @@ public class AtakTeamContactDataSource {
         private final String callsign;
         private final GeoPoint point;
         private final double headingDegrees;
+        private final boolean headingReliable;
+        private final double speedMetersPerSecond;
         private final long timestamp;
         private final String role;
         private final String atakGroupName;
 
         ContactSnapshot(String uid, String callsign, GeoPoint point,
-                double headingDegrees, long timestamp, String role,
+                double headingDegrees, boolean headingReliable,
+                double speedMetersPerSecond, long timestamp, String role,
                 String atakGroupName) {
             this.uid = uid;
             this.callsign = callsign;
             this.point = point;
             this.headingDegrees = headingDegrees;
+            this.headingReliable = headingReliable;
+            this.speedMetersPerSecond = speedMetersPerSecond;
             this.timestamp = timestamp;
             this.role = role;
             this.atakGroupName = atakGroupName;
@@ -61,6 +66,14 @@ public class AtakTeamContactDataSource {
 
         public double getHeadingDegrees() {
             return headingDegrees;
+        }
+
+        public boolean isHeadingReliable() {
+            return headingReliable;
+        }
+
+        public double getSpeedMetersPerSecond() {
+            return speedMetersPerSecond;
         }
 
         public long getTimestamp() {
@@ -146,6 +159,8 @@ public class AtakTeamContactDataSource {
                 lastContactModelCount++;
                 contacts.put(uid, new ContactSnapshot(uid, callsign, point,
                         marker == null ? 0.0 : getHeading(marker),
+                        marker != null && hasHeading(marker),
+                        marker == null ? 0.0 : getSpeed(marker),
                         marker == null ? 0L : getTimestamp(marker), role,
                         getAtakGroupName(marker)));
             }
@@ -187,7 +202,8 @@ public class AtakTeamContactDataSource {
             lastCandidateCount++;
             lastUserMarkerCount++;
             contacts.put(uid, new ContactSnapshot(uid, callsign, point,
-                    getHeading(marker), getTimestamp(marker), role,
+                    getHeading(marker), hasHeading(marker), getSpeed(marker),
+                    getTimestamp(marker), role,
                     getAtakGroupName(marker)));
         }
     }
@@ -268,6 +284,24 @@ public class AtakTeamContactDataSource {
         if (Double.isNaN(heading))
             heading = marker.getMetaDouble("heading", 0.0);
         return heading;
+    }
+
+    private boolean hasHeading(Marker marker) {
+        return marker != null
+                && (marker.hasMetaValue("trackHeading")
+                        || marker.hasMetaValue("course")
+                        || marker.hasMetaValue("heading"));
+    }
+
+    private double getSpeed(Marker marker) {
+        double speed = marker.getMetaDouble("speed", Double.NaN);
+        if (Double.isNaN(speed))
+            speed = marker.getMetaDouble("groundSpeed", Double.NaN);
+        if (Double.isNaN(speed))
+            speed = marker.getMetaDouble("trackSpeed", Double.NaN);
+        if (Double.isNaN(speed))
+            speed = marker.getMetaDouble("est.speed", 0.0);
+        return Math.max(0.0, speed);
     }
 
     private long getTimestamp(Marker marker) {

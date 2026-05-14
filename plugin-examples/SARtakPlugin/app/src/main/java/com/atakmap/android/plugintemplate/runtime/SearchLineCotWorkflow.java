@@ -29,7 +29,7 @@ public class SearchLineCotWorkflow {
     private static final String ATAK_CIV_PACKAGE = "com.atakmap.app.civ";
     private static final String DETAIL_NAME = "__sartak_line";
     private static final long LINE_MESSAGE_MAX_AGE_MS = 30000L;
-    private static final long UPDATE_INTERVAL_MS = 2000L;
+    private static final long UPDATE_INTERVAL_MS = 5000L;
 
     private final MapView mapView;
     private final IdentityManager identityManager;

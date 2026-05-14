@@ -25,6 +25,11 @@ public class SearchTeamCotDetailHandler implements MarkerDetailHandler {
         copy(marker, sartak, "senderCallsign");
         copy(marker, sartak, "targetUid");
         copy(marker, sartak, "targetCallsign");
+        copy(marker, sartak, "teamColorName");
+        copy(marker, sartak, "teamColorArgb");
+        copy(marker, sartak, "memberColorName");
+        copy(marker, sartak, "memberColorArgb");
+        copy(marker, sartak, "memberRole");
         copy(marker, sartak, "created");
         detail.addChild(sartak);
     }
@@ -42,6 +47,11 @@ public class SearchTeamCotDetailHandler implements MarkerDetailHandler {
         restore(marker, detail, "senderCallsign");
         restore(marker, detail, "targetUid");
         restore(marker, detail, "targetCallsign");
+        restore(marker, detail, "teamColorName");
+        restore(marker, detail, "teamColorArgb");
+        restore(marker, detail, "memberColorName");
+        restore(marker, detail, "memberColorArgb");
+        restore(marker, detail, "memberRole");
         restore(marker, detail, "created");
     }
 

@@ -34,6 +34,8 @@ import com.atakmap.android.plugintemplate.runtime.AtakTrackBridge;
 import com.atakmap.android.plugintemplate.runtime.IdentityManager;
 import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
+import com.atakmap.android.plugintemplate.runtime.SearchGridCotMessage;
+import com.atakmap.android.plugintemplate.runtime.SearchGridCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchLineCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchLineCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
@@ -60,6 +62,7 @@ public class SARTakMapController {
     private final LocationCaptureManager locationCaptureManager;
     private final AtakTeamContactDataSource teamContactDataSource;
     private final SearchTeamCotWorkflow teamCotWorkflow;
+    private final SearchGridCotWorkflow gridCotWorkflow;
     private final SearchLineCotWorkflow searchLineCotWorkflow;
     private final SearchTeamStateStore teamStateStore;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
@@ -102,6 +105,8 @@ public class SARTakMapController {
                 searcherRepository);
         this.teamContactDataSource = new AtakTeamContactDataSource(mapView);
         this.teamCotWorkflow = new SearchTeamCotWorkflow(mapView,
+                identityManager);
+        this.gridCotWorkflow = new SearchGridCotWorkflow(mapView,
                 identityManager);
         this.searchLineCotWorkflow = new SearchLineCotWorkflow(mapView,
                 identityManager);
@@ -218,16 +223,19 @@ public class SARTakMapController {
 
     public void markSelectedPartial() {
         gridManager.setSelectedStatus(SearchGridStatus.PARTIAL);
+        publishSelectedGridStatus(SearchGridStatus.PARTIAL);
         refreshOverlay();
     }
 
     public void markSelectedComplete() {
         gridManager.setSelectedStatus(SearchGridStatus.COMPLETE);
+        publishSelectedGridStatus(SearchGridStatus.COMPLETE);
         refreshOverlay();
     }
 
     public void clearSelectedStatus() {
         gridManager.setSelectedStatus(SearchGridStatus.NOT_STARTED);
+        publishSelectedGridStatus(SearchGridStatus.NOT_STARTED);
         refreshOverlay();
     }
 
@@ -545,12 +553,28 @@ public class SARTakMapController {
         if (assignmentManager.isTeamCreated())
             publishTeamPresenceIfDue();
         else
-            teamCotWorkflow.publishPresenceIfDue("", "", "", "");
+            teamCotWorkflow.publishPresenceIfDue("", "", "", "",
+                    "", 0, "", 0, "");
         teamCotWorkflow.republishPendingMessagesIfDue();
     }
 
     public String getAtakContactSummary() {
         return atakContactSummary;
+    }
+
+    public String getTeamSyncSummary() {
+        if (!assignmentManager.isTeamCreated())
+            return atakContactSummary;
+        return "Sync: sent " + formatAge(teamCotWorkflow
+                .getLastPresenceSentTime())
+                + " | received " + formatAge(teamCotWorkflow
+                        .getLatestPresenceReceivedTime(assignmentManager
+                                .getTeamId()))
+                + "\n" + atakContactSummary
+                + "\nMembers: " + assignmentManager.getVisibleMemberCount()
+                + " synced, " + assignmentManager.getConnectedMemberCount()
+                + " connected, " + assignmentManager.getStaleMemberCount()
+                + " stale/disconnected";
     }
 
     public boolean isLeaderRole() {
@@ -737,6 +761,7 @@ public class SARTakMapController {
         locationCaptureManager.stop();
         healthManager.stop();
         teamCotWorkflow.dispose();
+        gridCotWorkflow.dispose();
         searchLineCotWorkflow.dispose();
         backgroundHandler.removeCallbacks(backgroundRunnable);
         unregisterMapListeners();
@@ -747,6 +772,7 @@ public class SARTakMapController {
     }
 
     private void refreshOverlay() {
+        applyRemoteGridStatusMessages();
         applyRemoteSearchLineIfAvailable();
         GeoPoint currentPoint = getCurrentUserPoint();
         if (currentPoint != null && isLeaderRole()
@@ -773,8 +799,28 @@ public class SARTakMapController {
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
         applyRemoteSearchLineIfAvailable();
+        applyRemoteGridStatusMessages();
         refreshLocationAvailability();
         refreshOverlay();
+    }
+
+    private void publishSelectedGridStatus(SearchGridStatus status) {
+        if (!isLeaderRole() || !assignmentManager.isTeamCreated())
+            return;
+        SearchGridCell cell = gridManager.getSelectedCell();
+        if (cell == null)
+            return;
+        gridCotWorkflow.publishStatus(assignmentManager.getTeamId(),
+                cell.getId(), status);
+    }
+
+    private void applyRemoteGridStatusMessages() {
+        if (!assignmentManager.isTeamCreated())
+            return;
+        for (SearchGridCotMessage message : gridCotWorkflow
+                .consumeMessagesForTeam(assignmentManager.getTeamId()))
+            gridManager.setCellStatus(message.getCellId(),
+                    message.getStatus());
     }
 
     private void publishSearchLine(String action) {
@@ -889,28 +935,49 @@ public class SARTakMapController {
                 teamCotWorkflow.getPresenceForTeam(assignmentManager
                         .getTeamId()), contacts, getAvailableSelfPoint(),
                 converter);
+        assignmentManager.updateConnectionAges();
         if (presenceChanged)
             teamStateStore.save(assignmentManager);
         atakContactSummary = teamContactDataSource.describeLastScan(
                 assignmentManager.getLastAtakMatchedMembers());
     }
 
+    private String formatAge(long timestamp) {
+        if (timestamp <= 0L)
+            return "never";
+        long seconds = Math.max(0L, (System.currentTimeMillis() - timestamp)
+                / 1000L);
+        return seconds <= 1L ? "now" : seconds + " sec ago";
+    }
+
     private void publishTeamPresence() {
         if (!assignmentManager.isTeamCreated())
             return;
+        SearchTeamMember self = assignmentManager.getSelfMember();
         teamCotWorkflow.publishPresence(assignmentManager.getTeamId(),
                 assignmentManager.getTeamName(),
                 assignmentManager.getLeaderUid(),
-                assignmentManager.getLeaderCallsign());
+                assignmentManager.getLeaderCallsign(),
+                assignmentManager.getTeamColorName(),
+                assignmentManager.getTeamColorArgb(),
+                self == null ? "" : self.getColorName(),
+                self == null ? 0 : self.getDisplayColor(),
+                self == null ? "" : self.getRoleLabel());
     }
 
     private void publishTeamPresenceIfDue() {
         if (!assignmentManager.isTeamCreated())
             return;
+        SearchTeamMember self = assignmentManager.getSelfMember();
         teamCotWorkflow.publishPresenceIfDue(assignmentManager.getTeamId(),
                 assignmentManager.getTeamName(),
                 assignmentManager.getLeaderUid(),
-                assignmentManager.getLeaderCallsign());
+                assignmentManager.getLeaderCallsign(),
+                assignmentManager.getTeamColorName(),
+                assignmentManager.getTeamColorArgb(),
+                self == null ? "" : self.getColorName(),
+                self == null ? 0 : self.getDisplayColor(),
+                self == null ? "" : self.getRoleLabel());
     }
 
     private AtakTeamContactDataSource.ContactSnapshot findContact(

@@ -35,6 +35,7 @@ public class SearchTeamCotWorkflow {
     private static final String GROUP_NAME = "SARtak Team CoT";
     private static final long ADVERTISE_INTERVAL_MS = 10000L;
     private static final long PRESENCE_INTERVAL_MS = 10000L;
+    private static final long STYLE_INTERVAL_MS = 45000L;
     private static final long PENDING_REPUBLISH_INTERVAL_MS = 5000L;
     private static final long ADVERTISEMENT_MAX_AGE_MS = 30000L;
     private static final long PRESENCE_MAX_AGE_MS = 45000L;
@@ -56,6 +57,7 @@ public class SearchTeamCotWorkflow {
     private MapGroup messageGroup;
     private long lastAdvertiseTime;
     private long lastPresenceTime;
+    private long lastStyleTime;
     private long lastPendingRepublishTime;
 
     public SearchTeamCotWorkflow(MapView mapView,
@@ -96,19 +98,36 @@ public class SearchTeamCotWorkflow {
     }
 
     public void publishPresenceIfDue(String teamId, String teamName,
-            String leaderUid, String leaderCallsign) {
+            String leaderUid, String leaderCallsign, String teamColorName,
+            int teamColorArgb, String memberColorName, int memberColorArgb,
+            String memberRole) {
         long now = System.currentTimeMillis();
         if (now - lastPresenceTime < PRESENCE_INTERVAL_MS)
             return;
-        publishPresence(teamId, teamName, leaderUid, leaderCallsign);
+        boolean includeStyle = now - lastStyleTime >= STYLE_INTERVAL_MS;
+        publishPresence(teamId, teamName, leaderUid, leaderCallsign,
+                includeStyle ? teamColorName : "",
+                includeStyle ? teamColorArgb : 0,
+                includeStyle ? memberColorName : "",
+                includeStyle ? memberColorArgb : 0,
+                includeStyle ? memberRole : "");
+        if (includeStyle)
+            lastStyleTime = now;
     }
 
     public void publishPresence(String teamId, String teamName,
-            String leaderUid, String leaderCallsign) {
+            String leaderUid, String leaderCallsign, String teamColorName,
+            int teamColorArgb, String memberColorName, int memberColorArgb,
+            String memberRole) {
         publish(SearchTeamCotMessage.ACTION_PRESENCE, safe(teamId),
                 safe(teamName), safe(leaderUid), safe(leaderCallsign),
-                "", "");
+                "", "", teamColorName, teamColorArgb, memberColorName,
+                memberColorArgb, memberRole);
         lastPresenceTime = System.currentTimeMillis();
+        if (teamColorArgb != 0 || memberColorArgb != 0
+                || safe(teamColorName).length() > 0
+                || safe(memberColorName).length() > 0)
+            lastStyleTime = lastPresenceTime;
     }
 
     public void republishPendingMessagesIfDue() {
@@ -286,9 +305,34 @@ public class SearchTeamCotWorkflow {
         return dedupeBySender(filtered);
     }
 
+    public long getLastPresenceSentTime() {
+        return lastPresenceTime;
+    }
+
+    public long getLatestPresenceReceivedTime(String teamId) {
+        long latest = 0L;
+        for (SearchTeamCotMessage message : getPresenceForTeam(teamId)) {
+            IdentityManager.Identity identity = identityManager
+                    .getCurrentIdentity();
+            if (identity != null && identity.getUid().equals(
+                    message.getSenderUid()))
+                continue;
+            latest = Math.max(latest, message.getCreated());
+        }
+        return latest;
+    }
+
     private void publish(String action, String teamId, String teamName,
             String leaderUid, String leaderCallsign, String targetUid,
             String targetCallsign) {
+        publish(action, teamId, teamName, leaderUid, leaderCallsign,
+                targetUid, targetCallsign, "", 0, "", 0, "");
+    }
+
+    private void publish(String action, String teamId, String teamName,
+            String leaderUid, String leaderCallsign, String targetUid,
+            String targetCallsign, String teamColorName, int teamColorArgb,
+            String memberColorName, int memberColorArgb, String memberRole) {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         long created = System.currentTimeMillis();
         SearchTeamCotMessage message = new SearchTeamCotMessage(
@@ -296,7 +340,8 @@ public class SearchTeamCotWorkflow {
                         + identity.getUid() + "-" + created,
                 action, teamId, teamName, leaderUid, leaderCallsign,
                 identity.getUid(), identity.getCallsign(), targetUid,
-                targetCallsign, created);
+                targetCallsign, created, teamColorName, teamColorArgb,
+                memberColorName, memberColorArgb, memberRole);
         directMessages.put(message.getUid(), message);
         dispatch(message);
     }
@@ -363,7 +408,12 @@ public class SearchTeamCotWorkflow {
                     item.getMetaString(meta("senderCallsign"), ""),
                     itemTarget,
                     item.getMetaString(meta("targetCallsign"), ""),
-                    parseTimestamp(created)));
+                    parseTimestamp(created),
+                    item.getMetaString(meta("teamColorName"), ""),
+                    parseColor(item.getMetaString(meta("teamColorArgb"), "")),
+                    item.getMetaString(meta("memberColorName"), ""),
+                    parseColor(item.getMetaString(meta("memberColorArgb"), "")),
+                    item.getMetaString(meta("memberRole"), "")));
         }
         return messages;
     }
@@ -500,6 +550,13 @@ public class SearchTeamCotWorkflow {
         detail.setAttribute("senderCallsign", message.getSenderCallsign());
         detail.setAttribute("targetUid", message.getTargetUid());
         detail.setAttribute("targetCallsign", message.getTargetCallsign());
+        detail.setAttribute("teamColorName", message.getTeamColorName());
+        detail.setAttribute("teamColorArgb", String.valueOf(
+                message.getTeamColorArgb()));
+        detail.setAttribute("memberColorName", message.getMemberColorName());
+        detail.setAttribute("memberColorArgb", String.valueOf(
+                message.getMemberColorArgb()));
+        detail.setAttribute("memberRole", message.getMemberRole());
         detail.setAttribute("created", String.valueOf(message.getCreated()));
         root.addChild(detail);
         addStandardContactDetails(root, message);
@@ -624,7 +681,12 @@ public class SearchTeamCotWorkflow {
                 value(detail, "leaderCallsign"), value(detail, "senderUid"),
                 value(detail, "senderCallsign"), value(detail, "targetUid"),
                 value(detail, "targetCallsign"),
-                parseTimestamp(value(detail, "created")));
+                parseTimestamp(value(detail, "created")),
+                value(detail, "teamColorName"),
+                parseColor(value(detail, "teamColorArgb")),
+                value(detail, "memberColorName"),
+                parseColor(value(detail, "memberColorArgb")),
+                value(detail, "memberRole"));
     }
 
     private String value(CotDetail detail, String key) {
@@ -662,6 +724,15 @@ public class SearchTeamCotWorkflow {
                     ? 0L : Long.parseLong(value);
         } catch (NumberFormatException ignored) {
             return 0L;
+        }
+    }
+
+    private int parseColor(String value) {
+        try {
+            return value == null || value.length() == 0
+                    ? 0 : Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return 0;
         }
     }
 

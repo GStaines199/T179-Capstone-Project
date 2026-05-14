@@ -447,7 +447,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         teamMarkerVisibilityValue.setText("Showing: "
                 + mapController.getTeamMarkerVisibilityLabel());
         updateMarkerVisibilityButtons();
-        atakContactStatusValue.setText(mapController.getAtakContactSummary());
+        atakContactStatusValue.setText(mapController.getTeamSyncSummary());
         renderTeamMemberCards();
         renderInvitesAndRequests();
         teamAlertsValue.setText(alertSummary);
@@ -1193,9 +1193,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         TextView swatch = new TextView(pluginContext);
         GradientDrawable swatchBackground = new GradientDrawable();
         swatchBackground.setColor(member.getDisplayColor());
+        swatchBackground.setStroke(dp(3), member.getTeamColorArgb());
         swatch.setBackground(swatchBackground);
         LinearLayout.LayoutParams swatchParams = new LinearLayout.LayoutParams(
-                dp(8), dp(28));
+                dp(18), dp(28));
         swatchParams.setMargins(0, 0, dp(8), 0);
         header.addView(swatch, swatchParams);
 
@@ -1226,7 +1227,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         card.addView(header);
 
                 card.addView(createCardText("ID: " + member.getUniqueId()
-                + " | Colour: " + member.getColorName()
+                + " | Team: " + member.getTeamColorName()
+                + " | Personal: " + member.getColorName()
                 + " | " + member.getLaneLabel(), 13, false));
         card.addView(createCardText("ATAK group: "
                 + member.getAtakGroupName(), 13, false));
@@ -1234,6 +1236,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + " | Alt: " + member.getAltitude(), 13, false));
         card.addView(createCardText("Grid: " + member.getCurrentGridCell()
                 + " | Last ping: " + member.getLastPing(), 13, false));
+        card.addView(createCardText(member.hasReliableHeading()
+                ? "Heading: " + Math.round(member.getHeadingDegrees())
+                        + " deg | Speed: "
+                        + String.format(java.util.Locale.US, "%.1f m/s",
+                                member.getSpeedMetersPerSecond())
+                : "Heading unavailable - neutral map marker", 13, false));
         card.addView(createCardText("From you: "
                 + member.getDistanceFromYou() + " | From line: "
                 + mapController.getMemberSearchLineSummary(

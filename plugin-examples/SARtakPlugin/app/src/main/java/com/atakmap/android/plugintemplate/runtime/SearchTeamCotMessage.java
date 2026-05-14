@@ -25,6 +25,11 @@ public class SearchTeamCotMessage {
     private final String targetUid;
     private final String targetCallsign;
     private final long created;
+    private final String teamColorName;
+    private final int teamColorArgb;
+    private final String memberColorName;
+    private final int memberColorArgb;
+    private final String memberRole;
 
     public SearchTeamCotMessage(String uid, String action, String teamId,
             String teamName, String leaderUid, String leaderCallsign,
@@ -39,6 +44,17 @@ public class SearchTeamCotMessage {
             String teamName, String leaderUid, String leaderCallsign,
             String senderUid, String senderCallsign, String targetUid,
             String targetCallsign, long created) {
+        this(uid, action, teamId, teamName, leaderUid, leaderCallsign,
+                senderUid, senderCallsign, targetUid, targetCallsign,
+                created, "", 0, "", 0, "");
+    }
+
+    public SearchTeamCotMessage(String uid, String action, String teamId,
+            String teamName, String leaderUid, String leaderCallsign,
+            String senderUid, String senderCallsign, String targetUid,
+            String targetCallsign, long created, String teamColorName,
+            int teamColorArgb, String memberColorName, int memberColorArgb,
+            String memberRole) {
         this.uid = uid;
         this.action = action;
         this.teamId = teamId;
@@ -50,6 +66,11 @@ public class SearchTeamCotMessage {
         this.targetUid = targetUid;
         this.targetCallsign = targetCallsign;
         this.created = created;
+        this.teamColorName = teamColorName == null ? "" : teamColorName;
+        this.teamColorArgb = teamColorArgb;
+        this.memberColorName = memberColorName == null ? "" : memberColorName;
+        this.memberColorArgb = memberColorArgb;
+        this.memberRole = memberRole == null ? "" : memberRole;
     }
 
     public String getUid() { return uid; }
@@ -63,6 +84,11 @@ public class SearchTeamCotMessage {
     public String getTargetUid() { return targetUid; }
     public String getTargetCallsign() { return targetCallsign; }
     public long getCreated() { return created; }
+    public String getTeamColorName() { return teamColorName; }
+    public int getTeamColorArgb() { return teamColorArgb; }
+    public String getMemberColorName() { return memberColorName; }
+    public int getMemberColorArgb() { return memberColorArgb; }
+    public String getMemberRole() { return memberRole; }
 
     public String getDisplayLabel() {
         return teamName + "\nLeader: " + leaderCallsign + "\n" + teamId;

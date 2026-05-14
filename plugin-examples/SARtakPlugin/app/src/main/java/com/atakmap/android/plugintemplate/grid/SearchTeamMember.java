@@ -23,8 +23,10 @@ public class SearchTeamMember {
     private final String uniqueId;
     private final String callsign;
     private TeamRole role;
-    private final String colorName;
-    private final int displayColor;
+    private String colorName;
+    private int displayColor;
+    private String teamColorName = "White";
+    private int teamColorArgb = 0xFFFFFFFF;
     private double latitude;
     private double longitude;
     private double headingDegrees;
@@ -39,6 +41,9 @@ public class SearchTeamMember {
     private String distanceFromSearchLine;
     private boolean liveAtakContact;
     private String atakGroupName = "Ungrouped ATAK";
+    private boolean headingReliable;
+    private double speedMetersPerSecond;
+    private long lastPresenceTimestamp;
 
     public SearchTeamMember(String uniqueId, String callsign, TeamRole role,
             String colorName, int displayColor,
@@ -94,6 +99,26 @@ public class SearchTeamMember {
         return displayColor;
     }
 
+    public String getTeamColorName() {
+        return teamColorName;
+    }
+
+    public int getTeamColorArgb() {
+        return teamColorArgb;
+    }
+
+    public void setMarkerStyle(String teamColorName, int teamColorArgb,
+            String memberColorName, int memberColorArgb) {
+        if (teamColorArgb != 0)
+            this.teamColorArgb = teamColorArgb;
+        if (teamColorName != null && teamColorName.trim().length() > 0)
+            this.teamColorName = teamColorName.trim();
+        if (memberColorArgb != 0)
+            this.displayColor = memberColorArgb;
+        if (memberColorName != null && memberColorName.trim().length() > 0)
+            this.colorName = memberColorName.trim();
+    }
+
     public double getLatitude() {
         return latitude;
     }
@@ -104,6 +129,18 @@ public class SearchTeamMember {
 
     public double getHeadingDegrees() {
         return headingDegrees;
+    }
+
+    public boolean hasReliableHeading() {
+        return headingReliable && speedMetersPerSecond > 0.4;
+    }
+
+    public double getSpeedMetersPerSecond() {
+        return speedMetersPerSecond;
+    }
+
+    public long getLastPresenceTimestamp() {
+        return lastPresenceTimestamp;
     }
 
     public MembershipStatus getMembershipStatus() {
@@ -197,6 +234,13 @@ public class SearchTeamMember {
         this.liveAtakContact = true;
     }
 
+    public void updateMovement(double headingDegrees,
+            boolean headingReliable, double speedMetersPerSecond) {
+        this.headingDegrees = headingDegrees;
+        this.headingReliable = headingReliable;
+        this.speedMetersPerSecond = speedMetersPerSecond;
+    }
+
     public void updateMapPosition(double latitude, double longitude,
             double headingDegrees, String currentGridCell,
             String distanceFromYou, String distanceFromSearchLine) {
@@ -216,11 +260,14 @@ public class SearchTeamMember {
         distanceFromYou = message;
         distanceFromSearchLine = message;
         liveAtakContact = false;
+        headingReliable = false;
+        speedMetersPerSecond = 0.0;
     }
 
     public void markPresenceSeen(String lastPingMessage) {
         connectionStatus = ConnectionStatus.CONNECTED;
         lastPing = lastPingMessage;
+        lastPresenceTimestamp = System.currentTimeMillis();
         if (!liveAtakContact) {
             gpsCoordinates = "ATAK contact pending";
             altitude = "ATAK contact pending";

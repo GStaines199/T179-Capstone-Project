@@ -155,6 +155,7 @@ public class SearchTrackManager {
             trackSessionRepository.closeSession(
                     activeSessionId,
                     System.currentTimeMillis()
+                    /// completed push
             );
         }
     }

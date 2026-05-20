@@ -56,29 +56,6 @@
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/sartak_panel"
-            android:orientation="horizontal">
-
-            <TextView
-                style="@style/SARtakLabel"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:layout_weight="1"
-                android:text="@string/view_mode_label" />
-
-            <Button
-                android:id="@+id/role_toggle_button"
-                style="@style/SARtakActionButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/leader_view" />
-        </LinearLayout>
-
-        <LinearLayout
             android:id="@+id/home_tab_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -115,22 +92,33 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/searcher_callsign" />
+                        android:text="@string/atak_role_label" />
 
                     <TextView
                         android:id="@+id/current_role_value"
                         style="@style/SARtakStatusValue"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/leader_view" />
+                        android:text="@string/member_view" />
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/plugin_health_value"
                     style="@style/SARtakStatusValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="@string/connection_status" />
+                    android:background="@drawable/sartak_status_yellow"
+                    android:padding="6dp"
+                    android:text="@string/plugin_health_starting" />
+
+                <TextView
+                    android:id="@+id/identity_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/identity_pending" />
             </LinearLayout>
 
             <LinearLayout
@@ -197,10 +185,11 @@
                             android:text="@string/gps_heading" />
 
                         <TextView
+                            android:id="@+id/home_gps_value"
                             style="@style/SARtakValue"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="@string/gps_coords" />
+                            android:text="@string/gps_waiting" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -245,7 +234,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/sartak_panel"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:visibility="gone">
 
                 <TextView
                     style="@style/SARtakSectionTitle"
@@ -318,7 +308,8 @@
                     android:layout_marginTop="6dp"
                     android:background="@drawable/sartak_status_green"
                     android:padding="6dp"
-                    android:text="@string/message_latest" />
+                    android:text="@string/message_latest"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/home_alerts_value"
@@ -328,7 +319,7 @@
                     android:layout_marginTop="6dp"
                     android:background="@drawable/sartak_status_yellow"
                     android:padding="6dp"
-                    android:text="@string/team_member_two" />
+                    android:text="@string/no_team_alerts" />
             </LinearLayout>
         </LinearLayout>
 
@@ -357,21 +348,24 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="@string/area_grid_status" />
+                    android:text="@string/area_grid_status"
+                    android:visibility="gone" />
 
                 <TextView
                     style="@style/SARtakValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="@string/area_tracks_status" />
+                    android:text="@string/area_tracks_status"
+                    android:visibility="gone" />
 
                 <TextView
                     style="@style/SARtakValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="@string/area_cleared_status" />
+                    android:text="@string/area_cleared_status"
+                    android:visibility="gone" />
 
                 <Button
                     android:id="@+id/toggle_search_area_button"
@@ -632,7 +626,21 @@
                     android:layout_marginTop="4dp"
                     android:background="@drawable/sartak_status_yellow"
                     android:padding="6dp"
-                    android:text="@string/team_member_two" />
+                    android:text="@string/no_team_alerts" />
+
+                <TextView
+                    style="@style/SARtakLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/invites_requests" />
+
+                <LinearLayout
+                    android:id="@+id/invites_requests_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
             </LinearLayout>
 
             <LinearLayout
@@ -728,6 +736,77 @@
                     android:layout_height="wrap_content"
                     android:text="@string/leader_team_actions" />
 
+                <TextView
+                    android:id="@+id/atak_contact_status_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/sartak_status_yellow"
+                    android:padding="6dp"
+                    android:text="@string/atak_contacts_waiting" />
+
+                <EditText
+                    android:id="@+id/team_name_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/team_name_hint"
+                    android:singleLine="true"
+                    android:textColor="@color/sartak_text_primary"
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
+
+                <EditText
+                    android:id="@+id/team_id_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:hint="@string/team_id_hint"
+                    android:singleLine="true"
+                    android:textColor="@color/sartak_text_primary"
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/save_team_setup_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/save_team_setup" />
+
+                <Button
+                    android:id="@+id/remove_team_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/remove_team"
+                    android:visibility="gone" />
+
+                <EditText
+                    android:id="@+id/member_uid_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="@string/member_uid_hint"
+                    android:singleLine="true"
+                    android:textColor="@color/sartak_text_primary"
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
+
+                <EditText
+                    android:id="@+id/member_callsign_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:hint="@string/member_callsign_hint"
+                    android:singleLine="true"
+                    android:textColor="@color/sartak_text_primary"
+                    android:textColorHint="@color/sartak_text_secondary"
+                    android:visibility="gone" />
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -740,7 +819,8 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/team_size_decrease" />
+                        android:text="@string/remove_member"
+                        android:visibility="gone" />
 
                     <Button
                         android:id="@+id/team_size_plus_button"
@@ -751,6 +831,14 @@
                         android:layout_weight="1"
                         android:text="@string/add_member" />
                 </LinearLayout>
+
+                <Button
+                    android:id="@+id/refresh_atak_contacts_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/refresh_atak_contacts" />
             </LinearLayout>
 
             <LinearLayout
@@ -844,6 +932,14 @@
                         android:layout_weight="1"
                         android:text="@string/track_hide" />
                 </LinearLayout>
+
+                <Button
+                    android:id="@+id/track_clear_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/track_clear" />
             </LinearLayout>
         </LinearLayout>
 

@@ -46,11 +46,18 @@ public class SearchGridManager {
     public void setSelectedStatus(SearchGridStatus status) {
         if (selectedCell == null)
             return;
-        selectedCell.setStatus(status);
+        setCellStatus(selectedCell.getId(), status);
+    }
+
+    public void setCellStatus(String cellId, SearchGridStatus status) {
+        if (cellId == null || cellId.length() == 0 || status == null)
+            return;
+        if (selectedCell != null && cellId.equals(selectedCell.getId()))
+            selectedCell.setStatus(status);
         if (status == SearchGridStatus.NOT_STARTED)
-            stateStore.clearStatus(selectedCell.getId());
+            stateStore.clearStatus(cellId);
         else
-            stateStore.setStatus(selectedCell.getId(), status);
+            stateStore.setStatus(cellId, status);
     }
 
     public List<SearchGridCell> getSelectedAggregateCells() {

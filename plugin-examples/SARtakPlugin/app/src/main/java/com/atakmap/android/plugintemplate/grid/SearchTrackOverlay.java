@@ -8,6 +8,7 @@ import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
+import java.util.List;
 import java.util.UUID;
 
 public class SearchTrackOverlay {
@@ -30,27 +31,28 @@ public class SearchTrackOverlay {
             trackGroup.setVisible(false);
         } else {
             trackGroup.setVisible(true);
-            render();
         }
     }
 
-    public void render() {
+    public void render(List<double[]> points) {
         if (!visible)
             return;
 
         ensureTrackGroup();
         trackGroup.clearItems();
+        if (points == null || points.size() < 2)
+            return;
+
+        GeoPoint[] trackPoints = new GeoPoint[points.size()];
+        for (int i = 0; i < points.size(); i++) {
+            double[] point = points.get(i);
+            trackPoints[i] = new GeoPoint(point[0], point[1]);
+        }
+
         DrawingShape track = new DrawingShape(mapView,
                 "sartak-track-" + UUID.randomUUID());
         track.setTitle("SARtak My Track");
-        track.setPoints(new GeoPoint[] {
-                new GeoPoint(-27.4710, 153.0254),
-                new GeoPoint(-27.4708, 153.0256),
-                new GeoPoint(-27.4706, 153.0258),
-                new GeoPoint(-27.4705, 153.0260),
-                new GeoPoint(-27.4704, 153.0262),
-                new GeoPoint(-27.4702, 153.0264)
-        });
+        track.setPoints(trackPoints);
         track.setClosed(false);
         track.setStrokeColor(Color.argb(220, 66, 195, 106));
         track.setStrokeWeight(4.0);

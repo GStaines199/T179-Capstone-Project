@@ -192,7 +192,8 @@ public class SearchLineOverlay {
     }
 
     private String uid(String title) {
-        return "sartak-line-" + title.toLowerCase().replace(' ', '-') + "-"
+        return "sartak-line-"
+                + title.toLowerCase().replaceAll("[^a-z0-9]+", "-") + "-"
                 + UUID.randomUUID();
     }
 }

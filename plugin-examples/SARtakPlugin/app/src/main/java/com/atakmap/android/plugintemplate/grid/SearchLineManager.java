@@ -2,6 +2,7 @@ package com.atakmap.android.plugintemplate.grid;
 
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
+import com.atakmap.android.plugintemplate.runtime.SearchLineCotMessage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,9 @@ public class SearchLineManager {
     private String restartWarning = "Search line not started";
     private SearchLineColorOption colorOption = SearchLineColorOption.CYAN;
     private double returnMarkToleranceMeters = 10.0;
+    private boolean remoteControlled;
+    private String remoteLeaderCallsign = "";
+    private long lastRemoteUpdate;
 
     public SearchLineManager(GridCoordinateConverter converter,
             SearchPartyAssignmentManager assignmentManager) {
@@ -37,6 +41,8 @@ public class SearchLineManager {
         state = SearchLineState.ACTIVE;
         lineStartedAt = System.currentTimeMillis();
         restartWarning = "Search line active";
+        remoteControlled = false;
+        remoteLeaderCallsign = "";
     }
 
     public void end() {
@@ -44,7 +50,52 @@ public class SearchLineManager {
         zoneDescriptor = null;
         lineNorthing = 0.0;
         state = SearchLineState.NOT_STARTED;
+        lineStartedAt = 0L;
+        linePausedAt = 0L;
         restartWarning = "Search line ended";
+        remoteControlled = false;
+        remoteLeaderCallsign = "";
+        lastRemoteUpdate = 0L;
+    }
+
+    public void applyRemote(SearchLineCotMessage message) {
+        if (message == null)
+            return;
+        if (SearchLineCotMessage.ACTION_END.equals(message.getAction())) {
+            activeCell = null;
+            zoneDescriptor = null;
+            lineNorthing = 0.0;
+            state = SearchLineState.NOT_STARTED;
+            lineStartedAt = 0L;
+            linePausedAt = 0L;
+            remoteControlled = true;
+            remoteLeaderCallsign = message.getSenderCallsign();
+            lastRemoteUpdate = message.getCreated();
+            restartWarning = "Team leader ended the search line";
+            return;
+        }
+
+        SearchGridCell cell = message.toCell();
+        if (cell == null)
+            return;
+        activeCell = cell;
+        zoneDescriptor = cell.getZoneDescriptor();
+        lineNorthing = clamp(message.getLineNorthing(), cell.getSouth(),
+                cell.getNorth());
+        colorOption = message.getColorOption();
+        setReturnMarkToleranceMeters(message.getToleranceMeters());
+        state = SearchLineCotMessage.ACTION_PAUSE.equals(message.getAction())
+                ? SearchLineState.PAUSED : SearchLineState.ACTIVE;
+        if (lineStartedAt <= 0L)
+            lineStartedAt = message.getCreated();
+        if (state == SearchLineState.PAUSED)
+            linePausedAt = message.getCreated();
+        remoteControlled = true;
+        remoteLeaderCallsign = message.getSenderCallsign();
+        lastRemoteUpdate = message.getCreated();
+        restartWarning = state == SearchLineState.PAUSED
+                ? "Leader paused the search line"
+                : "Synced from team leader";
     }
 
     public void updateLeaderPosition(SearchGridCell cell,
@@ -94,6 +145,10 @@ public class SearchLineManager {
 
     public boolean isPaused() {
         return state == SearchLineState.PAUSED;
+    }
+
+    public boolean isRemoteControlled() {
+        return remoteControlled;
     }
 
     public SearchLineColorOption cycleColor() {
@@ -194,8 +249,14 @@ public class SearchLineManager {
 
     public String getSummary() {
         if (state == SearchLineState.NOT_STARTED)
-            return "Line not started";
-        return "Line " + state.name()
+            return remoteControlled && remoteLeaderCallsign.length() > 0
+                    ? "Leader line not started"
+                    : "Line not started";
+        String prefix = remoteControlled
+                ? "Leader line " + state.name() + " | "
+                        + remoteLeaderCallsign
+                : "Line " + state.name();
+        return prefix
                 + " | Leader pace: " + formatPace(getLeaderPace())
                 + " | Line pace: " + formatPace(getLinePace());
     }

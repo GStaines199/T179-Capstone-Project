@@ -99,6 +99,11 @@ public class SearchTeamMarkerOverlay {
         // plugin markers for other team members to avoid duplicate self-icons.
         if (assignmentManager.getSelfMemberId().equals(member.getUniqueId()))
             return false;
+        // Do not fabricate team-member positions. If ATAK has not supplied a
+        // live contact location, keep the member in the roster but do not draw
+        // a SARtak arrow on the map.
+        if (!member.hasLiveAtakContact())
+            return false;
         if (member.getUniqueId().equals(selectedMemberId))
             return true;
         switch (visibilityMode) {
@@ -153,28 +158,52 @@ public class SearchTeamMarkerOverlay {
         Canvas canvas = new Canvas(bitmap);
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        int markerColor = member.getDisplayColor();
-
-        canvas.save();
-        canvas.rotate((float) member.getHeadingDegrees(), ICON_CENTER,
-                ICON_CENTER);
-
-        Path arrow = new Path();
-        arrow.moveTo(ICON_CENTER, 3);
-        arrow.lineTo(ICON_SIZE - 4, ICON_SIZE - 3);
-        arrow.lineTo(ICON_CENTER, ICON_SIZE - 10);
-        arrow.lineTo(4, ICON_SIZE - 3);
-        arrow.close();
-
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(markerColor);
-        canvas.drawPath(arrow, paint);
-
+        paint.setColor(member.getDisplayColor());
+        int outlineColor = getOutlineColor(member, warningOutline);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(selected ? 4 : 3);
-        paint.setColor(getOutlineColor(member, warningOutline));
-        canvas.drawPath(arrow, paint);
-        canvas.restore();
+        paint.setColor(outlineColor);
+
+        if (member.hasReliableHeading()) {
+            canvas.save();
+            canvas.rotate((float) member.getHeadingDegrees(), ICON_CENTER,
+                    ICON_CENTER);
+
+            Path arrow = new Path();
+            arrow.moveTo(ICON_CENTER, 3);
+            arrow.lineTo(ICON_SIZE - 4, ICON_SIZE - 3);
+            arrow.lineTo(ICON_CENTER, ICON_SIZE - 10);
+            arrow.lineTo(4, ICON_SIZE - 3);
+            arrow.close();
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(member.getDisplayColor());
+            canvas.drawPath(arrow, paint);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(selected ? 4 : 3);
+            paint.setColor(outlineColor);
+            canvas.drawPath(arrow, paint);
+            canvas.restore();
+        } else {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(member.getDisplayColor());
+            canvas.drawCircle(ICON_CENTER, ICON_CENTER, 10, paint);
+
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(selected ? 4 : 3);
+            paint.setColor(outlineColor);
+            canvas.drawCircle(ICON_CENTER, ICON_CENTER, 11, paint);
+        }
+
+        if (selected) {
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(2);
+            paint.setColor(Color.rgb(216, 182, 76));
+            canvas.drawCircle(ICON_CENTER, ICON_CENTER, ICON_CENTER - 2,
+                    paint);
+        }
 
         if (member.getConnectionStatus()
                 != SearchTeamMember.ConnectionStatus.CONNECTED) {
@@ -198,9 +227,7 @@ public class SearchTeamMarkerOverlay {
             boolean warningOutline) {
         if (warningOutline)
             return Color.rgb(216, 84, 76);
-        if (member.isTeamLeader())
-            return Color.rgb(79, 170, 255);
-        return Color.WHITE;
+        return member.getTeamColorArgb();
     }
 
     private boolean hasWarningOutline(SearchTeamMember member,

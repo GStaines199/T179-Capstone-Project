@@ -51,8 +51,6 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
     @Override
     protected void onDestroyImpl(Context context, MapView view) {
         super.onDestroyImpl(context, view);
-        if (ddr != null)
-            ddr.cleanup();
     }
 
 }

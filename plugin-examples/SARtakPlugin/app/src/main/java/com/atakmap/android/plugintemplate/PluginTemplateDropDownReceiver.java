@@ -258,19 +258,6 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         mapController.dispose();
     }
 
-    // In PluginTemplateDropDownReceiver.java
-    public void cleanup() {
-        mapController.dispose();
-    }
-
-    // In PluginTemplateMapComponent.java
-    @Override
-    protected void onDestroyImpl(Context context, MapView view) {
-        super.onDestroyImpl(context, view);
-        if (ddr != null)
-            ddr.dispose();
-    }
-
     @Override
     public void onClick(View view) {
         int id = view.getId();

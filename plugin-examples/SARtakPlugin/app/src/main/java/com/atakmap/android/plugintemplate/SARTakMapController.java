@@ -759,7 +759,6 @@ public class SARTakMapController {
 
     public void dispose() {
         locationCaptureManager.stop();
-        trackManager.stopSession();          // <-- add this line
         healthManager.stop();
         teamCotWorkflow.dispose();
         gridCotWorkflow.dispose();

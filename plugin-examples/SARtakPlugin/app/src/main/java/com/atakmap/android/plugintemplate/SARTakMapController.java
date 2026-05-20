@@ -85,7 +85,7 @@ public class SARTakMapController {
         LocationRepository locationRepository = new LocationRepository(
                 databaseHelper);
         SearchGridStateStore stateStore = new SearchGridStateStore(runtimeContext);
-        this.assignmentManager = new SearchPartyAssignmentManager();
+        this.assignmentManager = new SearchPartyAssignmentManager(searcherRepository);
         this.teamStateStore = new SearchTeamStateStore(runtimeContext);
         this.teamStateStore.load(assignmentManager);
         this.gridManager = new SearchGridManager(converter, stateStore);

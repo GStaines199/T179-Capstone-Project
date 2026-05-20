@@ -11,6 +11,8 @@ import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
 
+import com.atakmap.android.plugintemplate.database.SearcherRepository;
+
 public class SearchPartyAssignmentManager {
 
     public static final long STALE_AFTER_MS = 30000L;
@@ -38,7 +40,11 @@ public class SearchPartyAssignmentManager {
     private int lastAtakMatchedMembers;
     private boolean teamCreated;
 
-    public SearchPartyAssignmentManager() {
+    private final SearcherRepository searcherRepository;
+
+
+    public SearchPartyAssignmentManager(SearcherRepository searcherRepository) {
+        this.searcherRepository = searcherRepository;
         members.add(new SearchTeamMember("TL-A-001", "Alpha Lead",
                 SearchTeamMember.TeamRole.TEAM_LEADER, "White", COLOR_WHITE,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
@@ -371,6 +377,10 @@ public class SearchPartyAssignmentManager {
 
             lastAtakMatchedMembers++;
             updateMemberFromContact(member, contact, selfPoint, converter);
+            searcherRepository.updateLastSeen(
+                    contact.getUid(),
+                    System.currentTimeMillis()
+            );
         }
     }
 
@@ -431,6 +441,15 @@ public class SearchPartyAssignmentManager {
             else
                 applyMemberStyle(member);
             member.markPresenceSeen(formatLastPing(presence.getCreated()));
+            long now = System.currentTimeMillis();
+            searcherRepository.insertOrUpdate(
+                    presence.getSenderUid(),
+                    presence.getSenderCallsign(),
+                    "",          // device model unknown from CoT
+                    now,         // first_seen — CONFLICT_REPLACE keeps original if already exists
+                    now,         // last_seen always updated
+                    false        // not self
+            );
             changed = true;
         }
         return changed;

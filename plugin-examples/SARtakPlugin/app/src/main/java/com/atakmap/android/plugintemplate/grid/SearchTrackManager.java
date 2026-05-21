@@ -80,6 +80,14 @@ public class SearchTrackManager {
         recording = wasRecording;
         if (uid != null && callsign != null && wasRecording)
             startOrResume(uid, callsign);
+
+        if (activeSessionId != null) {
+            trackSessionRepository.closeSession(
+                    activeSessionId,
+                    System.currentTimeMillis()
+                    /// completed push
+            );
+        }
     }
 
     public void recordLocation(String uid, String callsign, GeoPoint point,
@@ -150,14 +158,5 @@ public class SearchTrackManager {
         return String.format(Locale.US, "%d min %02d sec", minutes, seconds);
     }
 
-    public void stopSession() {
-        if (activeSessionId != null) {
-            trackSessionRepository.closeSession(
-                    activeSessionId,
-                    System.currentTimeMillis()
-                    /// completed push
-            );
-        }
-    }
 }
 

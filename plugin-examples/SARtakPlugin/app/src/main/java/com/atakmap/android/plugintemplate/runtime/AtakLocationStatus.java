@@ -1,6 +1,6 @@
 package com.atakmap.android.plugintemplate.runtime;
 
-import com.atakmap.android.maps.MapData;
+import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.coremap.maps.coords.GeoPoint;
@@ -32,7 +32,7 @@ public class AtakLocationStatus {
             return Snapshot.unavailable(
                     "GPS unavailable; no valid ATAK self marker");
 
-        MapData data = mapView.getMapData();
+        MetaDataHolder2 data = mapView.getMapData();
         if (hasGpsIssue(data))
             return Snapshot.unavailable("No GPS Signal");
 
@@ -61,7 +61,7 @@ public class AtakLocationStatus {
         return Snapshot.available(point, fixTimestamp, source);
     }
 
-    private static Availability getAvailability(MapData data, String prefix) {
+    private static Availability getAvailability(MetaDataHolder2 data, String prefix) {
         if (data == null)
             return new Availability(false, true);
 
@@ -69,8 +69,8 @@ public class AtakLocationStatus {
         // source-specific flags. When GPS is disabled after a valid fix, a
         // source-specific value can briefly remain stale, so an explicit global
         // "not available" always wins.
-        if (data.containsKey(KEY_LOCATION_AVAILABLE)) {
-            boolean available = data.getBoolean(KEY_LOCATION_AVAILABLE, false);
+        if (data.hasMetaValue(KEY_LOCATION_AVAILABLE)) {
+            boolean available = data.getMetaBoolean(KEY_LOCATION_AVAILABLE, false);
             if (!available)
                 return new Availability(true, false);
         }
@@ -85,30 +85,30 @@ public class AtakLocationStatus {
             return fine;
 
         String prefixedKey = prefixed(prefix, KEY_LOCATION_AVAILABLE);
-        if (prefixedKey != null && data.containsKey(prefixedKey))
-            return new Availability(true, data.getBoolean(prefixedKey, false));
-        if (data.containsKey(KEY_LOCATION_AVAILABLE))
+        if (prefixedKey != null && data.hasMetaValue(prefixedKey))
+            return new Availability(true, data.getMetaBoolean(prefixedKey, false));
+        if (data.hasMetaValue(KEY_LOCATION_AVAILABLE))
             return new Availability(true, true);
 
         return new Availability(false, true);
     }
 
-    private static Availability getAvailabilityIfPresent(MapData data,
+    private static Availability getAvailabilityIfPresent(MetaDataHolder2 data,
             String key) {
-        if (!data.containsKey(key))
+        if (!data.hasMetaValue(key))
             return new Availability(false, true);
-        return new Availability(true, data.getBoolean(key, false));
+        return new Availability(true, data.getMetaBoolean(key, false));
     }
 
-    private static long getLocationTimestamp(MapData data, String prefix) {
+    private static long getLocationTimestamp(MetaDataHolder2 data, String prefix) {
         if (data == null)
             return 0L;
 
         String prefixedKey = prefixed(prefix, KEY_LOCATION_TIME);
-        if (prefixedKey != null && data.containsKey(prefixedKey))
-            return data.getLong(prefixedKey, 0L);
-        if (data.containsKey(KEY_LOCATION_TIME))
-            return data.getLong(KEY_LOCATION_TIME, 0L);
+        if (prefixedKey != null && data.hasMetaValue(prefixedKey))
+            return data.getMetaLong(prefixedKey, 0L);
+        if (data.hasMetaValue(KEY_LOCATION_TIME))
+            return data.getMetaLong(KEY_LOCATION_TIME, 0L);
 
         long fineTime = getLongIfPresent(data, "fineLocationTime");
         if (fineTime > 0L)
@@ -119,16 +119,16 @@ public class AtakLocationStatus {
         return 0L;
     }
 
-    private static String getLocationSource(MapData data, String prefix,
+    private static String getLocationSource(MetaDataHolder2 data, String prefix,
             Marker self) {
         String source = null;
         if (data != null) {
             String prefixedKey = prefixed(prefix, KEY_LOCATION_SOURCE);
-            if (prefixedKey != null && data.containsKey(prefixedKey))
-                source = data.getString(prefixedKey, null);
+            if (prefixedKey != null && data.hasMetaValue(prefixedKey))
+                source = data.getMetaString(prefixedKey, null);
             if ((source == null || source.length() == 0)
-                    && data.containsKey(KEY_LOCATION_SOURCE))
-                source = data.getString(KEY_LOCATION_SOURCE, null);
+                    && data.hasMetaValue(KEY_LOCATION_SOURCE))
+                source = data.getMetaString(KEY_LOCATION_SOURCE, null);
         }
 
         if (source == null || source.length() == 0) {
@@ -139,24 +139,24 @@ public class AtakLocationStatus {
         return source == null || source.length() == 0 ? "ATAK" : source;
     }
 
-    private static String getSourcePrefix(MapData data) {
+    private static String getSourcePrefix(MetaDataHolder2 data) {
         if (data == null)
             return null;
-        String prefix = data.getString(KEY_EFFECTIVE_PREFIX, null);
+        String prefix = data.getMetaString(KEY_EFFECTIVE_PREFIX, null);
         if (prefix == null || prefix.length() == 0)
-            prefix = data.getString(KEY_SOURCE_PREFIX, null);
+            prefix = data.getMetaString(KEY_SOURCE_PREFIX, null);
         return prefix;
     }
 
-    private static long getLongIfPresent(MapData data, String key) {
-        return data.containsKey(key) ? data.getLong(key, 0L) : 0L;
+    private static long getLongIfPresent(MetaDataHolder2 data, String key) {
+        return data.hasMetaValue(key) ? data.getMetaLong(key, 0L) : 0L;
     }
 
-    private static boolean hasGpsIssue(MapData data) {
-        if (data == null || !data.containsKey(KEY_GPS_ISSUE))
+    private static boolean hasGpsIssue(MetaDataHolder2 data) {
+        if (data == null || !data.hasMetaValue(KEY_GPS_ISSUE))
             return false;
         try {
-            return data.getBoolean(KEY_GPS_ISSUE, false);
+            return data.getMetaBoolean(KEY_GPS_ISSUE, false);
         } catch (Exception ignored) {
             Object value = data.get(KEY_GPS_ISSUE);
             return value != null && Boolean.parseBoolean(value.toString());
@@ -250,3 +250,4 @@ public class AtakLocationStatus {
         }
     }
 }
+

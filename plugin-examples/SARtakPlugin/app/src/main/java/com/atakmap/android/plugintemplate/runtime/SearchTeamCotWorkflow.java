@@ -8,7 +8,7 @@ import android.preference.PreferenceManager;
 import com.atakmap.android.contact.Contact;
 import com.atakmap.android.contact.Contacts;
 import com.atakmap.android.cot.CotMapComponent;
-import com.atakmap.android.maps.MapData;
+import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
@@ -782,15 +782,15 @@ public class SearchTeamCotWorkflow {
         if (fromSelf.length() > 0)
             return fromSelf;
 
-        MapData data = mapView == null ? null : mapView.getMapData();
+        MetaDataHolder2 data = mapView == null ? null : mapView.getMapData();
         if (data != null) {
             String fromMapData = firstNonEmpty(
-                    data.getString("__groupName", ""),
-                    data.getString("team", ""),
-                    data.getString("atakTeam", ""),
-                    data.getString("teamColor", ""),
-                    data.getString("groupName", ""),
-                    data.getString("locationTeam", ""));
+                    data.getMetaString("__groupName", ""),
+                    data.getMetaString("team", ""),
+                    data.getMetaString("atakTeam", ""),
+                    data.getMetaString("teamColor", ""),
+                    data.getMetaString("groupName", ""),
+                    data.getMetaString("locationTeam", ""));
             if (fromMapData.length() > 0)
                 return fromMapData;
         }
@@ -814,14 +814,14 @@ public class SearchTeamCotWorkflow {
         if (fromSelf.length() > 0)
             return fromSelf;
 
-        MapData data = mapView == null ? null : mapView.getMapData();
+        MetaDataHolder2 data = mapView == null ? null : mapView.getMapData();
         if (data != null) {
             String fromMapData = firstNonEmpty(
-                    data.getString("__groupRole", ""),
-                    data.getString("atakRoleType", ""),
-                    data.getString("atakRole", ""),
-                    data.getString("teamRole", ""),
-                    data.getString("role", ""));
+                    data.getMetaString("__groupRole", ""),
+                    data.getMetaString("atakRoleType", ""),
+                    data.getMetaString("atakRole", ""),
+                    data.getMetaString("teamRole", ""),
+                    data.getMetaString("role", ""));
             if (fromMapData.length() > 0)
                 return fromMapData;
         }
@@ -984,3 +984,5 @@ public class SearchTeamCotWorkflow {
         return new ArrayList<>(byTeam.values());
     }
 }
+
+

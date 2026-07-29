@@ -1,6 +1,8 @@
 # Gradle / Android build files
 .gradle/
 **/.gradle/
+.takdev/
+**/.takdev/
 build/
 **/build/
 

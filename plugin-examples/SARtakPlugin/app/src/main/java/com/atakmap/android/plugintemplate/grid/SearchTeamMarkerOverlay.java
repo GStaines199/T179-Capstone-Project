@@ -129,7 +129,6 @@ public class SearchTeamMarkerOverlay {
                 ? "a-f-G-U-C"
                 : "a-f-G-U-C-I");
         marker.setAlwaysShowText(showCallsigns);
-        marker.setTouchable(true);
         marker.setMetaString("callsign",
                 showCallsigns ? member.getCallsign() : "");
         marker.setMetaString("entry", "sartak");

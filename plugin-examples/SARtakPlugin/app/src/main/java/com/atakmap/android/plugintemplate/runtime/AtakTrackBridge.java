@@ -3,7 +3,6 @@ package com.atakmap.android.plugintemplate.runtime;
 import com.atakmap.android.maps.CrumbTrail;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
-import com.atakmap.android.maps.PersistentCircleCrumbTrail;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 import com.atakmap.android.track.crumb.CrumbDatabase;
 import com.atakmap.android.track.maps.TrackPolyline;
@@ -18,8 +17,7 @@ public class AtakTrackBridge {
 
     public boolean hasAtakTrackTrail() {
         Marker self = getSelf();
-        return self != null && (self.getCrumbTrail() != null
-                || self.getPersistentCircleCrumbTrail() != null);
+        return self != null && self.getCrumbTrail() != null;
     }
 
     public void setVisible(boolean visible) {
@@ -31,10 +29,6 @@ public class AtakTrackBridge {
         if (crumbTrail != null)
             crumbTrail.setVisible(visible);
 
-        PersistentCircleCrumbTrail persistentTrail =
-                self.getPersistentCircleCrumbTrail();
-        if (persistentTrail != null)
-            persistentTrail.setVisible(visible);
     }
 
     public void setTracking(boolean tracking) {
@@ -56,10 +50,6 @@ public class AtakTrackBridge {
         if (crumbTrail != null)
             crumbTrail.clearAllCrumbs();
 
-        PersistentCircleCrumbTrail persistentTrail =
-                self.getPersistentCircleCrumbTrail();
-        if (persistentTrail != null)
-            persistentTrail.clearAllCrumbs();
     }
 
     public String getStatusSummary(SearchTrackManager fallbackTrackManager) {
@@ -87,17 +77,13 @@ public class AtakTrackBridge {
 
         StringBuilder builder = new StringBuilder("ATAK Track History");
         CrumbTrail crumbTrail = self.getCrumbTrail();
-        PersistentCircleCrumbTrail persistentTrail =
-                self.getPersistentCircleCrumbTrail();
 
-        if (crumbTrail == null && persistentTrail == null) {
+        if (crumbTrail == null) {
             builder.append(": no active ATAK trail found");
         } else {
             builder.append(": trail attached to self marker");
             if (crumbTrail != null)
                 builder.append("\nVisible crumbs: ").append(crumbTrail.size);
-            if (persistentTrail != null)
-                builder.append("\nPersistent self trail available");
         }
 
         try {

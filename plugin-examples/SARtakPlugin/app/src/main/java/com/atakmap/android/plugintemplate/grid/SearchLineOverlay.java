@@ -153,7 +153,6 @@ public class SearchLineOverlay {
         Marker marker = new Marker(point, uid(title));
         marker.setTitle(title);
         marker.setAlwaysShowText(true);
-        marker.setTouchable(false);
         marker.setMetaString("callsign", title);
         marker.setMetaString("entry", "sartak");
         marker.setMetaBoolean("archive", false);

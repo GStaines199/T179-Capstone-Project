@@ -6,7 +6,7 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 
 import com.atakmap.android.cot.CotMapComponent;
-import com.atakmap.android.maps.MapData;
+import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
@@ -282,15 +282,15 @@ public class SearchLineCotWorkflow {
         if (fromSelf.length() > 0)
             return fromSelf;
 
-        MapData data = mapView == null ? null : mapView.getMapData();
+        MetaDataHolder2 data = mapView == null ? null : mapView.getMapData();
         if (data != null) {
             String fromMapData = firstNonEmpty(
-                    data.getString("__groupName", ""),
-                    data.getString("team", ""),
-                    data.getString("atakTeam", ""),
-                    data.getString("teamColor", ""),
-                    data.getString("groupName", ""),
-                    data.getString("locationTeam", ""));
+                    data.getMetaString("__groupName", ""),
+                    data.getMetaString("team", ""),
+                    data.getMetaString("atakTeam", ""),
+                    data.getMetaString("teamColor", ""),
+                    data.getMetaString("groupName", ""),
+                    data.getMetaString("locationTeam", ""));
             if (fromMapData.length() > 0)
                 return fromMapData;
         }
@@ -397,3 +397,5 @@ public class SearchLineCotWorkflow {
         return value == null ? "" : value.trim();
     }
 }
+
+

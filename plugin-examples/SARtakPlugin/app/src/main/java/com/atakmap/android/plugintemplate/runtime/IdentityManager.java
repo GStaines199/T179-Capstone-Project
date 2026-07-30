@@ -46,10 +46,30 @@ public class IdentityManager {
         }
     }
 
+    /** Device identifiers used when ATAK cannot supply an identity. */
+    interface DeviceFallback {
+        String getDeviceId();
+
+        String getDeviceModel();
+    }
+
     private final Context context;
     private final MapView mapView;
     private final SearcherRepository searcherRepository;
     private Identity currentIdentity;
+
+    private final DeviceFallback deviceFallback = new DeviceFallback() {
+        @Override
+        public String getDeviceId() {
+            return Settings.Secure.getString(context.getContentResolver(),
+                    Settings.Secure.ANDROID_ID);
+        }
+
+        @Override
+        public String getDeviceModel() {
+            return Build.MODEL;
+        }
+    };
 
     public IdentityManager(Context context, MapView mapView,
             SearcherRepository searcherRepository) {
@@ -59,29 +79,14 @@ public class IdentityManager {
     }
 
     public Identity resolveIdentity() {
-        String uid = MapView.getDeviceUid();
-        String callsign = mapView.getDeviceCallsign();
         Marker self = mapView.getSelfMarker();
-        if (self != null) {
-            if (isEmpty(uid))
-                uid = self.getUID();
-            if (isEmpty(callsign))
-                callsign = self.getMetaString("callsign", self.getTitle());
-        }
+        String selfUid = self == null ? null : self.getUID();
+        String selfCallsign = self == null ? null
+                : self.getMetaString("callsign", self.getTitle());
 
-        boolean atakIdentity = !isEmpty(uid) && !isEmpty(callsign);
-        String message = atakIdentity ? "Identity: " + callsign
-                : "ATAK identity unavailable";
-
-        if (!atakIdentity) {
-            String androidId = Settings.Secure.getString(
-                    context.getContentResolver(), Settings.Secure.ANDROID_ID);
-            uid = isEmpty(uid) ? androidId : uid;
-            callsign = isEmpty(callsign) ? Build.MODEL : callsign;
-            message = "Using device identity fallback";
-        }
-
-        currentIdentity = new Identity(uid, callsign, message, atakIdentity);
+        currentIdentity = resolve(MapView.getDeviceUid(),
+                mapView.getDeviceCallsign(), selfUid, selfCallsign,
+                deviceFallback);
         if (currentIdentity.isResolved()) {
             long now = System.currentTimeMillis();
             searcherRepository.insertOrUpdate(currentIdentity.getUid(),
@@ -89,6 +94,31 @@ public class IdentityManager {
                     true);
         }
         return currentIdentity;
+    }
+
+    /**
+     * Picks the UID and callsign to track under. ATAK's device identity wins,
+     * then the self marker, then the device fallback. Kept free of ATAK types
+     * so it can be unit tested on a plain JVM.
+     */
+    static Identity resolve(String atakUid, String atakCallsign, String selfUid,
+            String selfCallsign, DeviceFallback fallback) {
+        String uid = isEmpty(atakUid) ? selfUid : atakUid;
+        String callsign = isEmpty(atakCallsign) ? selfCallsign : atakCallsign;
+
+        boolean atakIdentity = !isEmpty(uid) && !isEmpty(callsign);
+        String message;
+        if (atakIdentity) {
+            message = "Identity: " + callsign;
+        } else {
+            if (isEmpty(uid))
+                uid = fallback.getDeviceId();
+            if (isEmpty(callsign))
+                callsign = fallback.getDeviceModel();
+            message = "Using device identity fallback";
+        }
+
+        return new Identity(uid, callsign, message, atakIdentity);
     }
 
     public Identity getCurrentIdentity() {
@@ -104,7 +134,7 @@ public class IdentityManager {
         return identity.getCallsign() + " | " + identity.getUid();
     }
 
-    private boolean isEmpty(String value) {
+    private static boolean isEmpty(String value) {
         return value == null || value.trim().length() == 0;
     }
 }

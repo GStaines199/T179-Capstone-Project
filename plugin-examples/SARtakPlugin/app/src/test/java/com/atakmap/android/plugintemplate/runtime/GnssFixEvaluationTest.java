@@ -14,12 +14,12 @@ import static org.junit.Assert.assertTrue;
  * AtakLocationStatus#evaluate: whether ATAK is reporting a usable GPS fix,
  * which fix timestamp and location source win, and the message shown when the
  * fix is rejected.
- *
+ * <p>
  * The ATAK plumbing in AtakLocationStatus#from(MapView) is not covered here -
  * ATAK SDK classes (MapView, MapData, GeoPoint) fail JVM bytecode verification
  * when loaded outside Android, so they cannot appear in a unit test. Everything
  * below drives the ATAK map data through the MetaSource seam instead.
- *
+ * <p>
  * Dependencies (build.gradle):
  *   testImplementation 'junit:junit:4.13.2'
  */

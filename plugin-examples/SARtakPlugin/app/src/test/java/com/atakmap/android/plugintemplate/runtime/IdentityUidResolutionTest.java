@@ -10,13 +10,13 @@ import static org.junit.Assert.assertTrue;
 /**
  * Unit tests for the UID/callsign the plugin tracks under, as decided by
  * IdentityManager#resolve: ATAK's device identity first, then the ATAK self
- * marker, then the device fallback (ANDROID_ID / Build.MODEL).
- *
+ * marker, then the device fallback (the Android ID and device model).
+ * <p>
  * IdentityManager#resolveIdentity() itself is not covered - it reads MapView
  * and the searcher database, and ATAK SDK classes fail JVM bytecode
  * verification outside Android. The fallback values are supplied here through
  * the DeviceFallback seam.
- *
+ * <p>
  * Dependencies (build.gradle):
  *   testImplementation 'junit:junit:4.13.2'
  */

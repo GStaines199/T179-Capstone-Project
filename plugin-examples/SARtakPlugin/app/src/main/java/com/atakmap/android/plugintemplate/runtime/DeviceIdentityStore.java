@@ -75,7 +75,7 @@ public class DeviceIdentityStore {
         String base = isBlank(deviceModel) ? UNKNOWN_MODEL_CALLSIGN
                 : deviceModel.trim();
         String suffix = uidSuffix(uid);
-        return suffix.length() == 0 ? base : base + "-" + suffix;
+        return suffix.isEmpty() ? base : base + "-" + suffix;
     }
 
     /**
@@ -102,6 +102,6 @@ public class DeviceIdentityStore {
     }
 
     private static boolean isBlank(String value) {
-        return value == null || value.trim().length() == 0;
+        return value == null || value.trim().isEmpty();
     }
 }

@@ -35,11 +35,24 @@ public class SearcherRepository {
                 SQLiteDatabase.CONFLICT_REPLACE);
     }
 
+    /**
+     * Demotes any other row still flagged as self, so exactly one identity is
+     * ours. Called when the resolved UID changes - otherwise a stale row keeps
+     * its flag and {@link #getSelfIdentity()} can return the wrong searcher.
+     */
+    public void clearSelfFlagExcept(String uid) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("is_self", 0);
+        db.update("searcher_identity", values, "is_self = 1 AND uid != ?",
+                new String[]{uid});
+    }
+
     public String[] getSelfIdentity() {
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor cursor = db.query("searcher_identity",
                 new String[]{"uid", "callsign"},
-                "is_self = 1", null, null, null, null, "1");
+                "is_self = 1", null, null, null, "last_seen DESC", "1");
         String[] result = null;
         if (cursor.moveToFirst()) {
             result = new String[]{cursor.getString(0), cursor.getString(1)};

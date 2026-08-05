@@ -13,6 +13,7 @@ import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotDetailHandler;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.android.plugintemplate.plugin.R;
+import com.atakmap.android.plugintemplate.SARTakMapController;
 
 public class PluginTemplateMapComponent extends DropDownMapComponent {
 
@@ -46,6 +47,7 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
         ddFilter.addAction(PluginTemplateDropDownReceiver.SHOW_PLUGIN);
         registerDropDownReceiver(ddr, ddFilter);
     }
+
     @Override
     protected void onDestroyImpl(Context context, MapView view) {
         super.onDestroyImpl(context, view);

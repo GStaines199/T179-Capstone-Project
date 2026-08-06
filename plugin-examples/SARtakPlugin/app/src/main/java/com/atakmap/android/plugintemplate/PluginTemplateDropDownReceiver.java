@@ -55,6 +55,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button teamTabButton;
     private final Button trackTabButton;
     private final Button toggleSearchAreaButton;
+    private final Button toggleGridLabelsButton;
     private final Button markerModeMeButton;
     private final Button markerModeTeamButton;
     private final Button markerModeLeadersButton;
@@ -138,6 +139,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         trackTabButton = templateView.findViewById(R.id.track_tab_button);
         toggleSearchAreaButton = templateView
                 .findViewById(R.id.toggle_search_area_button);
+        toggleGridLabelsButton = templateView
+                .findViewById(R.id.toggle_grid_labels_button);
         markerModeMeButton = templateView
                 .findViewById(R.id.marker_mode_me_button);
         markerModeTeamButton = templateView
@@ -218,6 +221,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         teamTabButton.setOnClickListener(this);
         trackTabButton.setOnClickListener(this);
         toggleSearchAreaButton.setOnClickListener(this);
+        toggleGridLabelsButton.setOnClickListener(this);
         markerModeMeButton.setOnClickListener(this);
         markerModeTeamButton.setOnClickListener(this);
         markerModeLeadersButton.setOnClickListener(this);
@@ -274,6 +278,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             Toast.makeText(getMapView().getContext(), visible
                     ? "SARtak search grid shown"
                     : "SARtak search grid hidden", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.toggle_grid_labels_button) {
+            boolean showing = mapController.toggleGridMapLabels();
+            Toast.makeText(getMapView().getContext(), showing
+                    ? "SARtak grid labels shown"
+                    : "SARtak grid labels hidden", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.marker_mode_me_button) {
             setTeamMarkerMode(TeamMarkerVisibilityMode.ME_ONLY);
         } else if (id == R.id.marker_mode_team_button) {
@@ -398,10 +407,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         toggleSearchAreaButton.setText(mapController.isGridOverlayVisible()
                 ? R.string.hide_lanes
                 : R.string.show_lanes);
-        String status = mapController.getSelectedCellStatus();
-        String cellStatus = status.length() == 0
-                ? mapController.getSelectedCellId()
-                : mapController.getSelectedCellId() + " - " + status;
+        toggleGridLabelsButton.setText(mapController.isShowingGridMapLabels()
+                ? R.string.hide_grid_labels
+                : R.string.show_grid_labels);
+        String cellStatus = mapController.getSelectedCellDisplaySummary();
         String assignmentSummary = mapController.getAssignmentSummary();
         String alertSummary = mapController.getSearchLineWarningSummary();
         String searchLineSummary = mapController.getSearchLineSummary();
@@ -1234,7 +1243,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + member.getAtakGroupName(), 13, false));
         card.addView(createCardText("GPS: " + member.getGpsCoordinates()
                 + " | Alt: " + member.getAltitude(), 13, false));
-        card.addView(createCardText("Grid: " + member.getCurrentGridCell()
+        card.addView(createCardText("Grid: "
+                + member.getCurrentGridCellDisplay()
                 + " | Last ping: " + member.getLastPing(), 13, false));
         card.addView(createCardText(member.hasReliableHeading()
                 ? "Heading: " + Math.round(member.getHeadingDegrees())

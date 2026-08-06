@@ -34,6 +34,8 @@
     <string name="area_cleared_status">Cleared cells appear after manual marking.</string>
     <string name="show_lanes">Show Grid Overlay</string>
     <string name="hide_lanes">Hide Grid Overlay</string>
+    <string name="show_grid_labels">Show Grid Labels</string>
+    <string name="hide_grid_labels">Hide Grid Labels</string>
     <string name="grid_selected_cell">Selected Cell</string>
     <string name="grid_no_cell">No cell selected</string>
     <string name="grid_assignment">Assignments</string>

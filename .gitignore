@@ -22,6 +22,7 @@ local.properties
 output.json
 
 # Signing / credentials
+android_keystore
 *.jks
 *.keystore
 *.p12

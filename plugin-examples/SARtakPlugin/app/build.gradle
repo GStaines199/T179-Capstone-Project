@@ -90,7 +90,31 @@ allprojects {
 }
 
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
 apply plugin: 'atak-takdev-plugin'
+
+def getOptionalLocalProperty = { key ->
+    def propFile = project.rootProject.file('local.properties')
+    if (propFile.isFile() && propFile.canRead()) {
+        def prop = new Properties()
+        def reader = propFile.newReader()
+        try {
+            prop.load(reader)
+        } finally {
+            reader.close()
+        }
+        def value = prop.getProperty(key)
+        if (value != null && value.trim().length() > 0)
+            return value.trim()
+    }
+    def envValue = System.getenv(key)
+    return envValue == null ? "" : envValue.trim()
+}
+
+def buildConfigString = { value ->
+    def safe = value == null ? "" : value
+    return "\"" + safe.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+}
 
 android {
     compileSdkVersion 36
@@ -103,6 +127,10 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
     }
 
     lint {
@@ -245,7 +273,13 @@ android {
     }
 
      defaultConfig {
-        minSdkVersion 21
+        minSdkVersion 24
+        buildConfigField "String", "DITTO_APP_ID",
+                buildConfigString(getOptionalLocalProperty("DITTO_APP_ID"))
+        buildConfigField "String", "DITTO_PLAYGROUND_TOKEN",
+                buildConfigString(getOptionalLocalProperty("DITTO_PLAYGROUND_TOKEN"))
+        buildConfigField "String", "DITTO_AUTH_URL",
+                buildConfigString(getOptionalLocalProperty("DITTO_AUTH_URL"))
         ndk {
             abiFilters "armeabi-v7a", "arm64-v8a", "x86"
         }
@@ -261,6 +295,7 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
+    implementation 'com.ditto:ditto-kotlin-android:5.0.0'
 
 
     testImplementation 'junit:junit:4.13.2'

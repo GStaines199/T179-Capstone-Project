@@ -374,6 +374,14 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/show_lanes" />
+
+                <Button
+                    android:id="@+id/toggle_grid_labels_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/show_grid_labels" />
             </LinearLayout>
 
             <LinearLayout

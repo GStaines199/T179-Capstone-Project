@@ -179,6 +179,10 @@ public class SearchTeamMember {
         return currentGridCell;
     }
 
+    public String getCurrentGridCellDisplay() {
+        return SearchGridDisplayFormatter.formatCellReference(currentGridCell);
+    }
+
     public String getLastPing() {
         return lastPing;
     }

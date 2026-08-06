@@ -7,6 +7,7 @@ import java.util.Locale;
 
 import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.DittoDeviceSnapshot;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
@@ -455,6 +456,62 @@ public class SearchPartyAssignmentManager {
         return changed;
     }
 
+    public boolean updateFromDittoDevices(
+            List<DittoDeviceSnapshot> snapshots,
+            GeoPoint selfPoint, GridCoordinateConverter converter) {
+        boolean changed = false;
+        if (!teamCreated || snapshots == null)
+            return false;
+
+        for (DittoDeviceSnapshot snapshot : snapshots) {
+            if (!teamId.equals(snapshot.getTeamId()))
+                continue;
+            if (selfMemberId.equals(snapshot.getUid()))
+                continue;
+
+            SearchTeamMember.TeamRole role = sameMember(snapshot.getUid(),
+                    snapshot.getCallsign(), snapshot.getLeaderUid(),
+                    snapshot.getLeaderCallsign())
+                            ? SearchTeamMember.TeamRole.TEAM_LEADER
+                            : SearchTeamMember.TeamRole.SEARCHER;
+            SearchTeamMember member = addConfirmedRosterMember(
+                    snapshot.getUid(), snapshot.getCallsign(), role);
+            if (member == null)
+                continue;
+            member.setRole(role);
+            if (snapshot.getTeamColorArgb() != 0)
+                setTeamStyle(snapshot.getTeamColorName(),
+                        snapshot.getTeamColorArgb());
+            if (snapshot.getMemberColorArgb() != 0)
+                member.setMarkerStyle(teamColorName, teamColorArgb,
+                        snapshot.getMemberColorName(),
+                        snapshot.getMemberColorArgb());
+            else
+                applyMemberStyle(member);
+            member.markPresenceSeen(formatLastPing(snapshot.getUpdatedAt()));
+            if (snapshot.hasLocation()) {
+                GeoPoint point = new GeoPoint(snapshot.getLatitude(),
+                        snapshot.getLongitude(), snapshot.getAltitude());
+                member.updatePosition(snapshot.getLatitude(),
+                        snapshot.getLongitude(), snapshot.getHeading(),
+                        formatGeo(point), formatAltitude(point),
+                        snapshot.getGridCellId(), formatLastPing(snapshot
+                                .getUpdatedAt()),
+                        formatDistanceFromSelf(selfPoint, point),
+                        member.getDistanceFromSearchLine());
+                member.updateMovement(snapshot.getHeading(),
+                        snapshot.isHeadingReliable(), snapshot.getSpeed());
+            } else {
+                member.markLocationUnavailable("Ditto location unavailable");
+            }
+            long now = System.currentTimeMillis();
+            searcherRepository.insertOrUpdate(snapshot.getUid(),
+                    snapshot.getCallsign(), "", now, now, false);
+            changed = true;
+        }
+        return changed;
+    }
+
     public void removeLastLaneMember() {
         for (int i = members.size() - 1; i >= 0; i--) {
             SearchTeamMember member = members.get(i);
@@ -522,7 +579,8 @@ public class SearchPartyAssignmentManager {
     public String describeAssignments(SearchGridCell cell) {
         if (cell == null)
             return "No cell selected";
-        return cell.getId() + " split into " + getLaneMemberCount()
+        return SearchGridDisplayFormatter.formatCellCompact(cell)
+                + " split into " + getLaneMemberCount()
                 + " assigned lanes";
     }
 
@@ -548,7 +606,7 @@ public class SearchPartyAssignmentManager {
                     .append(" | Alt: ")
                     .append(member.getAltitude())
                     .append("\nGrid: ")
-                    .append(member.getCurrentGridCell())
+                    .append(member.getCurrentGridCellDisplay())
                     .append(" | Last ping: ")
                     .append(member.getLastPing())
                     .append("\nDistance: ")

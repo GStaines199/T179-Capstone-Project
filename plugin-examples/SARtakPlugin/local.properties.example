@@ -22,3 +22,9 @@ takReleaseKeyFile=C\:\\Users\\YOUR_USERNAME\\.android\\debug.keystore
 takReleaseKeyFilePassword=android
 takReleaseKeyAlias=androiddebugkey
 takReleaseKeyPassword=android
+
+# Optional: Ditto SDK sync test credentials
+# Get these from https://portal.ditto.live/ and keep them out of git.
+DITTO_APP_ID=88ed3c0c-bf9b-4da2-bc94-6c3ac95751a3
+DITTO_PLAYGROUND_TOKEN=801317b0-9885-42e9-af80-ea3b27a0e41b
+DITTO_AUTH_URL=https://i83inp.cloud.dittolive.app

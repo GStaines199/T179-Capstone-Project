@@ -13,6 +13,7 @@ import com.atakmap.android.plugintemplate.database.SearcherRepository;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
+import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
 import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
@@ -31,6 +32,7 @@ import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakRoleResolver;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
 import com.atakmap.android.plugintemplate.runtime.AtakTrackBridge;
+import com.atakmap.android.plugintemplate.runtime.DittoSyncManager;
 import com.atakmap.android.plugintemplate.runtime.IdentityManager;
 import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
@@ -64,6 +66,7 @@ public class SARTakMapController {
     private final SearchTeamCotWorkflow teamCotWorkflow;
     private final SearchGridCotWorkflow gridCotWorkflow;
     private final SearchLineCotWorkflow searchLineCotWorkflow;
+    private final DittoSyncManager dittoSyncManager;
     private final SearchTeamStateStore teamStateStore;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
     private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
@@ -110,6 +113,7 @@ public class SARTakMapController {
                 identityManager);
         this.searchLineCotWorkflow = new SearchLineCotWorkflow(mapView,
                 identityManager);
+        this.dittoSyncManager = new DittoSyncManager(mapView, identityManager);
         this.locationCaptureManager = new LocationCaptureManager(mapView,
                 identityManager, trackManager, healthManager,
                 new LocationCaptureManager.Listener() {
@@ -145,6 +149,16 @@ public class SARTakMapController {
             selectCurrentCell();
         refreshOverlay();
         return visible;
+    }
+
+    public boolean toggleGridMapLabels() {
+        boolean showing = gridOverlay.toggleLabels();
+        refreshOverlay();
+        return showing;
+    }
+
+    public boolean isShowingGridMapLabels() {
+        return gridOverlay.isShowingLabels();
     }
 
     public SearchGridCell selectCurrentCell() {
@@ -257,6 +271,11 @@ public class SARTakMapController {
     public String getSelectedCellId() {
         SearchGridCell cell = gridManager.getSelectedCell();
         return cell == null ? "No cell selected" : cell.getId();
+    }
+
+    public String getSelectedCellDisplaySummary() {
+        SearchGridCell cell = gridManager.getSelectedCell();
+        return SearchGridDisplayFormatter.formatCellSummaryWithStatus(cell);
     }
 
     public String getSelectedCellStatus() {
@@ -564,8 +583,8 @@ public class SARTakMapController {
 
     public String getTeamSyncSummary() {
         if (!assignmentManager.isTeamCreated())
-            return atakContactSummary;
-        return "Sync: sent " + formatAge(teamCotWorkflow
+            return atakContactSummary + "\n" + dittoSyncManager.getSummary();
+        return "CoT: sent " + formatAge(teamCotWorkflow
                 .getLastPresenceSentTime())
                 + " | received " + formatAge(teamCotWorkflow
                         .getLatestPresenceReceivedTime(assignmentManager
@@ -574,7 +593,8 @@ public class SARTakMapController {
                 + "\nMembers: " + assignmentManager.getVisibleMemberCount()
                 + " synced, " + assignmentManager.getConnectedMemberCount()
                 + " connected, " + assignmentManager.getStaleMemberCount()
-                + " stale/disconnected";
+                + " stale/disconnected"
+                + "\n" + dittoSyncManager.getSummary();
     }
 
     public boolean isLeaderRole() {
@@ -669,7 +689,8 @@ public class SARTakMapController {
             else if (cell.getStatus() == SearchGridStatus.IN_PROGRESS)
                 inProgress++;
         }
-        return "1 km area: " + complete + " complete, " + partial
+        return "UTM: " + SearchGridDisplayFormatter.formatParentUtm(
+                cells.get(0)) + "\n1 km area: " + complete + " complete, " + partial
                 + " partial, " + inProgress + " in progress, "
                 + cells.size() + " cells total";
     }
@@ -760,6 +781,7 @@ public class SARTakMapController {
     public void dispose() {
         locationCaptureManager.stop();
         healthManager.stop();
+        dittoSyncManager.stop();
         teamCotWorkflow.dispose();
         gridCotWorkflow.dispose();
         searchLineCotWorkflow.dispose();
@@ -801,6 +823,8 @@ public class SARTakMapController {
         applyRemoteSearchLineIfAvailable();
         applyRemoteGridStatusMessages();
         refreshLocationAvailability();
+        publishDittoDeviceStateIfDue();
+        applyDittoDeviceSnapshots();
         refreshOverlay();
     }
 
@@ -900,6 +924,7 @@ public class SARTakMapController {
             healthManager.setTrackingActive(false);
         }
         locationCaptureManager.start();
+        dittoSyncManager.start();
     }
 
     private void refreshLocationAvailability() {
@@ -935,11 +960,37 @@ public class SARTakMapController {
                 teamCotWorkflow.getPresenceForTeam(assignmentManager
                         .getTeamId()), contacts, getAvailableSelfPoint(),
                 converter);
+        boolean dittoChanged = assignmentManager.updateFromDittoDevices(
+                dittoSyncManager.getDeviceSnapshots(), getAvailableSelfPoint(),
+                converter);
         assignmentManager.updateConnectionAges();
-        if (presenceChanged)
+        if (presenceChanged || dittoChanged)
             teamStateStore.save(assignmentManager);
         atakContactSummary = teamContactDataSource.describeLastScan(
                 assignmentManager.getLastAtakMatchedMembers());
+    }
+
+    private void publishDittoDeviceStateIfDue() {
+        SearchTeamMember self = assignmentManager.getSelfMember();
+        dittoSyncManager.publishDeviceStateIfDue(
+                assignmentManager.isTeamCreated(), assignmentManager
+                        .getTeamId(), assignmentManager.getTeamName(),
+                assignmentManager.getLeaderUid(), assignmentManager
+                        .getLeaderCallsign(),
+                getRoleLabel(), assignmentManager.getTeamColorName(),
+                assignmentManager.getTeamColorArgb(), self,
+                gridManager.getSelectedCell(), AtakLocationStatus.from(
+                        mapView));
+    }
+
+    private void applyDittoDeviceSnapshots() {
+        if (!assignmentManager.isTeamCreated())
+            return;
+        boolean changed = assignmentManager.updateFromDittoDevices(
+                dittoSyncManager.getDeviceSnapshots(), getAvailableSelfPoint(),
+                converter);
+        if (changed)
+            teamStateStore.save(assignmentManager);
     }
 
     private String formatAge(long timestamp) {

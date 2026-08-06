@@ -4,6 +4,7 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
+
 public class SearcherRepository {
 
     public static final String CREATE_TABLE =
@@ -24,15 +25,27 @@ public class SearcherRepository {
     public void insertOrUpdate(String uid, String callsign, String deviceModel,
                                long firstSeen, long lastSeen, boolean isSelf) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put("uid", uid);
-        values.put("callsign", callsign);
-        values.put("device_model", deviceModel);
-        values.put("first_seen", firstSeen);
-        values.put("last_seen", lastSeen);
-        values.put("is_self", isSelf ? 1 : 0);
-        db.insertWithOnConflict("searcher_identity", null, values,
-                SQLiteDatabase.CONFLICT_REPLACE);
+
+        // Try insert first (preserves first_seen on conflict)
+        ContentValues insert = new ContentValues();
+        insert.put("uid", uid);
+        insert.put("callsign", callsign);
+        insert.put("device_model", deviceModel);
+        insert.put("first_seen", firstSeen);
+        insert.put("last_seen", lastSeen);
+        insert.put("is_self", isSelf ? 1 : 0);
+        long result = db.insertWithOnConflict("searcher_identity", null, insert,
+                SQLiteDatabase.CONFLICT_IGNORE);  // IGNORE instead of REPLACE
+
+        if (result == -1) {
+            // Row exists — update everything except first_seen
+            ContentValues update = new ContentValues();
+            update.put("callsign", callsign);
+            update.put("device_model", deviceModel);
+            update.put("last_seen", lastSeen);
+            update.put("is_self", isSelf ? 1 : 0);
+            db.update("searcher_identity", update, "uid = ?", new String[]{uid});
+        }
     }
 
     public String[] getSelfIdentity() {

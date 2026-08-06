@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+
 public class SearchTrackManager {
 
     private final TrackSessionRepository trackSessionRepository;
@@ -148,4 +149,15 @@ public class SearchTrackManager {
         long seconds = elapsedSeconds % 60L;
         return String.format(Locale.US, "%d min %02d sec", minutes, seconds);
     }
+
+    public void stopSession() {
+        if (activeSessionId != null) {
+            trackSessionRepository.closeSession(
+                    activeSessionId,
+                    System.currentTimeMillis()
+                    /// completed push
+            );
+        }
+    }
 }
+

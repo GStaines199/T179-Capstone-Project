@@ -16,9 +16,15 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -49,7 +55,11 @@ import static org.junit.Assert.assertTrue;
  * The point of the whole exercise is that two devices never end up on one UID
  * and one device never splits itself across two, so the tests cover both halves
  * of that: uniqueness between installs, and stability within an install across
- * restarts.
+ * restarts - including under concurrent first calls, which is when a device
+ * splits. First launch is the one moment the UID does not exist yet, and the
+ * capture poll and the UI both ask for it; the racing tests hold minting to a
+ * single answer across threads and across store instances, since the
+ * preferences file is process wide.
  * <p>
  * ATAK SDK types are kept out - MapView and friends fail JVM bytecode
  * verification off-device - so {@code IdentityManager.resolveIdentity()} itself
@@ -616,8 +626,182 @@ public class UidGenerationTest {
     }
 
     // =========================================================================
+    // Collision avoidance: one device does not mint two UIDs
+    // =========================================================================
+
+    /** Enough callers to lose a race reliably if minting is not guarded. */
+    private static final int RACING_CALLERS = 16;
+
+    @Test
+    public void getOrCreateUid_underConcurrentFirstCalls_mintsExactlyOneUid()
+            throws Exception {
+        // First launch is exactly when this happens: the capture poll and the
+        // UI both ask for the identity, both find nothing stored, and both
+        // mint. The device then reports under two UIDs and appears as two
+        // searchers - the same failure as a collision, from the other side.
+        final DeviceIdentityStore store = newInstall();
+
+        Set<String> minted = callConcurrently(new Call() {
+            @Override
+            public String get() {
+                return store.getOrCreateUid();
+            }
+        });
+
+        assertEquals("the device minted more than one uid: " + minted,
+                1, minted.size());
+    }
+
+    @Test
+    public void getOrCreateUid_underConcurrentFirstCalls_persistsTheOneItReturned()
+            throws Exception {
+        // A UID handed out but not the one persisted is worse than a duplicate:
+        // this run tracks under one, the next run under another.
+        final DeviceIdentityStore store = newInstall();
+
+        Set<String> minted = callConcurrently(new Call() {
+            @Override
+            public String get() {
+                return store.getOrCreateUid();
+            }
+        });
+
+        assertEquals(1, minted.size());
+        assertEquals(minted.iterator().next(),
+                preferences().getString(DeviceIdentityStore.KEY_UID, null));
+    }
+
+    @Test
+    public void getOrCreateUid_acrossConcurrentStoreInstances_mintsOneUid()
+            throws Exception {
+        // Two stores over one preferences file are two views of one identity.
+        // IdentityManager holds its own, and anything else constructing one
+        // gets a second - guarding only a single instance would not be enough.
+        newInstall();
+
+        Set<String> minted = callConcurrently(new Call() {
+            @Override
+            public String get() {
+                return new DeviceIdentityStore(context).getOrCreateUid();
+            }
+        });
+
+        assertEquals("two stores minted separate uids: " + minted,
+                1, minted.size());
+    }
+
+    @Test
+    public void getFallbackCallsign_underConcurrentFirstCalls_agreesOnOne()
+            throws Exception {
+        // The callsign carries the UID's suffix, so a split identity shows up
+        // on the map as two differently named markers for one searcher.
+        final DeviceIdentityStore store = newInstall();
+
+        Set<String> callsigns = callConcurrently(new Call() {
+            @Override
+            public String get() {
+                return store.getFallbackCallsign(DEVICE_MODEL);
+            }
+        });
+
+        assertEquals("the device answered to more than one callsign: "
+                + callsigns, 1, callsigns.size());
+    }
+
+    @Test
+    public void resolve_underConcurrentFirstCalls_yieldsOneFallbackIdentity()
+            throws Exception {
+        newInstall();
+
+        Set<String> uids = callConcurrently(new Call() {
+            @Override
+            public String get() {
+                return resolveFallback(new DeviceIdentityStore(context))
+                        .getUid();
+            }
+        });
+
+        assertEquals(1, uids.size());
+    }
+
+    // =========================================================================
+    // A value already in preferences
+    // =========================================================================
+
+    @Test
+    public void getOrCreateUid_whenPreferencesHoldALegacyUid_keepsIt() {
+        // Pins the current rule: anything non-blank already stored is this
+        // device's identity, whatever it looks like. That is what keeps the UID
+        // stable, but it also means a UID written by the old ANDROID_ID
+        // fallback would survive - and those are the values that collide across
+        // cloned emulators. If such installs exist in the field, this is where
+        // the migration goes.
+        preferences().edit()
+                .putString(DeviceIdentityStore.KEY_UID, DEVICE_ID).commit();
+
+        assertEquals(DEVICE_ID,
+                new DeviceIdentityStore(context).getOrCreateUid());
+    }
+
+    @Test
+    public void getFallbackCallsign_fromALegacyUid_stillSeparatesHandsets() {
+        // Even off a non-namespaced UID the suffix has to come from the stored
+        // value, or a fleet on the old scheme all answers to "Pixel 7".
+        preferences().edit()
+                .putString(DeviceIdentityStore.KEY_UID, DEVICE_ID).commit();
+
+        assertEquals("Pixel 7-9774", new DeviceIdentityStore(context)
+                .getFallbackCallsign(DEVICE_MODEL));
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
+
+    /** One concurrent caller's work; kept an interface for Java 7 source. */
+    private interface Call {
+        String get();
+    }
+
+    /**
+     * Runs {@code call} on {@link #RACING_CALLERS} threads released together,
+     * and returns the distinct values they saw. One value means they agreed.
+     */
+    private Set<String> callConcurrently(final Call call) throws Exception {
+        final CyclicBarrier start = new CyclicBarrier(RACING_CALLERS);
+        final CountDownLatch done = new CountDownLatch(RACING_CALLERS);
+        final Set<String> results =
+                Collections.synchronizedSet(new HashSet<String>());
+        final List<Throwable> failures =
+                Collections.synchronizedList(new ArrayList<Throwable>());
+
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < RACING_CALLERS; i++) {
+            Thread thread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        start.await(10, TimeUnit.SECONDS);
+                        results.add(call.get());
+                    } catch (Throwable t) {
+                        failures.add(t);
+                    } finally {
+                        done.countDown();
+                    }
+                }
+            });
+            threads.add(thread);
+            thread.start();
+        }
+
+        assertTrue("callers did not finish", done.await(30, TimeUnit.SECONDS));
+        for (Thread thread : threads)
+            thread.join(10000L);
+        if (!failures.isEmpty())
+            throw new AssertionError("a caller threw: " + failures.get(0),
+                    failures.get(0));
+        return results;
+    }
 
     /**
      * A store with no identity yet - a fresh install, which is also the state a

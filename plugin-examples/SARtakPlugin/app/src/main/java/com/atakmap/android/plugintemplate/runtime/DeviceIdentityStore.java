@@ -36,6 +36,13 @@ public class DeviceIdentityStore {
     /** How many of the UID's hex digits are appended to a fallback callsign. */
     static final int CALLSIGN_SUFFIX_LENGTH = 4;
 
+    /**
+     * Guards minting. Static because the preferences file is process wide: two
+     * stores over the same file are two views of one identity, so an instance
+     * lock would let them mint a UID each.
+     */
+    private static final Object MINT_LOCK = new Object();
+
     private final SharedPreferences preferences;
 
     public DeviceIdentityStore(Context context) {
@@ -46,15 +53,25 @@ public class DeviceIdentityStore {
     /**
      * The UID for this install: minted on the first call, unchanged after
      * that.
+     * <p>
+     * Read, mint and write are one atomic step. The first call happens on
+     * whichever thread asks first - the capture poll and the UI both do - and
+     * two threads racing through an unguarded check would mint a UID each,
+     * splitting one searcher across two identities for the rest of the search.
+     * The write is committed rather than applied so the UID is on disk before
+     * it is handed out; a UID used for a fix but lost to a process kill before
+     * the flush would come back as a different device.
      */
     public String getOrCreateUid() {
-        String existing = preferences.getString(KEY_UID, null);
-        if (!isBlank(existing))
-            return existing;
+        synchronized (MINT_LOCK) {
+            String existing = preferences.getString(KEY_UID, null);
+            if (!isBlank(existing))
+                return existing;
 
-        String uid = generateUid();
-        preferences.edit().putString(KEY_UID, uid).apply();
-        return uid;
+            String uid = generateUid();
+            preferences.edit().putString(KEY_UID, uid).commit();
+            return uid;
+        }
     }
 
     /**

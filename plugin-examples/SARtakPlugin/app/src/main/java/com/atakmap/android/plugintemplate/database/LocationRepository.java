@@ -47,6 +47,36 @@ public class LocationRepository {
         db.insert("location_points", null, values);
     }
 
+    /**
+     * Inserts a fix, writing NULL for anything the receiver did not report.
+     * <p>
+     * {@link #insert} takes primitives, so it cannot tell a measurement from a
+     * missing one: a fix carrying no accuracy lands as "accurate to 0 m", and a
+     * fix carrying no bearing lands as "heading due north". Both are values a
+     * real fix can legitimately have, so the difference cannot be recovered
+     * afterwards. Callers holding a {@code Location} should branch on its
+     * {@code hasAltitude()}, {@code hasAccuracy()}, {@code hasBearing()} and
+     * {@code hasSpeed()} flags and pass null for whatever was not reported.
+     */
+    public void insertFix(String uid, String callsign, double latitude,
+                          double longitude, Double altitude, Float accuracy,
+                          Float bearing, Float speed, long timestamp,
+                          String sessionId) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("uid", uid);
+        values.put("callsign", callsign);
+        values.put("latitude", latitude);
+        values.put("longitude", longitude);
+        values.put("altitude", altitude);
+        values.put("accuracy_meters", accuracy);
+        values.put("bearing_degrees", bearing);
+        values.put("speed_mps", speed);
+        values.put("timestamp", timestamp);
+        values.put("session_id", sessionId);
+        db.insert("location_points", null, values);
+    }
+
     public List<double[]> getPointsForSession(String sessionId) {
         List<double[]> points = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();

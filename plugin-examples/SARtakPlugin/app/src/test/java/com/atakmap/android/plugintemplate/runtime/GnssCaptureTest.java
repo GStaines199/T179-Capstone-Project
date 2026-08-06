@@ -1,11 +1,16 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import android.Manifest;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.Bundle;
+import android.os.Looper;
 
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.database.LocationRepository;
@@ -17,14 +22,27 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+// Shadow.extract rather than Shadows.shadowOf: the generated shadowOf overloads
+// name framework classes that compileSdk 26 does not ship, and javac has to
+// load every overload's parameter types to resolve the call.
+import org.robolectric.shadow.api.Shadow;
+import org.robolectric.shadows.ShadowApplication;
+import org.robolectric.shadows.ShadowLocationManager;
+import org.robolectric.shadows.ShadowLooper;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -53,14 +71,31 @@ import static org.junit.Assert.assertTrue;
  * (due north, stationary). Those tests pin what the {@code location_points}
  * columns do with NULL so the capture code has somewhere to put "not reported".
  * <p>
- * Two things are deliberately not covered. ATAK SDK classes (MapView, MapData,
- * GeoPoint) fail JVM bytecode verification when loaded outside Android, so they
- * appear nowhere below and the plumbing in
+ * <b>LocationManager</b> covers the receiver subscription itself, driven
+ * through Robolectric's shadow: which provider is asked for, the interval and
+ * distance it is asked at, that the listener is dropped again on unsubscribe,
+ * what a disabled provider reports, and that a fix crosses the callback with
+ * every field - including the API 26 vertical, speed and bearing accuracies and
+ * the satellite count - still attached. It ends with the whole path in one
+ * test, receiver to listener to table to caller.
+ * <p>
+ * <b>Not reported is not zero</b> covers the branch capture has to make. The
+ * {@code captureFix} helper is that branch, written the way the capture code
+ * needs to: {@code hasAltitude}, {@code hasAccuracy}, {@code hasBearing} and
+ * {@code hasSpeed} decide whether a value or NULL is stored. When the capture
+ * code owns that branching, these tests point at it instead; the expected
+ * values do not change.
+ * <p>
+ * One test is a deliberate tripwire rather than an assertion of intent:
+ * {@code locationPointsSchema_isExactlyTheColumnsWeStoreToday}. The remaining
+ * GNSS metadata has nowhere to go, so adding a column should fail it and prompt
+ * the {@code DATABASE_VERSION} bump that has to come with it - {@code onUpgrade}
+ * drops every table.
+ * <p>
+ * ATAK SDK classes (MapView, MapData, GeoPoint) fail JVM bytecode verification
+ * when loaded outside Android, so they appear nowhere below and the plumbing in
  * {@code AtakLocationStatus.from(MapView)} is reached through the MetaSource
- * seam instead. And {@code LocationRepository.insert} takes primitive floats, so
- * it cannot express "not reported" yet - the NULL cases are driven through the
- * table directly. When the nullable insert lands, those tests should be
- * repointed at it; the expected values do not change.
+ * seam instead.
  * <p>
  * Dependencies (build.gradle):
  *   testImplementation 'junit:junit:4.13.2'
@@ -101,17 +136,41 @@ public class GnssCaptureTest {
             "longitude", "altitude", "accuracy_meters", "bearing_degrees",
             "speed_mps", "timestamp", "session_id"};
 
+    /** Every column location_points has, in declaration order. */
+    private static final Set<String> EXPECTED_SCHEMA = new HashSet<>(
+            Arrays.asList("id", "uid", "callsign", "latitude", "longitude",
+                    "altitude", "accuracy_meters", "bearing_degrees",
+                    "speed_mps", "timestamp", "session_id"));
+
+    /** What LocationCaptureManager polls at; the subscription must match. */
+    private static final long UPDATE_INTERVAL_MS =
+            LocationCaptureManager.UPDATE_INTERVAL_MS;
+
+    /** Every fix is wanted, however little the searcher has moved. */
+    private static final float MIN_DISTANCE_M = 0f;
+
     private final FakeMetaSource data = new FakeMetaSource();
 
+    private Context context;
     private DatabaseHelper dbHelper;
     private LocationRepository repo;
+    private LocationManager locationManager;
+    private ShadowLocationManager shadowLocationManager;
 
     @Before
     public void setUp() {
-        Context context = RuntimeEnvironment.getApplication();
+        context = RuntimeEnvironment.getApplication();
         dbHelper = new DatabaseHelper(context);
         repo = new LocationRepository(dbHelper);
         dbHelper.getWritableDatabase().delete("location_points", null, null);
+
+        locationManager = (LocationManager)
+                context.getSystemService(Context.LOCATION_SERVICE);
+        shadowLocationManager = Shadow.extract(locationManager);
+        shadowLocationManager.setProviderEnabled(LocationManager.GPS_PROVIDER,
+                true);
+        shadowApplication().grantPermissions(
+                Manifest.permission.ACCESS_FINE_LOCATION);
     }
 
     @After
@@ -728,6 +787,425 @@ public class GnssCaptureTest {
     }
 
     // =========================================================================
+    // LocationManager: subscribing to the receiver
+    // =========================================================================
+
+    @Test
+    public void requestLocationUpdates_registersTheListenerAgainstGps() {
+        RecordingListener listener = subscribeToGps();
+
+        assertEquals(1, shadowLocationManager
+                .getLocationUpdateListeners(LocationManager.GPS_PROVIDER)
+                .size());
+        assertTrue(shadowLocationManager
+                .getLocationUpdateListeners(LocationManager.GPS_PROVIDER)
+                .contains(listener));
+    }
+
+    @Test
+    public void requestLocationUpdates_asksForTheRawGpsProviderNotTheFused() {
+        // The fused provider smooths and interpolates, which is exactly what
+        // "raw capture, accuracy preserved" rules out.
+        subscribeToGps();
+
+        assertTrue(shadowLocationManager
+                .getLocationUpdateListeners(LocationManager.NETWORK_PROVIDER)
+                .isEmpty());
+        assertTrue(shadowLocationManager
+                .getLocationUpdateListeners(LocationManager.PASSIVE_PROVIDER)
+                .isEmpty());
+    }
+
+    @Test
+    public void requestLocationUpdates_keepsTheIntervalAndDistanceAsAsked() {
+        subscribeToGps();
+
+        List<ShadowLocationManager.RoboLocationRequest> requests =
+                shadowLocationManager.getLegacyLocationRequests(
+                        LocationManager.GPS_PROVIDER);
+        assertEquals(1, requests.size());
+        assertEquals(UPDATE_INTERVAL_MS, requests.get(0).getIntervalMillis());
+        assertEquals("a minimum distance would drop fixes from a searcher"
+                        + " standing still", MIN_DISTANCE_M,
+                requests.get(0).getMinUpdateDistanceMeters(), 0.0f);
+    }
+
+    @Test
+    public void removeUpdates_unregistersTheListener() {
+        // A subscription left running after the plugin stops keeps the GNSS
+        // receiver powered for the rest of the search.
+        RecordingListener listener = subscribeToGps();
+
+        locationManager.removeUpdates(listener);
+
+        assertTrue(shadowLocationManager
+                .getLocationUpdateListeners(LocationManager.GPS_PROVIDER)
+                .isEmpty());
+    }
+
+    @Test
+    public void removeUpdates_stopsFurtherFixesReachingTheListener() {
+        RecordingListener listener = subscribeToGps();
+        deliver(gpsFixAt(0));
+        assertEquals(1, listener.locations.size());
+
+        locationManager.removeUpdates(listener);
+        // A full interval later, so it is the unsubscribe stopping this fix and
+        // not the provider's own rate limiting.
+        deliver(gpsFixAt(1));
+
+        assertEquals("a fix arrived after the subscription was dropped",
+                1, listener.locations.size());
+    }
+
+    @Test
+    public void subscribingTwice_doesNotDoubleDeliverTheSameFix() {
+        // start() being called twice must not register a second listener; the
+        // same fix would otherwise be written to the track twice.
+        RecordingListener listener = new RecordingListener();
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                UPDATE_INTERVAL_MS, MIN_DISTANCE_M, listener);
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                UPDATE_INTERVAL_MS, MIN_DISTANCE_M, listener);
+
+        deliver(gpsFix());
+
+        assertEquals(1, listener.locations.size());
+    }
+
+    @Test
+    public void aDisabledGpsProvider_tellsTheListenerAndSendsNoFix() {
+        RecordingListener listener = subscribeToGps();
+
+        shadowLocationManager.setProviderEnabled(LocationManager.GPS_PROVIDER,
+                false);
+        idle();
+
+        assertTrue(listener.providerDisabled);
+        assertFalse(locationManager
+                .isProviderEnabled(LocationManager.GPS_PROVIDER));
+        assertTrue(listener.locations.isEmpty());
+    }
+
+    @Test
+    public void aReenabledGpsProvider_tellsTheListener() {
+        RecordingListener listener = subscribeToGps();
+
+        shadowLocationManager.setProviderEnabled(LocationManager.GPS_PROVIDER,
+                false);
+        shadowLocationManager.setProviderEnabled(LocationManager.GPS_PROVIDER,
+                true);
+        idle();
+
+        assertTrue(listener.providerEnabled);
+    }
+
+    @Test
+    public void aFixFromAnotherProvider_doesNotReachAGpsOnlyListener() {
+        RecordingListener listener = subscribeToGps();
+
+        shadowLocationManager.setProviderEnabled(
+                LocationManager.NETWORK_PROVIDER, true);
+        Location coarse = new Location(LocationManager.NETWORK_PROVIDER);
+        coarse.setLatitude(LATITUDE);
+        coarse.setLongitude(LONGITUDE);
+        coarse.setTime(FIX_TIME);
+        shadowLocationManager.simulateLocation(
+                LocationManager.NETWORK_PROVIDER, coarse);
+        idle();
+
+        assertTrue("a network fix was captured as a GNSS fix",
+                listener.locations.isEmpty());
+    }
+
+    // =========================================================================
+    // LocationManager: permission
+    // =========================================================================
+
+    @Test
+    public void withoutFineLocationPermission_theCheckReportsDenied() {
+        // The manifest declares no location permission today, so capture has to
+        // check before subscribing rather than assume the grant.
+        shadowApplication().denyPermissions(
+                Manifest.permission.ACCESS_FINE_LOCATION);
+
+        assertEquals(PackageManager.PERMISSION_DENIED,
+                context.checkSelfPermission(
+                        Manifest.permission.ACCESS_FINE_LOCATION));
+    }
+
+    @Test
+    public void withFineLocationPermission_theCheckReportsGranted() {
+        assertEquals(PackageManager.PERMISSION_GRANTED,
+                context.checkSelfPermission(
+                        Manifest.permission.ACCESS_FINE_LOCATION));
+    }
+
+    // =========================================================================
+    // LocationManager: the fix arrives unmodified
+    // =========================================================================
+
+    @Test
+    public void aDeliveredFix_reachesTheListenerWithEveryFieldIntact() {
+        Location sent = fullyPopulatedFix();
+
+        RecordingListener listener = subscribeToGps();
+        deliver(sent);
+
+        assertEquals(1, listener.locations.size());
+        Location got = listener.locations.get(0);
+        assertEquals(LocationManager.GPS_PROVIDER, got.getProvider());
+        assertEquals(sent.getLatitude(), got.getLatitude(), 0.0);
+        assertEquals(sent.getLongitude(), got.getLongitude(), 0.0);
+        assertEquals(sent.getAltitude(), got.getAltitude(), 0.0);
+        assertEquals(sent.getAccuracy(), got.getAccuracy(), 0.0f);
+        assertEquals(sent.getBearing(), got.getBearing(), 0.0f);
+        assertEquals(sent.getSpeed(), got.getSpeed(), 0.0f);
+        assertEquals(sent.getTime(), got.getTime());
+        assertEquals(sent.getElapsedRealtimeNanos(),
+                got.getElapsedRealtimeNanos());
+    }
+
+    @Test
+    public void aDeliveredFix_keepsTheAccuracyMetadataBeyondTheRadius() {
+        // Vertical, speed and bearing accuracy are separate measurements from
+        // the horizontal radius, and API 26 is where they first appear.
+        Location sent = fullyPopulatedFix();
+
+        RecordingListener listener = subscribeToGps();
+        deliver(sent);
+
+        Location got = listener.locations.get(0);
+        assertTrue(got.hasVerticalAccuracy());
+        assertEquals(4.5f, got.getVerticalAccuracyMeters(), 0.0f);
+        assertTrue(got.hasSpeedAccuracy());
+        assertEquals(0.35f, got.getSpeedAccuracyMetersPerSecond(), 0.0f);
+        assertTrue(got.hasBearingAccuracy());
+        assertEquals(11.5f, got.getBearingAccuracyDegrees(), 0.0f);
+    }
+
+    @Test
+    public void aDeliveredFix_keepsTheSatelliteCountInItsExtras() {
+        // The satellite count is how a fix taken under canopy is told from one
+        // taken in the open, long after the search.
+        Location sent = fullyPopulatedFix();
+
+        RecordingListener listener = subscribeToGps();
+        deliver(sent);
+
+        Bundle extras = listener.locations.get(0).getExtras();
+        assertNotNull("the extras bundle was dropped in delivery", extras);
+        assertEquals(11, extras.getInt("satellites"));
+    }
+
+    @Test
+    public void deliveredFixes_arriveInOrderWithEachAccuracyDistinct() {
+        float[] accuracies = {3.0f, 25.0f, 8.0f};
+
+        RecordingListener listener = subscribeToGps();
+        for (int i = 0; i < accuracies.length; i++) {
+            Location fix = gpsFixAt(i);
+            fix.setAccuracy(accuracies[i]);
+            deliver(fix);
+        }
+
+        assertEquals(3, listener.locations.size());
+        for (int i = 0; i < accuracies.length; i++)
+            assertEquals(accuracies[i],
+                    listener.locations.get(i).getAccuracy(), 0.0f);
+    }
+
+    @Test
+    public void aDeliveredFix_survivesTheRoundTripToTheDatabase() {
+        // The whole path in one test: receiver to listener to table to caller.
+        Location sent = fullyPopulatedFix();
+
+        RecordingListener listener = subscribeToGps();
+        deliver(sent);
+        captureFix(listener.locations.get(0));
+
+        Cursor row = firstRow();
+        assertEquals(sent.getLatitude(), row.getDouble(2), 0.0);
+        assertEquals(sent.getLongitude(), row.getDouble(3), 0.0);
+        assertEquals(sent.getAltitude(), row.getDouble(4), 0.0);
+        assertEquals(sent.getAccuracy(), row.getFloat(5), 0.0f);
+        assertEquals(sent.getBearing(), row.getFloat(6), 0.0f);
+        assertEquals(sent.getSpeed(), row.getFloat(7), 0.0f);
+        assertEquals(sent.getTime(), row.getLong(8));
+        row.close();
+    }
+
+    // =========================================================================
+    // The metadata the schema cannot hold yet
+    // =========================================================================
+
+    @Test
+    public void locationPointsSchema_isExactlyTheColumnsWeStoreToday() {
+        // A tripwire, not a preference. Vertical, speed and bearing accuracy,
+        // the satellite count, the elapsed realtime and the provider name all
+        // arrive on the fix and have nowhere to go, so "preserve accuracy
+        // metadata" is only partly met. Adding a column has to come with a
+        // DATABASE_VERSION bump - onUpgrade drops every table - so this failing
+        // is the reminder to do both.
+        assertEquals(EXPECTED_SCHEMA, columnsOf("location_points"));
+    }
+
+    @Test
+    public void aGnssFix_carriesAnElapsedRealtimeIndependentOfTheWallClock() {
+        // getTime() follows the system clock, which ATAK or NTP can step
+        // mid-search; elapsed realtime cannot go backwards, so it is the only
+        // safe way to order two fixes across a clock change.
+        Location earlier = gpsFix();
+        earlier.setElapsedRealtimeNanos(1_000_000_000L);
+        earlier.setTime(FIX_TIME + 60_000L);
+
+        Location later = gpsFix();
+        later.setElapsedRealtimeNanos(2_000_000_000L);
+        later.setTime(FIX_TIME);
+
+        assertTrue(later.getElapsedRealtimeNanos()
+                > earlier.getElapsedRealtimeNanos());
+        assertTrue("the wall clock disagrees with the receiver's own ordering",
+                later.getTime() < earlier.getTime());
+    }
+
+    @Test
+    public void aGnssFix_namesTheProviderThatProducedIt() {
+        // Nothing stores this, so a GPS fix and a network fix are
+        // indistinguishable once written.
+        assertEquals(LocationManager.GPS_PROVIDER, gpsFix().getProvider());
+    }
+
+    // =========================================================================
+    // "Not reported" reaches the table as NULL
+    // =========================================================================
+
+    @Test
+    public void captureFix_withNoAccuracy_storesNullRatherThanZeroMetres() {
+        // The bug this whole section exists for: passing getAccuracy() straight
+        // through turns "the receiver said nothing" into "accurate to 0 m".
+        captureFix(gpsFix());
+
+        Cursor row = firstRow();
+        assertTrue("a fix with no accuracy was stored as 0 m", row.isNull(5));
+        row.close();
+    }
+
+    @Test
+    public void captureFix_withNothingOptionalReported_storesNullForEach() {
+        captureFix(gpsFix());
+
+        Cursor row = firstRow();
+        assertTrue("altitude", row.isNull(4));
+        assertTrue("accuracy_meters", row.isNull(5));
+        assertTrue("bearing_degrees", row.isNull(6));
+        assertTrue("speed_mps", row.isNull(7));
+        row.close();
+    }
+
+    @Test
+    public void captureFix_withAMeasuredZeroBearing_storesZeroNotNull() {
+        // Due north and stationary are real readings; blanking them would lose
+        // a measurement just as surely as writing 0 for "not reported".
+        Location fix = gpsFix();
+        fix.setBearing(0.0f);
+        fix.setSpeed(0.0f);
+
+        captureFix(fix);
+
+        Cursor row = firstRow();
+        assertFalse("a measured bearing of 0 was stored as NULL", row.isNull(6));
+        assertEquals(0.0f, row.getFloat(6), 0.0f);
+        assertFalse("a measured speed of 0 was stored as NULL", row.isNull(7));
+        assertEquals(0.0f, row.getFloat(7), 0.0f);
+        row.close();
+    }
+
+    @Test
+    public void captureFix_withAMeasuredZeroAccuracy_storesZeroNotNull() {
+        Location fix = gpsFix();
+        fix.setAccuracy(0.0f);
+
+        captureFix(fix);
+
+        Cursor row = firstRow();
+        assertFalse(row.isNull(5));
+        assertEquals(0.0f, row.getFloat(5), 0.0f);
+        row.close();
+    }
+
+    @Test
+    public void captureFix_withAMeasuredZeroAltitude_storesZeroNotNull() {
+        // Sea level, which a coastal search produces constantly.
+        Location fix = gpsFix();
+        fix.setAltitude(0.0);
+
+        captureFix(fix);
+
+        Cursor row = firstRow();
+        assertFalse(row.isNull(4));
+        assertEquals(0.0, row.getDouble(4), 0.0);
+        row.close();
+    }
+
+    @Test
+    public void captureFix_separatesAReportedZeroFromAnUnreportedOne() {
+        // The two rows a reader has to be able to tell apart. Read through
+        // getFloat alone they are identical; only isNull distinguishes them.
+        Location reported = gpsFix();
+        reported.setAccuracy(0.0f);
+        captureFix(reported);
+
+        Location unreported = gpsFix();
+        unreported.setTime(FIX_TIME + 1000L);
+        captureFix(unreported);
+
+        Cursor rows = allRows();
+        assertTrue(rows.moveToNext());
+        assertFalse(rows.isNull(5));
+        assertTrue(rows.moveToNext());
+        assertTrue(rows.isNull(5));
+        assertEquals("both read back as 0 m through getFloat",
+                0.0f, rows.getFloat(5), 0.0f);
+        rows.close();
+    }
+
+    @Test
+    public void captureFix_fromAFullyPopulatedFix_storesEveryValueUnmodified() {
+        Location fix = fullyPopulatedFix();
+
+        captureFix(fix);
+
+        Cursor row = firstRow();
+        assertEquals(UID, row.getString(0));
+        assertEquals(CALLSIGN, row.getString(1));
+        assertEquals(fix.getLatitude(), row.getDouble(2), 0.0);
+        assertEquals(fix.getLongitude(), row.getDouble(3), 0.0);
+        assertEquals(fix.getAltitude(), row.getDouble(4), 0.0);
+        assertEquals(fix.getAccuracy(), row.getFloat(5), 0.0f);
+        assertEquals(fix.getBearing(), row.getFloat(6), 0.0f);
+        assertEquals(fix.getSpeed(), row.getFloat(7), 0.0f);
+        assertEquals(fix.getTime(), row.getLong(8));
+        assertEquals(SESSION, row.getString(9));
+        row.close();
+    }
+
+    @Test
+    public void insertFix_acceptsNullDirectlyForEveryOptionalValue() {
+        repo.insertFix(UID, CALLSIGN, LATITUDE, LONGITUDE, null, null, null,
+                null, FIX_TIME, SESSION);
+
+        Cursor row = firstRow();
+        assertTrue(row.isNull(4));
+        assertTrue(row.isNull(5));
+        assertTrue(row.isNull(6));
+        assertTrue(row.isNull(7));
+        assertEquals(LATITUDE, row.getDouble(2), 0.0);
+        assertEquals(FIX_TIME, row.getLong(8));
+        row.close();
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
@@ -756,10 +1234,117 @@ public class GnssCaptureTest {
         return fix;
     }
 
+    /**
+     * The {@code index}-th fix of a subscription, one update interval after the
+     * one before it. LocationManager rate limits a provider to the interval the
+     * caller asked for, so fixes delivered closer together than that are
+     * dropped before any listener sees them - spacing them keeps a test about
+     * capture from quietly becoming a test about throttling.
+     */
+    private static Location gpsFixAt(int index) {
+        Location fix = gpsFix();
+        fix.setTime(FIX_TIME + (index * UPDATE_INTERVAL_MS));
+        fix.setElapsedRealtimeNanos(
+                (index + 1) * UPDATE_INTERVAL_MS * 1_000_000L);
+        return fix;
+    }
+
+    /** A fix with every field a GNSS receiver can report populated. */
+    private static Location fullyPopulatedFix() {
+        Location fix = gpsFix();
+        fix.setAltitude(42.75);
+        fix.setAccuracy(3.7f);
+        fix.setBearing(87.25f);
+        fix.setSpeed(1.35f);
+        fix.setVerticalAccuracyMeters(4.5f);
+        fix.setSpeedAccuracyMetersPerSecond(0.35f);
+        fix.setBearingAccuracyDegrees(11.5f);
+        fix.setElapsedRealtimeNanos(1_234_567_890L);
+
+        Bundle extras = new Bundle();
+        extras.putInt("satellites", 11);
+        fix.setExtras(extras);
+        return fix;
+    }
+
     private void insert(Location fix) {
         repo.insert(UID, CALLSIGN, fix.getLatitude(), fix.getLongitude(),
                 fix.getAltitude(), fix.getAccuracy(), fix.getBearing(),
                 fix.getSpeed(), fix.getTime(), SESSION);
+    }
+
+    /**
+     * Writes a fix the way capture has to: every optional value passed only if
+     * the receiver actually reported it. This is the branching the capture code
+     * needs to own - when it does, these tests point at it instead.
+     */
+    private void captureFix(Location fix) {
+        repo.insertFix(UID, CALLSIGN, fix.getLatitude(), fix.getLongitude(),
+                fix.hasAltitude() ? fix.getAltitude() : null,
+                fix.hasAccuracy() ? fix.getAccuracy() : null,
+                fix.hasBearing() ? fix.getBearing() : null,
+                fix.hasSpeed() ? fix.getSpeed() : null,
+                fix.getTime(), SESSION);
+    }
+
+    private RecordingListener subscribeToGps() {
+        RecordingListener listener = new RecordingListener();
+        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                UPDATE_INTERVAL_MS, MIN_DISTANCE_M, listener);
+        return listener;
+    }
+
+    private void deliver(Location fix) {
+        shadowLocationManager.simulateLocation(LocationManager.GPS_PROVIDER,
+                fix);
+        idle();
+    }
+
+    /** Delivery is posted to the looper, so it has to be drained first. */
+    private static void idle() {
+        ShadowLooper.shadowMainLooper().idle();
+    }
+
+    private static ShadowApplication shadowApplication() {
+        return Shadow.extract(RuntimeEnvironment.getApplication());
+    }
+
+    private Set<String> columnsOf(String table) {
+        Set<String> columns = new HashSet<>();
+        Cursor cursor = dbHelper.getReadableDatabase()
+                .rawQuery("PRAGMA table_info(" + table + ")", null);
+        while (cursor.moveToNext())
+            columns.add(cursor.getString(cursor.getColumnIndexOrThrow("name")));
+        cursor.close();
+        return columns;
+    }
+
+    /** Records what LocationManager delivered, without touching it. */
+    private static class RecordingListener implements LocationListener {
+
+        final List<Location> locations = new ArrayList<>();
+        boolean providerEnabled;
+        boolean providerDisabled;
+
+        @Override
+        public void onLocationChanged(Location location) {
+            locations.add(location);
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status,
+                Bundle extras) {
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+            providerEnabled = true;
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+            providerDisabled = true;
+        }
     }
 
     /**

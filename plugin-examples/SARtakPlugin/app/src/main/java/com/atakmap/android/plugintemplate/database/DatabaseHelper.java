@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "sar_database.db";
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 2;
 
     private static volatile DatabaseHelper INSTANCE;
 
@@ -38,9 +38,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        db.execSQL("DROP TABLE IF EXISTS location_points");
-        db.execSQL("DROP TABLE IF EXISTS searcher_identity");
-        db.execSQL("DROP TABLE IF EXISTS track_sessions");
-        onCreate(db);
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE location_points ADD COLUMN provider TEXT");
+            db.execSQL("ALTER TABLE location_points ADD COLUMN vertical_accuracy_meters REAL");
+            db.execSQL("ALTER TABLE location_points ADD COLUMN bearing_accuracy_degrees REAL");
+            db.execSQL("ALTER TABLE location_points ADD COLUMN speed_accuracy_mps REAL");
+        }
     }
 }

@@ -27,7 +27,7 @@ import java.util.Map;
 public class SearchLineCotWorkflow {
 
     private static final String ATAK_CIV_PACKAGE = "com.atakmap.app.civ";
-    private static final String DETAIL_NAME = "__sartak_line";
+    static final String DETAIL_NAME = "__sartak_line";
     private static final long LINE_MESSAGE_MAX_AGE_MS = 30000L;
     private static final long UPDATE_INTERVAL_MS = 5000L;
 
@@ -129,29 +129,9 @@ public class SearchLineCotWorkflow {
         CoordinatedTime now = new CoordinatedTime();
         CotDetail root = new CotDetail();
         CotDetail detail = new CotDetail(DETAIL_NAME);
-        detail.setAttribute("messageUid", message.getUid());
-        detail.setAttribute("action", message.getAction());
-        detail.setAttribute("teamId", message.getTeamId());
-        detail.setAttribute("senderUid", message.getSenderUid());
-        detail.setAttribute("senderCallsign", message.getSenderCallsign());
-        detail.setAttribute("zone", message.getZoneDescriptor());
-        SearchGridCell cell = message.toCell();
-        if (cell != null) {
-            detail.setAttribute("aggregateId", cell.getAggregateId());
-            detail.setAttribute("cellId", cell.getId());
-            detail.setAttribute("row", String.valueOf(cell.getRow()));
-            detail.setAttribute("column", String.valueOf(cell.getColumn()));
-            detail.setAttribute("west", String.valueOf(cell.getWest()));
-            detail.setAttribute("south", String.valueOf(cell.getSouth()));
-            detail.setAttribute("east", String.valueOf(cell.getEast()));
-            detail.setAttribute("north", String.valueOf(cell.getNorth()));
-        }
-        detail.setAttribute("lineNorthing", String.valueOf(
-                message.getLineNorthing()));
-        detail.setAttribute("color", message.getColorOption().name());
-        detail.setAttribute("tolerance", String.valueOf(
-                message.getToleranceMeters()));
-        detail.setAttribute("created", String.valueOf(message.getCreated()));
+        for (Map.Entry<String, String> attribute : toAttributes(message)
+                .entrySet())
+            detail.setAttribute(attribute.getKey(), attribute.getValue());
         root.addChild(detail);
         addStandardContactDetails(root, message.getSenderCallsign());
 
@@ -165,6 +145,43 @@ public class SearchLineCotWorkflow {
         event.setPoint(new CotPoint(getPublishPoint()));
         event.setDetail(root);
         return event;
+    }
+
+    /**
+     * Maps a message onto the exact set of CotDetail attribute name/value
+     * pairs that createCotEvent writes into the "__sartak_line" detail
+     * element (the contact/uid/__group details added separately by
+     * addStandardContactDetails are one-way ATAK/WinTAK presentation only -
+     * fromCotEvent never reads them back, so they are out of scope for this
+     * schema mapping). Kept ATAK-type-free so it is unit-testable outside
+     * Android - see SearchLineCotWorkflowSchemaTest.
+     */
+    static Map<String, String> toAttributes(SearchLineCotMessage message) {
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("messageUid", message.getUid());
+        attributes.put("action", message.getAction());
+        attributes.put("teamId", message.getTeamId());
+        attributes.put("senderUid", message.getSenderUid());
+        attributes.put("senderCallsign", message.getSenderCallsign());
+        attributes.put("zone", message.getZoneDescriptor());
+        SearchGridCell cell = message.toCell();
+        if (cell != null) {
+            attributes.put("aggregateId", cell.getAggregateId());
+            attributes.put("cellId", cell.getId());
+            attributes.put("row", String.valueOf(cell.getRow()));
+            attributes.put("column", String.valueOf(cell.getColumn()));
+            attributes.put("west", String.valueOf(cell.getWest()));
+            attributes.put("south", String.valueOf(cell.getSouth()));
+            attributes.put("east", String.valueOf(cell.getEast()));
+            attributes.put("north", String.valueOf(cell.getNorth()));
+        }
+        attributes.put("lineNorthing", String.valueOf(
+                message.getLineNorthing()));
+        attributes.put("color", message.getColorOption().name());
+        attributes.put("tolerance", String.valueOf(
+                message.getToleranceMeters()));
+        attributes.put("created", String.valueOf(message.getCreated()));
+        return attributes;
     }
 
     private void registerDirectCotProcessor() {
@@ -202,21 +219,46 @@ public class SearchLineCotWorkflow {
         CotDetail detail = event.findDetail(DETAIL_NAME);
         if (detail == null)
             return null;
-        long created = longValue(detail, "created", System.currentTimeMillis());
-        String messageUid = value(detail, "messageUid");
+        Map<String, String> attributes = new LinkedHashMap<>();
+        for (String key : new String[] { "messageUid", "action", "teamId",
+                "senderUid", "senderCallsign", "zone", "aggregateId",
+                "cellId", "row", "column", "west", "south", "east", "north",
+                "lineNorthing", "color", "tolerance", "created" }) {
+            String value = detail.getAttribute(key);
+            if (value != null)
+                attributes.put(key, value);
+        }
+        return fromAttributes(attributes, event.getUID());
+    }
+
+    /**
+     * Inverse of toAttributes: reconstructs a message from the CotDetail
+     * attribute name/value pairs read off a received event, applying the
+     * same defensive fallbacks fromCotEvent always has (missing messageUid,
+     * unparsable numbers, unknown color). ATAK-type-free and unit-tested in
+     * SearchLineCotWorkflowSchemaTest.
+     */
+    static SearchLineCotMessage fromAttributes(Map<String, String> attributes,
+            String eventUid) {
+        long created = longValue(attributes, "created",
+                System.currentTimeMillis());
+        String messageUid = value(attributes, "messageUid");
         if (messageUid.length() == 0)
-            messageUid = event.getUID() + "-line-" + created;
+            messageUid = eventUid + "-line-" + created;
         return new SearchLineCotMessage(messageUid,
-                value(detail, "action"), value(detail, "teamId"),
-                value(detail, "senderUid"), value(detail, "senderCallsign"),
-                value(detail, "zone"), value(detail, "aggregateId"),
-                value(detail, "cellId"), intValue(detail, "row"),
-                intValue(detail, "column"), doubleValue(detail, "west"),
-                doubleValue(detail, "south"), doubleValue(detail, "east"),
-                doubleValue(detail, "north"),
-                doubleValue(detail, "lineNorthing"),
-                colorValue(value(detail, "color")),
-                doubleValue(detail, "tolerance"), created);
+                value(attributes, "action"), value(attributes, "teamId"),
+                value(attributes, "senderUid"),
+                value(attributes, "senderCallsign"),
+                value(attributes, "zone"), value(attributes, "aggregateId"),
+                value(attributes, "cellId"), intValue(attributes, "row"),
+                intValue(attributes, "column"),
+                doubleValue(attributes, "west"),
+                doubleValue(attributes, "south"),
+                doubleValue(attributes, "east"),
+                doubleValue(attributes, "north"),
+                doubleValue(attributes, "lineNorthing"),
+                colorValue(value(attributes, "color")),
+                doubleValue(attributes, "tolerance"), created);
     }
 
     private void addStandardContactDetails(CotDetail root, String callsign) {
@@ -347,36 +389,37 @@ public class SearchLineCotWorkflow {
         }
     }
 
-    private String value(CotDetail detail, String key) {
-        String value = detail.getAttribute(key);
+    static String value(Map<String, String> attributes, String key) {
+        String value = attributes.get(key);
         return value == null ? "" : value;
     }
 
-    private int intValue(CotDetail detail, String key) {
+    static int intValue(Map<String, String> attributes, String key) {
         try {
-            return Integer.parseInt(value(detail, key));
+            return Integer.parseInt(value(attributes, key));
         } catch (NumberFormatException ignored) {
             return 0;
         }
     }
 
-    private long longValue(CotDetail detail, String key, long fallback) {
+    static long longValue(Map<String, String> attributes, String key,
+            long fallback) {
         try {
-            return Long.parseLong(value(detail, key));
+            return Long.parseLong(value(attributes, key));
         } catch (NumberFormatException ignored) {
             return fallback;
         }
     }
 
-    private double doubleValue(CotDetail detail, String key) {
+    static double doubleValue(Map<String, String> attributes, String key) {
         try {
-            return Double.parseDouble(value(detail, key));
+            return Double.parseDouble(value(attributes, key));
         } catch (NumberFormatException ignored) {
             return 0.0;
         }
     }
 
-    private SearchLineColorOption colorValue(String value) {
+    static SearchLineColorOption colorValue(String value) {
         try {
             return SearchLineColorOption.valueOf(value);
         } catch (Exception ignored) {

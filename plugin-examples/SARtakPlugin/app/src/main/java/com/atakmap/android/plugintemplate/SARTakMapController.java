@@ -9,6 +9,7 @@ import android.os.Looper;
 import com.atakmap.android.maps.MapEvent;
 import com.atakmap.android.maps.MapEventDispatcher;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.maps.Marker;
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.database.LocationRepository;
 import com.atakmap.android.plugintemplate.database.SearcherRepository;
@@ -1160,8 +1161,15 @@ public class SARTakMapController {
         AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
         assignmentManager.updateSelfFromAtak(snapshot,
                 gridManager.getSelectedCell());
-        if (!snapshot.isAvailable())
+        if (snapshot.isAvailable()) {
+            Marker self = mapView.getSelfMarker();
+            double speed = self == null ? 0.0 : Math.max(0.0,
+                    self.getTrackSpeed());
+            double heading = self == null ? 0.0 : self.getTrackHeading();
+            assignmentManager.updateSelfMovement(heading, speed > 0.4, speed);
+        } else {
             healthManager.recordLocationFailure(snapshot.getMessage());
+        }
     }
 
     private void refreshTeamContactsInternal() {

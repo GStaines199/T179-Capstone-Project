@@ -310,7 +310,7 @@ public class AtakTeamContactDataSource {
             timestamp = marker.getMetaLong("locationTime", 0L);
         if (timestamp <= 0L)
             timestamp = marker.getMetaLong("timestamp", 0L);
-        return timestamp > 0L ? timestamp : System.currentTimeMillis();
+        return timestamp;
     }
 
     private String safe(String value) {

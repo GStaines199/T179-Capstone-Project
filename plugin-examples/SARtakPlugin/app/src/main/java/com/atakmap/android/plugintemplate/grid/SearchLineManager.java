@@ -235,6 +235,8 @@ public class SearchLineManager {
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
             if (!member.contributesLane())
                 continue;
+            if (!member.hasLiveAtakContact())
+                continue;
             UTMPoint memberPoint = UTMPoint.fromGeoPoint(new GeoPoint(
                     member.getLatitude(), member.getLongitude()));
             GeoPoint returnMark = returnMarkForMember(member, laneCount);
@@ -390,19 +392,28 @@ public class SearchLineManager {
         if (member.getConnectionStatus()
                 != SearchTeamMember.ConnectionStatus.CONNECTED)
             return 0.0;
-        return 31.0 + member.getLaneNumber() * 1.7;
+        return member.getSpeedMetersPerSecond() * 60.0;
     }
 
     private double getLeaderPace() {
-        return state == SearchLineState.ACTIVE ? 34.0 : 0.0;
+        if (state != SearchLineState.ACTIVE)
+            return 0.0;
+        SearchTeamMember leader = getLeaderMember();
+        return leader == null ? 0.0 : paceFor(leader);
     }
 
     private double getLinePace() {
         if (state != SearchLineState.ACTIVE)
             return 0.0;
-        long elapsed = Math.max(1L, (System.currentTimeMillis()
-                - lineStartedAt) / 1000L);
-        return Math.min(36.0, 12.0 + elapsed * 0.05);
+        return getLeaderPace();
+    }
+
+    private SearchTeamMember getLeaderMember() {
+        for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
+            if (member.isTeamLeader())
+                return member;
+        }
+        return null;
     }
 
     private String formatLineDistance(double distanceMeters) {
@@ -414,7 +425,7 @@ public class SearchLineManager {
 
     private String formatPace(double pace) {
         if (pace <= 0.0)
-            return "paused";
+            return "unavailable";
         return String.format(Locale.US, "%.1f m/min", pace);
     }
 

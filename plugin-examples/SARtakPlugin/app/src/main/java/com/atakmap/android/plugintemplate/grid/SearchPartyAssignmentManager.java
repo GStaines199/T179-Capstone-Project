@@ -39,7 +39,7 @@ public class SearchPartyAssignmentManager {
     private String teamName = "";
     private String teamColorName = "Unassigned";
     private int teamColorArgb = COLOR_UNASSIGNED;
-    private String selfMemberId = "TL-A-001";
+    private String selfMemberId = "SELF-PENDING";
     private final List<SearchTeamMember> members = new ArrayList<>();
     private final Set<String> blockedRosterMemberKeys = new HashSet<>();
     private int lastAtakMatchedMembers;
@@ -50,12 +50,12 @@ public class SearchPartyAssignmentManager {
 
     public SearchPartyAssignmentManager(SearcherRepository searcherRepository) {
         this.searcherRepository = searcherRepository;
-        members.add(new SearchTeamMember("TL-A-001", "Alpha Lead",
+        members.add(new SearchTeamMember("SELF-PENDING", "Identity pending",
                 SearchTeamMember.TeamRole.TEAM_LEADER, "Unassigned",
                 COLOR_UNASSIGNED,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 1,
-                -27.4705, 153.0260, 0.0,
+                0.0, 0.0, 0.0,
                 "No GPS Signal", "No GPS Signal", "No GPS Signal",
                 "No GPS Signal", "No GPS Signal", "No GPS Signal"));
     }
@@ -239,7 +239,7 @@ public class SearchPartyAssignmentManager {
                     COLOR_UNASSIGNED,
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                     SearchTeamMember.ConnectionStatus.STALE, 1,
-                    -27.4705, 153.0260, 0.0,
+                    0.0, 0.0, 0.0,
                     "No GPS Signal", "No GPS Signal", "No GPS Signal",
                     "No GPS Signal", "No GPS Signal", "No GPS Signal"));
         } else {
@@ -388,6 +388,15 @@ public class SearchPartyAssignmentManager {
                 selectedCell == null ? "No cell selected" : selectedCell.getId(),
                 formatLastPing(snapshot.getTimestamp()), "You",
                 self.getDistanceFromSearchLine());
+    }
+
+    public void updateSelfMovement(double headingDegrees,
+            boolean headingReliable, double speedMetersPerSecond) {
+        SearchTeamMember self = findMemberById(selfMemberId);
+        if (self == null)
+            return;
+        self.updateMovement(headingDegrees, headingReliable,
+                Math.max(0.0, speedMetersPerSecond));
     }
 
     public void updateFromAtakContacts(
@@ -591,7 +600,6 @@ public class SearchPartyAssignmentManager {
         }
 
         int laneCursor = 0;
-        int variationCursor = 0;
         for (SearchTeamMember member : laneMembers) {
             if (member.getUniqueId().equals(selfMemberId))
                 continue;
@@ -812,12 +820,6 @@ public class SearchPartyAssignmentManager {
         return builder.toString().trim();
     }
 
-    private double searchLineOffset(int index) {
-        double[] offsets = new double[] { -6.0, 4.0, 11.0, -3.0, 7.0,
-                -9.0, 13.0, 2.0 };
-        return offsets[index % offsets.length];
-    }
-
     private String formatGeo(GeoPoint point) {
         if (point == null || !point.isValid())
             return "No GPS Signal";
@@ -833,7 +835,7 @@ public class SearchPartyAssignmentManager {
 
     private String formatLastPing(long timestamp) {
         if (timestamp <= 0L)
-            return "ATAK GPS now";
+            return "Timestamp unavailable";
         long seconds = Math.max(0L, (System.currentTimeMillis() - timestamp)
                 / 1000L);
         return seconds <= 1L ? "ATAK GPS now" : seconds + " sec ago";

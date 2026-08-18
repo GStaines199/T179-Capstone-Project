@@ -1,6 +1,8 @@
 package com.atakmap.android.plugintemplate;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -126,6 +128,8 @@ public class SARTakMapController {
                 identityManager);
         this.dittoSyncManager = new DittoSyncManager(mapView, identityManager);
         this.teamCotWorkflow.setDittoSyncManager(dittoSyncManager);
+        this.gridCotWorkflow.setDittoSyncManager(dittoSyncManager);
+        this.searchLineCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.locationCaptureManager = new LocationCaptureManager(mapView,
                 identityManager, trackManager, healthManager,
                 new LocationCaptureManager.Listener() {
@@ -350,6 +354,20 @@ public class SARTakMapController {
             publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_REMOVED);
         }
         clearLocalTeam(false);
+    }
+
+    public void resetLocalSyncState() {
+        assignmentManager.clearTeam();
+        teamStateStore.clear();
+        rosterJoinTimes.clear();
+        teamCotWorkflow.clearLocalState();
+        gridCotWorkflow.clearLocalMessages();
+        searchLineCotWorkflow.clearLocalMessages();
+        dittoSyncManager.clearLocalCaches();
+        atakContactSummary = "Local SARtak sync state reset.";
+        publishDittoDeviceStateNow();
+        refreshTeamContactsInternal();
+        refreshOverlay();
     }
 
     public void leaveTeam() {
@@ -785,6 +803,15 @@ public class SARTakMapController {
                     }
                 });
         return snapshots;
+    }
+
+    public String getDeviceDiagnosticsSummary(int visibleCount,
+            int atakCount, int dittoCount, int staleCount) {
+        return visibleCount + " device(s) visible | " + atakCount
+                + " via ATAK/CoT | " + dittoCount + " via Ditto | "
+                + staleCount + " stale"
+                + "\nNetwork: " + getNetworkConnectivitySummary()
+                + "\n" + dittoSyncManager.getDiagnosticsSummary();
     }
 
     public boolean isLeaderRole() {
@@ -1553,11 +1580,11 @@ public class SARTakMapController {
                     && now - lastDittoUpdate <= 30000L;
             boolean dittoStale = ditto && !dittoFresh;
             if (atak && dittoFresh)
-                return "ATAK CoT/server + Ditto mesh";
+                return "ATAK CoT/contact + Ditto mesh";
             if (atak && dittoStale)
-                return "ATAK CoT/server + Ditto stale";
+                return "ATAK CoT/contact + Ditto stale";
             if (atak)
-                return "ATAK CoT/server";
+                return "ATAK CoT/contact";
             if (dittoFresh)
                 return "Ditto mesh";
             if (dittoStale)
@@ -1571,6 +1598,20 @@ public class SARTakMapController {
             if (teamId.length() > 0)
                 return teamId;
             return "No SARtak team advertised";
+        }
+    }
+
+    private String getNetworkConnectivitySummary() {
+        try {
+            ConnectivityManager manager = (ConnectivityManager) mapView
+                    .getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo active = manager == null ? null
+                    : manager.getActiveNetworkInfo();
+            if (active == null || !active.isConnected())
+                return "no internet/network reported by Android";
+            return active.getTypeName() + " connected";
+        } catch (Exception exception) {
+            return "unknown";
         }
     }
 }

@@ -2,6 +2,8 @@ package com.atakmap.android.plugintemplate.runtime;
 
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
+import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
+import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
@@ -34,6 +36,14 @@ public class DittoSyncManager {
             "sartak_team_memberships";
     private static final String TEAM_MEMBERSHIP_QUERY = "SELECT * FROM "
             + TEAM_MEMBERSHIP_COLLECTION;
+    private static final String GRID_STATUS_COLLECTION =
+            "sartak_grid_status";
+    private static final String GRID_STATUS_QUERY = "SELECT * FROM "
+            + GRID_STATUS_COLLECTION;
+    private static final String SEARCH_LINE_COLLECTION =
+            "sartak_search_lines";
+    private static final String SEARCH_LINE_QUERY = "SELECT * FROM "
+            + SEARCH_LINE_COLLECTION;
 
     private final MapView mapView;
     private final IdentityManager identityManager;
@@ -46,14 +56,24 @@ public class DittoSyncManager {
     private final Map<String, DittoTeamMembershipSnapshot> teamMemberships =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     DittoTeamMembershipSnapshot>());
+    private final Map<String, SearchGridCotMessage> gridStatuses =
+            Collections.synchronizedMap(new LinkedHashMap<String,
+                    SearchGridCotMessage>());
+    private final Map<String, SearchLineCotMessage> searchLines =
+            Collections.synchronizedMap(new LinkedHashMap<String,
+                    SearchLineCotMessage>());
 
     private Ditto ditto;
     private DittoSyncSubscription deviceSubscription;
     private DittoSyncSubscription teamEventSubscription;
     private DittoSyncSubscription teamMembershipSubscription;
+    private DittoSyncSubscription gridStatusSubscription;
+    private DittoSyncSubscription searchLineSubscription;
     private DittoStoreObserver deviceObserver;
     private DittoStoreObserver teamEventObserver;
     private DittoStoreObserver teamMembershipObserver;
+    private DittoStoreObserver gridStatusObserver;
+    private DittoStoreObserver searchLineObserver;
     private boolean started;
     private boolean configured;
     private String status = "Ditto: not started";
@@ -111,6 +131,26 @@ public class DittoSyncManager {
                             updateTeamMemberships(jsonDocuments);
                         }
                     });
+            gridStatusSubscription = DittoSdkBridge.registerSubscription(ditto,
+                    GRID_STATUS_QUERY);
+            gridStatusObserver = DittoSdkBridge.registerJsonObserver(ditto,
+                    GRID_STATUS_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateGridStatuses(jsonDocuments);
+                        }
+                    });
+            searchLineSubscription = DittoSdkBridge.registerSubscription(ditto,
+                    SEARCH_LINE_QUERY);
+            searchLineObserver = DittoSdkBridge.registerJsonObserver(ditto,
+                    SEARCH_LINE_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateSearchLines(jsonDocuments);
+                        }
+                    });
             DittoSdkBridge.startSync(ditto);
             started = true;
             status = "Ditto: active";
@@ -136,6 +176,10 @@ public class DittoSyncManager {
         teamEventSubscription = null;
         teamMembershipObserver = null;
         teamMembershipSubscription = null;
+        gridStatusObserver = null;
+        gridStatusSubscription = null;
+        searchLineObserver = null;
+        searchLineSubscription = null;
         ditto = null;
     }
 
@@ -169,6 +213,18 @@ public class DittoSyncManager {
     public List<DittoTeamMembershipSnapshot> getTeamMemberships() {
         synchronized (teamMemberships) {
             return new ArrayList<>(teamMemberships.values());
+        }
+    }
+
+    public List<SearchGridCotMessage> getSearchGridMessages() {
+        synchronized (gridStatuses) {
+            return new ArrayList<>(gridStatuses.values());
+        }
+    }
+
+    public List<SearchLineCotMessage> getSearchLineMessages() {
+        synchronized (searchLines) {
+            return new ArrayList<>(searchLines.values());
         }
     }
 
@@ -260,6 +316,104 @@ public class DittoSyncManager {
                     + throwable.getClass().getSimpleName();
             Log.w(TAG, "Ditto team membership publish failed", throwable);
         }
+    }
+
+    public void publishSearchGridStatus(SearchGridCotMessage message) {
+        if (!started || ditto == null || message == null)
+            return;
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", "grid-status-" + safe(message.getTeamId())
+                + "-" + safe(message.getCellId()));
+        document.put("uid", safe(message.getUid()));
+        document.put("teamId", safe(message.getTeamId()));
+        document.put("senderUid", safe(message.getSenderUid()));
+        document.put("senderCallsign", safe(message.getSenderCallsign()));
+        document.put("cellId", safe(message.getCellId()));
+        document.put("status", message.getStatus().name());
+        document.put("created", message.getCreated());
+
+        Map<String, Object> args = Collections.singletonMap("grid",
+                (Object) document);
+        try {
+            DittoSdkBridge.execute(ditto, "INSERT INTO "
+                    + GRID_STATUS_COLLECTION
+                    + " DOCUMENTS (:grid) ON ID CONFLICT DO UPDATE", args);
+            status = "Ditto: active";
+        } catch (Throwable throwable) {
+            status = "Ditto: grid publish failed - "
+                    + throwable.getClass().getSimpleName();
+            Log.w(TAG, "Ditto grid status publish failed", throwable);
+        }
+    }
+
+    public void publishSearchLine(SearchLineCotMessage message) {
+        if (!started || ditto == null || message == null)
+            return;
+        SearchGridCell cell = message.toCell();
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", "search-line-" + safe(message.getTeamId()));
+        document.put("uid", safe(message.getUid()));
+        document.put("action", safe(message.getAction()));
+        document.put("teamId", safe(message.getTeamId()));
+        document.put("senderUid", safe(message.getSenderUid()));
+        document.put("senderCallsign", safe(message.getSenderCallsign()));
+        document.put("zone", safe(message.getZoneDescriptor()));
+        document.put("aggregateId", cell == null ? ""
+                : safe(cell.getAggregateId()));
+        document.put("cellId", cell == null ? "" : safe(cell.getId()));
+        document.put("row", cell == null ? 0 : cell.getRow());
+        document.put("column", cell == null ? 0 : cell.getColumn());
+        document.put("west", cell == null ? 0.0 : cell.getWest());
+        document.put("south", cell == null ? 0.0 : cell.getSouth());
+        document.put("east", cell == null ? 0.0 : cell.getEast());
+        document.put("north", cell == null ? 0.0 : cell.getNorth());
+        document.put("lineNorthing", message.getLineNorthing());
+        document.put("color", message.getColorOption().name());
+        document.put("tolerance", message.getToleranceMeters());
+        document.put("created", message.getCreated());
+
+        Map<String, Object> args = Collections.singletonMap("line",
+                (Object) document);
+        try {
+            DittoSdkBridge.execute(ditto, "INSERT INTO "
+                    + SEARCH_LINE_COLLECTION
+                    + " DOCUMENTS (:line) ON ID CONFLICT DO UPDATE", args);
+            status = "Ditto: active";
+        } catch (Throwable throwable) {
+            status = "Ditto: line publish failed - "
+                    + throwable.getClass().getSimpleName();
+            Log.w(TAG, "Ditto search line publish failed", throwable);
+        }
+    }
+
+    public void clearLocalCaches() {
+        synchronized (devices) {
+            devices.clear();
+        }
+        synchronized (teamEvents) {
+            teamEvents.clear();
+        }
+        synchronized (teamMemberships) {
+            teamMemberships.clear();
+        }
+        synchronized (gridStatuses) {
+            gridStatuses.clear();
+        }
+        synchronized (searchLines) {
+            searchLines.clear();
+        }
+        lastReceiveTime = 0L;
+        lastPublishTime = 0L;
+    }
+
+    public String getDiagnosticsSummary() {
+        return getSummary()
+                + "\nDocs: " + getDeviceSnapshots().size()
+                + " devices, " + getTeamEvents().size()
+                + " team events, " + getTeamMemberships().size()
+                + " memberships, " + getSearchGridMessages().size()
+                + " grid states, " + getSearchLineMessages().size()
+                + " search lines";
     }
 
     public String getSummary() {
@@ -430,6 +584,105 @@ public class DittoSyncManager {
         }
     }
 
+    private void updateGridStatuses(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        LinkedHashMap<String, SearchGridCotMessage> next =
+                new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                SearchGridCotMessage message = gridStatusFromJson(json);
+                if (message.getUid().length() == 0
+                        || message.getCellId().length() == 0)
+                    continue;
+                next.put(message.getUid(), message);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto grid status document",
+                        exception);
+            }
+        }
+        synchronized (gridStatuses) {
+            gridStatuses.clear();
+            gridStatuses.putAll(next);
+        }
+        for (SearchGridCotMessage message : next.values()) {
+            if (!message.getSenderUid().equals(selfUid)) {
+                lastReceiveTime = System.currentTimeMillis();
+                break;
+            }
+        }
+    }
+
+    private SearchGridCotMessage gridStatusFromJson(String json)
+            throws JSONException {
+        JSONObject object = new JSONObject(json);
+        return new SearchGridCotMessage(
+                object.optString("uid", ""),
+                object.optString("teamId", ""),
+                object.optString("senderUid", ""),
+                object.optString("senderCallsign", ""),
+                object.optString("cellId", ""),
+                statusValue(object.optString("status", "")),
+                object.optLong("created", 0L));
+    }
+
+    private void updateSearchLines(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        LinkedHashMap<String, SearchLineCotMessage> next =
+                new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                SearchLineCotMessage message = searchLineFromJson(json);
+                if (message.getUid().length() == 0
+                        || message.getTeamId().length() == 0)
+                    continue;
+                next.put(message.getUid(), message);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto search line document",
+                        exception);
+            }
+        }
+        synchronized (searchLines) {
+            searchLines.clear();
+            searchLines.putAll(next);
+        }
+        for (SearchLineCotMessage message : next.values()) {
+            if (!message.getSenderUid().equals(selfUid)) {
+                lastReceiveTime = System.currentTimeMillis();
+                break;
+            }
+        }
+    }
+
+    private SearchLineCotMessage searchLineFromJson(String json)
+            throws JSONException {
+        JSONObject object = new JSONObject(json);
+        return new SearchLineCotMessage(
+                object.optString("uid", ""),
+                object.optString("action", ""),
+                object.optString("teamId", ""),
+                object.optString("senderUid", ""),
+                object.optString("senderCallsign", ""),
+                object.optString("zone", ""),
+                object.optString("aggregateId", ""),
+                object.optString("cellId", ""),
+                object.optInt("row", 0),
+                object.optInt("column", 0),
+                object.optDouble("west", 0.0),
+                object.optDouble("south", 0.0),
+                object.optDouble("east", 0.0),
+                object.optDouble("north", 0.0),
+                object.optDouble("lineNorthing", 0.0),
+                lineColorValue(object.optString("color", "")),
+                object.optDouble("tolerance", 0.0),
+                object.optLong("created", 0L));
+    }
+
     private String documentIdFor(SearchTeamCotMessage message) {
         String action = safe(message.getAction());
         if (SearchTeamCotMessage.ACTION_ADVERTISE.equals(action)
@@ -521,6 +774,22 @@ public class DittoSyncManager {
 
     private boolean notEmpty(String value) {
         return value != null && value.trim().length() > 0;
+    }
+
+    private SearchGridStatus statusValue(String value) {
+        try {
+            return SearchGridStatus.valueOf(value);
+        } catch (Exception ignored) {
+            return SearchGridStatus.NOT_STARTED;
+        }
+    }
+
+    private SearchLineColorOption lineColorValue(String value) {
+        try {
+            return SearchLineColorOption.valueOf(value);
+        } catch (Exception ignored) {
+            return SearchLineColorOption.CYAN;
+        }
     }
 
     private String safe(String value) {

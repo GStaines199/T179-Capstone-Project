@@ -36,6 +36,7 @@ public class SearchGridCotWorkflow {
                     receiveCotEvent(event);
                 }
             };
+    private DittoSyncManager dittoSyncManager;
 
     public SearchGridCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -52,12 +53,24 @@ public class SearchGridCotWorkflow {
         }
     }
 
+    public void setDittoSyncManager(DittoSyncManager dittoSyncManager) {
+        this.dittoSyncManager = dittoSyncManager;
+    }
+
+    public void clearLocalMessages() {
+        synchronized (messages) {
+            messages.clear();
+        }
+    }
+
     public void publishStatus(String teamId, String cellId,
             SearchGridStatus status) {
         if (teamId == null || teamId.length() == 0 || cellId == null
                 || cellId.length() == 0 || status == null)
             return;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        if (identity == null || !identity.isResolved())
+            return;
         long created = System.currentTimeMillis();
         SearchGridCotMessage message = new SearchGridCotMessage(
                 "sartak-grid-" + teamId + "-" + cellId + "-"
@@ -65,6 +78,8 @@ public class SearchGridCotWorkflow {
                 teamId, identity.getUid(), identity.getCallsign(), cellId,
                 status, created);
         messages.put(message.getUid(), message);
+        if (dittoSyncManager != null)
+            dittoSyncManager.publishSearchGridStatus(message);
         CotEvent event = createCotEvent(message);
         if (event != null)
             CotMapComponent.getExternalDispatcher().dispatchToBroadcast(event);
@@ -77,6 +92,17 @@ public class SearchGridCotWorkflow {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         synchronized (messages) {
             for (SearchGridCotMessage message : messages.values()) {
+                if (!teamId.equals(message.getTeamId()) || isExpired(message))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                result.add(message);
+            }
+        }
+        if (dittoSyncManager != null) {
+            for (SearchGridCotMessage message
+                    : dittoSyncManager.getSearchGridMessages()) {
                 if (!teamId.equals(message.getTeamId()) || isExpired(message))
                     continue;
                 if (identity != null && identity.getUid().equals(

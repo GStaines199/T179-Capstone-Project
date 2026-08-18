@@ -106,6 +106,7 @@
     <string name="show_callsigns">Show Callsigns</string>
     <string name="devices_heading">Connected Devices</string>
     <string name="devices_waiting">Waiting for ATAK or Ditto devices</string>
+    <string name="reset_sync_state">Reset Local Sync State</string>
 
 
 

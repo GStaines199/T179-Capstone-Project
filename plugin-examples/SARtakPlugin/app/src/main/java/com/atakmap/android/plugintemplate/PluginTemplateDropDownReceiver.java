@@ -73,6 +73,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button saveTeamSetupButton;
     private final Button removeTeamButton;
     private final Button refreshAtakContactsButton;
+    private final Button resetSyncStateButton;
     private final EditText searchLineToleranceInput;
     private final EditText teamNameInput;
     private final EditText teamIdInput;
@@ -175,6 +176,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.remove_team_button);
         refreshAtakContactsButton = templateView
                 .findViewById(R.id.refresh_atak_contacts_button);
+        resetSyncStateButton = templateView
+                .findViewById(R.id.reset_sync_state_button);
         searchLineToleranceInput = templateView
                 .findViewById(R.id.search_line_tolerance_input);
         teamNameInput = templateView.findViewById(R.id.team_name_input);
@@ -250,6 +253,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         saveTeamSetupButton.setOnClickListener(this);
         removeTeamButton.setOnClickListener(this);
         refreshAtakContactsButton.setOnClickListener(this);
+        resetSyncStateButton.setOnClickListener(this);
         setupToleranceInput();
         templateView.findViewById(R.id.select_current_cell_button)
                 .setOnClickListener(this);
@@ -358,6 +362,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             Toast.makeText(getMapView().getContext(),
                     mapController.refreshAtakTeamContacts(),
                     Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.reset_sync_state_button) {
+            showResetSyncStateDialog();
         } else if (id == R.id.select_current_cell_button) {
             mapController.selectCurrentCell();
             Toast.makeText(getMapView().getContext(),
@@ -1019,17 +1025,19 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 mapController.getVisibleDevices();
         int atakCount = 0;
         int dittoCount = 0;
+        int staleCount = 0;
         for (DeviceConnectivitySnapshot device : devices) {
             String connection = device.getConnectionSummary();
             if (connection.contains("ATAK"))
                 atakCount++;
             if (connection.contains("Ditto"))
                 dittoCount++;
+            if (connection.toLowerCase(java.util.Locale.US).contains("stale"))
+                staleCount++;
             devicesCardsContainer.addView(createDeviceCard(device));
         }
-        devicesSummaryValue.setText(devices.size() + " device(s) visible | "
-                + atakCount + " via ATAK/CoT | " + dittoCount
-                + " via Ditto");
+        devicesSummaryValue.setText(mapController.getDeviceDiagnosticsSummary(
+                devices.size(), atakCount, dittoCount, staleCount));
         if (devices.isEmpty())
             devicesCardsContainer.addView(createCardText(
                     "No ATAK contacts or Ditto peers visible yet", 13,
@@ -1388,6 +1396,30 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         if (connection.contains("ATAK"))
             return Color.rgb(180, 124, 255);
         return Color.rgb(138, 143, 152);
+    }
+
+    private void showResetSyncStateDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Reset local SARtak sync state?")
+                .setMessage("This clears this device's local SARtak team, "
+                        + "pending messages, and visible sync caches. It does "
+                        + "not delete another device's data.")
+                .setPositiveButton("Reset",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                handledTeamMessages.clear();
+                                resolvedTeamMessages.clear();
+                                mapController.resetLocalSyncState();
+                                Toast.makeText(getMapView().getContext(),
+                                        "Local SARtak sync state reset",
+                                        Toast.LENGTH_SHORT).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showRemoveMemberDialog(final SearchTeamMember member) {

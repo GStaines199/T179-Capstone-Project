@@ -81,6 +81,16 @@ public class SearchTeamCotWorkflow {
         this.dittoSyncManager = dittoSyncManager;
     }
 
+    public void clearLocalState() {
+        synchronized (directMessages) {
+            directMessages.clear();
+        }
+        lastAdvertiseTime = 0L;
+        lastPresenceTime = 0L;
+        lastStyleTime = 0L;
+        lastPendingRepublishTime = 0L;
+    }
+
     public void advertiseTeam(String teamId, String teamName) {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         publish(SearchTeamCotMessage.ACTION_ADVERTISE, teamId, teamName,

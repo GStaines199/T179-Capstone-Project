@@ -44,6 +44,7 @@ public class SearchLineCotWorkflow {
                 }
             };
     private long lastUpdatePublishTime;
+    private DittoSyncManager dittoSyncManager;
 
     public SearchLineCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -57,6 +58,16 @@ public class SearchLineCotWorkflow {
             CommsMapComponent.getInstance()
                     .removeOnCotEventListener(cotEventListener);
         } catch (Exception ignored) {
+        }
+    }
+
+    public void setDittoSyncManager(DittoSyncManager dittoSyncManager) {
+        this.dittoSyncManager = dittoSyncManager;
+    }
+
+    public void clearLocalMessages() {
+        synchronized (messages) {
+            messages.clear();
         }
     }
 
@@ -96,12 +107,29 @@ public class SearchLineCotWorkflow {
                     latest = message;
             }
         }
+        if (dittoSyncManager != null) {
+            for (SearchLineCotMessage message
+                    : dittoSyncManager.getSearchLineMessages()) {
+                if (!teamId.equals(message.getTeamId()))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                if (isExpired(message))
+                    continue;
+                if (latest == null || message.getCreated()
+                        > latest.getCreated())
+                    latest = message;
+            }
+        }
         return latest;
     }
 
     private void publish(String action, String teamId,
             SearchLineManager manager) {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        if (identity == null || !identity.isResolved())
+            return;
         long created = System.currentTimeMillis();
         SearchGridCell cell = manager.getActiveCell();
         SearchLineCotMessage message = new SearchLineCotMessage(
@@ -120,6 +148,8 @@ public class SearchLineCotWorkflow {
                 manager.getLineNorthing(), manager.getColorOption(),
                 manager.getReturnMarkToleranceMeters(), created);
         messages.put(message.getUid(), message);
+        if (dittoSyncManager != null)
+            dittoSyncManager.publishSearchLine(message);
         CotEvent event = createCotEvent(message);
         if (event != null)
             CotMapComponent.getExternalDispatcher().dispatchToBroadcast(event);

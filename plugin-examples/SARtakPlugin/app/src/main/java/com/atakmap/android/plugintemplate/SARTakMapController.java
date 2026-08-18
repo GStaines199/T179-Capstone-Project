@@ -32,6 +32,9 @@ import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakRoleResolver;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
 import com.atakmap.android.plugintemplate.runtime.AtakTrackBridge;
+import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
+import com.atakmap.android.plugintemplate.runtime.DittoDeviceSnapshot;
+import com.atakmap.android.plugintemplate.runtime.DittoTeamMembershipSnapshot;
 import com.atakmap.android.plugintemplate.runtime.DittoSyncManager;
 import com.atakmap.android.plugintemplate.runtime.IdentityManager;
 import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
@@ -44,7 +47,10 @@ import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SARTakMapController {
 
@@ -71,6 +77,11 @@ public class SARTakMapController {
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
     private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
     private final Runnable backgroundRunnable;
+    private final java.util.Map<String, Long> rosterJoinTimes =
+            new java.util.HashMap<>();
+    private final java.util.Set<String> appliedTeamMessageIds =
+            new java.util.HashSet<>();
+    private long localTeamJoinTime;
     private String atakContactSummary = "ATAK contacts not scanned yet";
     private AtakRoleResolver.Role currentRole = AtakRoleResolver.Role.TEAM_MEMBER;
 
@@ -114,6 +125,7 @@ public class SARTakMapController {
         this.searchLineCotWorkflow = new SearchLineCotWorkflow(mapView,
                 identityManager);
         this.dittoSyncManager = new DittoSyncManager(mapView, identityManager);
+        this.teamCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.locationCaptureManager = new LocationCaptureManager(mapView,
                 identityManager, trackManager, healthManager,
                 new LocationCaptureManager.Listener() {
@@ -321,10 +333,13 @@ public class SARTakMapController {
 
     public void createTeam(String teamName) {
         assignmentManager.createTeam(teamName, getFixedLeaderTeamId());
+        localTeamJoinTime = System.currentTimeMillis();
         teamStateStore.save(assignmentManager);
+        publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_ACTIVE);
         teamCotWorkflow.advertiseTeam(assignmentManager.getTeamId(),
                 assignmentManager.getTeamName());
         publishTeamPresence();
+        publishDittoDeviceStateNow();
         refreshOverlay();
     }
 
@@ -332,13 +347,30 @@ public class SARTakMapController {
         if (assignmentManager.isTeamCreated()) {
             teamCotWorkflow.removeTeam(assignmentManager.getTeamId(),
                     assignmentManager.getTeamName());
+            publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_REMOVED);
         }
-        leaveTeam();
+        clearLocalTeam(false);
     }
 
     public void leaveTeam() {
+        clearLocalTeam(true);
+    }
+
+    private void clearLocalTeam(boolean notifyLeader) {
+        if (notifyLeader && assignmentManager.isTeamCreated()
+                && !isLeaderRole())
+            publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_LEFT);
+        if (notifyLeader && assignmentManager.isTeamCreated() && !isLeaderRole())
+            teamCotWorkflow.memberLeft(assignmentManager.getTeamId(),
+                    assignmentManager.getTeamName(),
+                    assignmentManager.getLeaderUid(),
+                    assignmentManager.getLeaderCallsign());
+        if (assignmentManager.isTeamCreated())
+            teamCotWorkflow.publishPresence("", "", "", "",
+                    "", 0, "", 0, "");
         assignmentManager.clearTeam();
         teamStateStore.clear();
+        publishDittoDeviceStateNow();
         refreshTeamContactsInternal();
         refreshOverlay();
     }
@@ -372,6 +404,8 @@ public class SARTakMapController {
         if (accepted) {
             AtakTeamContactDataSource.ContactSnapshot contact = findContact(
                     request.getSenderUid(), request.getSenderCallsign());
+            assignmentManager.unblockRosterMember(request.getSenderUid(),
+                    request.getSenderCallsign());
             if (contact != null) {
                 assignmentManager.addTeamMember(contact,
                         getAvailableSelfPoint(), converter);
@@ -380,8 +414,15 @@ public class SARTakMapController {
                         request.getSenderUid(), request.getSenderCallsign(),
                         SearchTeamMember.TeamRole.SEARCHER);
             }
+            rememberRosterJoin(request.getSenderUid(),
+                    request.getSenderCallsign());
+            publishMembership(request.getSenderUid(),
+                    request.getSenderCallsign(),
+                    DittoTeamMembershipSnapshot.STATUS_ACTIVE,
+                    "Searcher");
             teamStateStore.save(assignmentManager);
             publishTeamPresence();
+            publishDittoDeviceStateNow();
             refreshOverlay();
         }
     }
@@ -389,10 +430,13 @@ public class SARTakMapController {
     public void acceptJoinResponse(SearchTeamCotMessage response) {
         assignmentManager.joinTeam(response.getTeamName(),
                 response.getTeamId());
+        localTeamJoinTime = System.currentTimeMillis();
         addLeaderFromContact(response.getLeaderUid(),
                 response.getLeaderCallsign());
         teamStateStore.save(assignmentManager);
+        publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_ACTIVE);
         publishTeamPresence();
+        publishDittoDeviceStateNow();
         refreshOverlay();
     }
 
@@ -402,10 +446,13 @@ public class SARTakMapController {
         if (accepted) {
             assignmentManager.joinTeam(invite.getTeamName(),
                     invite.getTeamId());
+            localTeamJoinTime = System.currentTimeMillis();
             addLeaderFromContact(invite.getLeaderUid(),
                     invite.getLeaderCallsign());
             teamStateStore.save(assignmentManager);
+            publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_ACTIVE);
             publishTeamPresence();
+            publishDittoDeviceStateNow();
             refreshOverlay();
         }
     }
@@ -414,11 +461,22 @@ public class SARTakMapController {
         if (!SearchTeamCotMessage.ACTION_INVITE_ACCEPT.equals(
                 response.getAction()))
             return false;
+        assignmentManager.unblockRosterMember(response.getSenderUid(),
+                response.getSenderCallsign());
         boolean added = addTeamMemberFromResponse(response);
-        if (added)
+        if (added) {
+            rememberRosterJoin(response.getSenderUid(),
+                    response.getSenderCallsign());
+            publishMembership(response.getSenderUid(),
+                    response.getSenderCallsign(),
+                    DittoTeamMembershipSnapshot.STATUS_ACTIVE,
+                    "Searcher");
             teamStateStore.save(assignmentManager);
-        if (added)
+        }
+        if (added) {
             publishTeamPresence();
+            publishDittoDeviceStateNow();
+        }
         return added;
     }
 
@@ -440,7 +498,19 @@ public class SARTakMapController {
         return teamCotWorkflow.getJoinResponsesForMe();
     }
 
+    public List<SearchTeamCotMessage> getMemberRemovalsForMe() {
+        return teamCotWorkflow.getMemberRemovalsForMe();
+    }
+
+    public List<SearchTeamCotMessage> getMemberLeavesForLeader() {
+        if (!assignmentManager.isTeamCreated())
+            return java.util.Collections.emptyList();
+        return teamCotWorkflow.getMemberLeavesForMe();
+    }
+
     public List<SearchTeamCotMessage> getInvitesForMe() {
+        if (assignmentManager.isTeamCreated())
+            return java.util.Collections.emptyList();
         return teamCotWorkflow.getInvitesForMe();
     }
 
@@ -457,7 +527,13 @@ public class SARTakMapController {
     }
 
     public List<SearchTeamCotMessage> getOutgoingJoinRequests() {
+        if (assignmentManager.isTeamCreated())
+            return java.util.Collections.emptyList();
         return teamCotWorkflow.getOutgoingJoinRequests();
+    }
+
+    public int getVisibleTeamAdvertisementCount() {
+        return getActiveTeamAdvertisements().size();
     }
 
     public void updateTeamSetup(String teamName) {
@@ -545,14 +621,68 @@ public class SARTakMapController {
     }
 
     public boolean removeTeamMemberFromSetup(String uniqueId) {
+        SearchTeamMember member = assignmentManager.findMemberById(uniqueId);
         boolean removed = assignmentManager.removeTeamMember(uniqueId);
+        if (removed && member != null)
+            teamCotWorkflow.removeMember(assignmentManager.getTeamId(),
+                    assignmentManager.getTeamName(), member.getUniqueId(),
+                    member.getCallsign());
+        if (removed && member != null)
+            publishMembership(member.getUniqueId(), member.getCallsign(),
+                    DittoTeamMembershipSnapshot.STATUS_REMOVED,
+                    member.getRoleLabel());
         arrangeTeamMembers();
         refreshOverlay();
         if (removed)
             teamStateStore.save(assignmentManager);
-        if (removed)
+        if (removed) {
             publishTeamPresence();
+            publishDittoDeviceStateNow();
+        }
         return removed;
+    }
+
+    public boolean applyMemberRemoval(SearchTeamCotMessage removal) {
+        if (removal == null || !assignmentManager.isTeamCreated())
+            return false;
+        if (!assignmentManager.getTeamId().equals(removal.getTeamId()))
+            return false;
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? assignmentManager.getSelfMemberId()
+                : identity.getUid();
+        String selfCallsign = identity == null ? "" : identity.getCallsign();
+        if (!matchesMember(selfUid, selfCallsign, removal.getTargetUid(),
+                removal.getTargetCallsign()))
+            return false;
+        if (localTeamJoinTime > 0L
+                && removal.getCreated() < localTeamJoinTime)
+            return false;
+        clearLocalTeam(false);
+        return true;
+    }
+
+    public String applyMemberLeft(SearchTeamCotMessage message) {
+        if (message == null || !assignmentManager.isTeamCreated())
+            return "";
+        if (!assignmentManager.getTeamId().equals(message.getTeamId()))
+            return "";
+        Long joinedAt = getRosterJoinTime(message.getSenderUid(),
+                message.getSenderCallsign());
+        if (joinedAt != null && message.getCreated() < joinedAt)
+            return "";
+        SearchTeamMember member = assignmentManager.findMemberById(
+                message.getSenderUid());
+        String callsign = member == null ? message.getSenderCallsign()
+                : member.getCallsign();
+        boolean removed = assignmentManager.removeTeamMemberByIdentity(
+                message.getSenderUid(), message.getSenderCallsign());
+        if (!removed)
+            return "";
+        arrangeTeamMembers();
+        teamStateStore.save(assignmentManager);
+        publishTeamPresence();
+        refreshOverlay();
+        return callsign;
     }
 
     public String refreshAtakTeamContacts() {
@@ -595,6 +725,66 @@ public class SARTakMapController {
                 + " connected, " + assignmentManager.getStaleMemberCount()
                 + " stale/disconnected"
                 + "\n" + dittoSyncManager.getSummary();
+    }
+
+    public List<DeviceConnectivitySnapshot> getVisibleDevices() {
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        String selfCallsign = identity == null ? "" : identity.getCallsign();
+        Map<String, DeviceBuilder> devices = new LinkedHashMap<>();
+
+        for (AtakTeamContactDataSource.ContactSnapshot contact
+                : teamContactDataSource.getContacts()) {
+            String key = deviceKey(contact.getUid(), contact.getCallsign());
+            DeviceBuilder builder = devices.get(key);
+            if (builder == null) {
+                builder = new DeviceBuilder(contact.getUid(),
+                        contact.getCallsign());
+                devices.put(key, builder);
+            }
+            builder.atak = true;
+            builder.atakGroupName = contact.getAtakGroupName();
+            builder.role = contact.getRole();
+            builder.lastAtakUpdate = contact.getTimestamp();
+        }
+
+        for (DittoDeviceSnapshot snapshot
+                : dittoSyncManager.getDeviceSnapshots()) {
+            String key = deviceKey(snapshot.getUid(), snapshot.getCallsign());
+            DeviceBuilder builder = devices.get(key);
+            if (builder == null) {
+                builder = new DeviceBuilder(snapshot.getUid(),
+                        snapshot.getCallsign());
+                devices.put(key, builder);
+            }
+            builder.ditto = true;
+            builder.teamName = snapshot.getTeamName();
+            builder.teamId = snapshot.getTeamId();
+            if (builder.role.length() == 0)
+                builder.role = snapshot.getRole();
+            builder.lastDittoUpdate = snapshot.getUpdatedAt();
+            if (builder.atakGroupName.length() == 0)
+                builder.atakGroupName = "Ditto sync";
+        }
+
+        List<DeviceConnectivitySnapshot> snapshots = new ArrayList<>();
+        for (DeviceBuilder builder : devices.values()) {
+            boolean isSelf = matchesMember(selfUid, selfCallsign,
+                    builder.uid, builder.callsign);
+            snapshots.add(builder.build(isSelf));
+        }
+        java.util.Collections.sort(snapshots,
+                new java.util.Comparator<DeviceConnectivitySnapshot>() {
+                    @Override
+                    public int compare(DeviceConnectivitySnapshot first,
+                            DeviceConnectivitySnapshot second) {
+                        if (first.isSelf() != second.isSelf())
+                            return first.isSelf() ? -1 : 1;
+                        return first.getCallsign().compareToIgnoreCase(
+                                second.getCallsign());
+                    }
+                });
+        return snapshots;
     }
 
     public boolean isLeaderRole() {
@@ -818,6 +1008,8 @@ public class SARTakMapController {
 
     private void runBackgroundTeamRefresh() {
         advertiseTeamIfDue();
+        applyTeamLifecycleMessages();
+        applyDittoMembershipSnapshots();
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
         applyRemoteSearchLineIfAvailable();
@@ -983,6 +1175,19 @@ public class SARTakMapController {
                         mapView));
     }
 
+    private void publishDittoDeviceStateNow() {
+        SearchTeamMember self = assignmentManager.getSelfMember();
+        dittoSyncManager.publishDeviceStateNow(
+                assignmentManager.isTeamCreated(), assignmentManager
+                        .getTeamId(), assignmentManager.getTeamName(),
+                assignmentManager.getLeaderUid(), assignmentManager
+                        .getLeaderCallsign(),
+                getRoleLabel(), assignmentManager.getTeamColorName(),
+                assignmentManager.getTeamColorArgb(), self,
+                gridManager.getSelectedCell(), AtakLocationStatus.from(
+                        mapView));
+    }
+
     private void applyDittoDeviceSnapshots() {
         if (!assignmentManager.isTeamCreated())
             return;
@@ -993,12 +1198,59 @@ public class SARTakMapController {
             teamStateStore.save(assignmentManager);
     }
 
+    private void applyTeamLifecycleMessages() {
+        for (SearchTeamCotMessage removal : getMemberRemovalsForMe()) {
+            if (rememberAppliedMessage(removal))
+                applyMemberRemoval(removal);
+        }
+
+        if (isLeaderRole() && assignmentManager.isTeamCreated()) {
+            for (SearchTeamCotMessage left : getMemberLeavesForLeader()) {
+                if (rememberAppliedMessage(left))
+                    applyMemberLeft(left);
+            }
+            for (SearchTeamCotMessage response
+                    : getInviteResponsesForLeader()) {
+                if (!rememberAppliedMessage(response))
+                    continue;
+                if (SearchTeamCotMessage.ACTION_INVITE_ACCEPT.equals(
+                        response.getAction()))
+                    acceptInviteResponse(response);
+            }
+            return;
+        }
+
+        if (!assignmentManager.isTeamCreated()) {
+            for (SearchTeamCotMessage response : getJoinResponsesForMe()) {
+                if (!rememberAppliedMessage(response))
+                    continue;
+                if (SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(
+                        response.getAction()))
+                    acceptJoinResponse(response);
+            }
+        }
+    }
+
+    private boolean rememberAppliedMessage(SearchTeamCotMessage message) {
+        return message != null && message.getUid() != null
+                && appliedTeamMessageIds.add(message.getUid());
+    }
+
     private String formatAge(long timestamp) {
         if (timestamp <= 0L)
             return "never";
         long seconds = Math.max(0L, (System.currentTimeMillis() - timestamp)
                 / 1000L);
         return seconds <= 1L ? "now" : seconds + " sec ago";
+    }
+
+    private String deviceKey(String uid, String callsign) {
+        String safeUid = uid == null ? "" : uid.trim();
+        if (safeUid.length() > 0)
+            return "uid:" + safeUid;
+        String safeCallsign = callsign == null ? "" : callsign.trim()
+                .toLowerCase(java.util.Locale.US);
+        return "callsign:" + safeCallsign;
     }
 
     private void publishTeamPresence() {
@@ -1029,6 +1281,134 @@ public class SARTakMapController {
                 self == null ? "" : self.getColorName(),
                 self == null ? 0 : self.getDisplayColor(),
                 self == null ? "" : self.getRoleLabel());
+    }
+
+    private void publishSelfMembership(String status) {
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        if (identity == null || !identity.isResolved()
+                || !assignmentManager.isTeamCreated())
+            return;
+        SearchTeamMember self = assignmentManager.getSelfMember();
+        String role = self == null ? getRoleLabel() : self.getRoleLabel();
+        publishMembership(identity.getUid(), identity.getCallsign(), status,
+                role);
+    }
+
+    private void publishMembership(String memberUid, String memberCallsign,
+            String status, String roleLabel) {
+        if (!assignmentManager.isTeamCreated())
+            return;
+        dittoSyncManager.publishTeamMembership(assignmentManager.getTeamId(),
+                assignmentManager.getTeamName(),
+                assignmentManager.getLeaderUid(),
+                assignmentManager.getLeaderCallsign(),
+                memberUid, memberCallsign, status, roleLabel);
+    }
+
+    private void applyDittoMembershipSnapshots() {
+        List<DittoTeamMembershipSnapshot> memberships =
+                dittoSyncManager.getTeamMemberships();
+        if (memberships.isEmpty())
+            return;
+
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? assignmentManager.getSelfMemberId()
+                : identity.getUid();
+        String selfCallsign = identity == null ? "" : identity.getCallsign();
+        boolean changed = false;
+
+        for (DittoTeamMembershipSnapshot membership : memberships) {
+            if (membership.getTeamId().length() == 0)
+                continue;
+
+            boolean appliesToSelf = matchesMember(selfUid, selfCallsign,
+                    membership.getMemberUid(),
+                    membership.getMemberCallsign());
+            if (appliesToSelf) {
+                changed = applySelfMembership(membership) || changed;
+                continue;
+            }
+
+            if (!assignmentManager.isTeamCreated()
+                    || !assignmentManager.getTeamId().equals(
+                            membership.getTeamId()))
+                continue;
+
+            if (membership.isActive())
+                changed = applyActiveMembership(membership) || changed;
+            else if (membership.isLeftOrRemoved())
+                changed = applyInactiveMembership(membership) || changed;
+        }
+
+        if (changed) {
+            teamStateStore.save(assignmentManager);
+            arrangeTeamMembers();
+            refreshOverlay();
+        }
+    }
+
+    private boolean applySelfMembership(
+            DittoTeamMembershipSnapshot membership) {
+        if (!assignmentManager.isTeamCreated()) {
+            if (!membership.isActive())
+                return false;
+            if (membership.getLeaderUid().length() == 0
+                    || membership.getTeamId().length() == 0)
+                return false;
+            assignmentManager.joinTeam(membership.getTeamName(),
+                    membership.getTeamId());
+            localTeamJoinTime = Math.max(System.currentTimeMillis(),
+                    membership.getUpdatedAt());
+            addLeaderFromContact(membership.getLeaderUid(),
+                    membership.getLeaderCallsign());
+            publishTeamPresence();
+            publishDittoDeviceStateNow();
+            return true;
+        }
+
+        if (!assignmentManager.getTeamId().equals(membership.getTeamId()))
+            return false;
+        if (membership.isLeftOrRemoved()
+                && membership.getUpdatedAt() >= localTeamJoinTime) {
+            clearLocalTeam(false);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean applyActiveMembership(
+            DittoTeamMembershipSnapshot membership) {
+        AtakTeamContactDataSource.ContactSnapshot contact = findContact(
+                membership.getMemberUid(), membership.getMemberCallsign());
+        SearchTeamMember.TeamRole role = matchesMember(
+                membership.getMemberUid(), membership.getMemberCallsign(),
+                membership.getLeaderUid(), membership.getLeaderCallsign())
+                        ? SearchTeamMember.TeamRole.TEAM_LEADER
+                        : SearchTeamMember.TeamRole.SEARCHER;
+        assignmentManager.unblockRosterMember(membership.getMemberUid(),
+                membership.getMemberCallsign());
+        SearchTeamMember member = contact == null
+                ? assignmentManager.addConfirmedRosterMember(
+                        membership.getMemberUid(),
+                        membership.getMemberCallsign(), role)
+                : assignmentManager.addTeamMember(contact,
+                        getAvailableSelfPoint(), converter);
+        if (member == null)
+            return false;
+        member.setRole(role);
+        rememberRosterJoin(membership.getMemberUid(),
+                membership.getMemberCallsign(), membership.getUpdatedAt());
+        return true;
+    }
+
+    private boolean applyInactiveMembership(
+            DittoTeamMembershipSnapshot membership) {
+        Long joinedAt = getRosterJoinTime(membership.getMemberUid(),
+                membership.getMemberCallsign());
+        if (joinedAt != null && membership.getUpdatedAt() < joinedAt)
+            return false;
+        return assignmentManager.removeTeamMemberByIdentity(
+                membership.getMemberUid(), membership.getMemberCallsign());
     }
 
     private AtakTeamContactDataSource.ContactSnapshot findContact(
@@ -1068,6 +1448,49 @@ public class SARTakMapController {
         return new java.util.ArrayList<>(byTeam.values());
     }
 
+    private void rememberRosterJoin(String uid, String callsign) {
+        rememberRosterJoin(uid, callsign, System.currentTimeMillis());
+    }
+
+    private void rememberRosterJoin(String uid, String callsign, long joinedAt) {
+        long now = joinedAt > 0L ? joinedAt : System.currentTimeMillis();
+        String uidKey = memberKey(uid);
+        if (uidKey.length() > 0)
+            rosterJoinTimes.put(uidKey, now);
+        String callsignKey = memberKey(callsign);
+        if (callsignKey.length() > 0)
+            rosterJoinTimes.put(callsignKey, now);
+    }
+
+    private Long getRosterJoinTime(String uid, String callsign) {
+        String uidKey = memberKey(uid);
+        if (uidKey.length() > 0 && rosterJoinTimes.containsKey(uidKey))
+            return rosterJoinTimes.get(uidKey);
+        String callsignKey = memberKey(callsign);
+        if (callsignKey.length() > 0)
+            return rosterJoinTimes.get(callsignKey);
+        return null;
+    }
+
+    private String memberKey(String value) {
+        return value == null ? "" : value.trim().toLowerCase(
+                java.util.Locale.US);
+    }
+
+    private boolean matchesMember(String firstUid, String firstCallsign,
+            String secondUid, String secondCallsign) {
+        String leftUid = firstUid == null ? "" : firstUid.trim();
+        String rightUid = secondUid == null ? "" : secondUid.trim();
+        if (leftUid.length() > 0 && leftUid.equals(rightUid))
+            return true;
+        String leftCallsign = firstCallsign == null ? ""
+                : firstCallsign.trim();
+        String rightCallsign = secondCallsign == null ? ""
+                : secondCallsign.trim();
+        return leftCallsign.length() > 0
+                && leftCallsign.equalsIgnoreCase(rightCallsign);
+    }
+
     private GeoPoint getAvailableSelfPoint() {
         AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
         return snapshot.isAvailable() ? snapshot.getPoint() : null;
@@ -1092,5 +1515,62 @@ public class SARTakMapController {
         dispatcher.removeMapEventListener(MapEvent.MAP_ZOOM, mapEventListener);
         dispatcher.removeMapEventListener(MapEvent.MAP_SCALE, mapEventListener);
         dispatcher.removeMapEventListener(MapEvent.MAP_MOVED, mapEventListener);
+    }
+
+    private class DeviceBuilder {
+        private final String uid;
+        private final String callsign;
+        private boolean atak;
+        private boolean ditto;
+        private long lastAtakUpdate;
+        private long lastDittoUpdate;
+        private String teamName = "";
+        private String teamId = "";
+        private String role = "";
+        private String atakGroupName = "";
+
+        DeviceBuilder(String uid, String callsign) {
+            this.uid = uid == null ? "" : uid.trim();
+            this.callsign = callsign == null || callsign.trim().length() == 0
+                    ? this.uid : callsign.trim();
+        }
+
+        DeviceConnectivitySnapshot build(boolean self) {
+            long latest = Math.max(lastAtakUpdate, lastDittoUpdate);
+            return new DeviceConnectivitySnapshot(uid,
+                    self ? callsign + " (you)" : callsign,
+                    connectionSummary(), latest <= 0L ? "No updates yet"
+                            : "Last update " + formatAge(latest),
+                    teamSummary(), role.length() == 0 ? "Unknown role" : role,
+                    atakGroupName.length() == 0 ? "No ATAK group"
+                            : atakGroupName,
+                    self);
+        }
+
+        private String connectionSummary() {
+            long now = System.currentTimeMillis();
+            boolean dittoFresh = ditto && lastDittoUpdate > 0L
+                    && now - lastDittoUpdate <= 30000L;
+            boolean dittoStale = ditto && !dittoFresh;
+            if (atak && dittoFresh)
+                return "ATAK CoT/server + Ditto mesh";
+            if (atak && dittoStale)
+                return "ATAK CoT/server + Ditto stale";
+            if (atak)
+                return "ATAK CoT/server";
+            if (dittoFresh)
+                return "Ditto mesh";
+            if (dittoStale)
+                return "Ditto stale";
+            return "Unknown";
+        }
+
+        private String teamSummary() {
+            if (teamName.length() > 0)
+                return teamName + " | " + teamId;
+            if (teamId.length() > 0)
+                return teamId;
+            return "No SARtak team advertised";
+        }
     }
 }

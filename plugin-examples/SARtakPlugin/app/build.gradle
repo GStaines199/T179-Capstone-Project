@@ -111,6 +111,15 @@ def getOptionalLocalProperty = { key ->
     return envValue == null ? "" : envValue.trim()
 }
 
+def getOptionalLocalPropertyAny = { keys ->
+    for (def key : keys) {
+        def value = getOptionalLocalProperty(key)
+        if (value != null && value.trim().length() > 0)
+            return value.trim()
+    }
+    return ""
+}
+
 def buildConfigString = { value ->
     def safe = value == null ? "" : value
     return "\"" + safe.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -275,13 +284,19 @@ android {
      defaultConfig {
         minSdkVersion 24
         buildConfigField "String", "DITTO_APP_ID",
-                buildConfigString(getOptionalLocalProperty("DITTO_APP_ID"))
+                buildConfigString(getOptionalLocalPropertyAny([
+                        "DITTO_APP_ID", "DITTO_DATABASE_ID",
+                        "DITTO_DATABASEID", "DITTO_DB_ID"]))
         buildConfigField "String", "DITTO_PLAYGROUND_TOKEN",
-                buildConfigString(getOptionalLocalProperty("DITTO_PLAYGROUND_TOKEN"))
+                buildConfigString(getOptionalLocalPropertyAny([
+                        "DITTO_PLAYGROUND_TOKEN", "DITTO_DEVELOPMENT_TOKEN",
+                        "DITTO_DEV_TOKEN", "DITTO_TOKEN"]))
         buildConfigField "String", "DITTO_AUTH_URL",
-                buildConfigString(getOptionalLocalProperty("DITTO_AUTH_URL"))
+                buildConfigString(getOptionalLocalPropertyAny([
+                        "DITTO_AUTH_URL", "DITTO_URL", "DITTO_APP_URL",
+                        "DITTO_AUTHURL"]))
         ndk {
-            abiFilters "armeabi-v7a", "arm64-v8a", "x86"
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
         }
     }
 

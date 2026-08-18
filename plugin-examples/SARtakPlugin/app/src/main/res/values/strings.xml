@@ -57,6 +57,7 @@
     <string name="tab_home">Home</string>
     <string name="tab_grid">Grid</string>
     <string name="tab_team">Team</string>
+    <string name="tab_devices">Devices</string>
     <string name="tab_track">Track</string>
     <string name="atak_role_label">ATAK Role</string>
     <string name="leader_view">Team Leader</string>
@@ -103,6 +104,8 @@
     <string name="grid_progress_empty">Select the current GPS cell to show grid progress.</string>
     <string name="hide_callsigns">Hide Callsigns</string>
     <string name="show_callsigns">Show Callsigns</string>
+    <string name="devices_heading">Connected Devices</string>
+    <string name="devices_waiting">Waiting for ATAK or Ditto devices</string>
 
 
 

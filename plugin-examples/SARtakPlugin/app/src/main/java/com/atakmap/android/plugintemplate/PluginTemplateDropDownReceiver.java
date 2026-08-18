@@ -25,6 +25,7 @@ import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.plugin.R;
 import com.atakmap.android.dropdown.DropDown.OnStateListener;
@@ -45,7 +46,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private static final int TAB_HOME = 0;
     private static final int TAB_GRID = 1;
     private static final int TAB_TEAM = 2;
-    private static final int TAB_TRACK = 3;
+    private static final int TAB_DEVICES = 3;
+    private static final int TAB_TRACK = 4;
 
     private final View templateView;
     private final Context pluginContext;
@@ -53,6 +55,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button homeTabButton;
     private final Button gridTabButton;
     private final Button teamTabButton;
+    private final Button devicesTabButton;
     private final Button trackTabButton;
     private final Button toggleSearchAreaButton;
     private final Button toggleGridLabelsButton;
@@ -78,6 +81,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final View homeTabContent;
     private final View gridTabContent;
     private final View teamTabContent;
+    private final View devicesTabContent;
     private final View trackTabContent;
     private final View leaderTeamControls;
     private final View otherTeamsSection;
@@ -99,8 +103,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView teamNameValue;
     private final LinearLayout teamMemberCardsContainer;
     private final LinearLayout invitesRequestsContainer;
+    private final LinearLayout devicesCardsContainer;
     private final TextView teamMarkerVisibilityValue;
     private final TextView atakContactStatusValue;
+    private final TextView devicesSummaryValue;
     private final TextView teamAlertsValue;
     private final TextView homeAlertsValue;
     private final TextView currentRoleValue;
@@ -136,6 +142,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeTabButton = templateView.findViewById(R.id.home_tab_button);
         gridTabButton = templateView.findViewById(R.id.grid_tab_button);
         teamTabButton = templateView.findViewById(R.id.team_tab_button);
+        devicesTabButton = templateView.findViewById(R.id.devices_tab_button);
         trackTabButton = templateView.findViewById(R.id.track_tab_button);
         toggleSearchAreaButton = templateView
                 .findViewById(R.id.toggle_search_area_button);
@@ -178,6 +185,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeTabContent = templateView.findViewById(R.id.home_tab_content);
         gridTabContent = templateView.findViewById(R.id.grid_tab_content);
         teamTabContent = templateView.findViewById(R.id.team_tab_content);
+        devicesTabContent = templateView.findViewById(
+                R.id.devices_tab_content);
         trackTabContent = templateView.findViewById(R.id.track_tab_content);
         leaderTeamControls = templateView.findViewById(R.id.leader_team_controls);
         otherTeamsSection = templateView.findViewById(R.id.other_teams_section);
@@ -206,10 +215,14 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.team_member_cards_container);
         invitesRequestsContainer = templateView
                 .findViewById(R.id.invites_requests_container);
+        devicesCardsContainer = templateView
+                .findViewById(R.id.devices_cards_container);
         teamMarkerVisibilityValue = templateView
                 .findViewById(R.id.team_marker_visibility_value);
         atakContactStatusValue = templateView
                 .findViewById(R.id.atak_contact_status_value);
+        devicesSummaryValue = templateView
+                .findViewById(R.id.devices_summary_value);
         teamAlertsValue = templateView.findViewById(R.id.team_alerts_value);
         homeAlertsValue = templateView.findViewById(R.id.home_alerts_value);
         currentRoleValue = templateView.findViewById(R.id.current_role_value);
@@ -219,6 +232,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeTabButton.setOnClickListener(this);
         gridTabButton.setOnClickListener(this);
         teamTabButton.setOnClickListener(this);
+        devicesTabButton.setOnClickListener(this);
         trackTabButton.setOnClickListener(this);
         toggleSearchAreaButton.setOnClickListener(this);
         toggleGridLabelsButton.setOnClickListener(this);
@@ -271,6 +285,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             showTab(TAB_GRID);
         } else if (id == R.id.team_tab_button) {
             showTab(TAB_TEAM);
+        } else if (id == R.id.devices_tab_button) {
+            showTab(TAB_DEVICES);
         } else if (id == R.id.track_tab_button) {
             showTab(TAB_TRACK);
         } else if (id == R.id.toggle_search_area_button) {
@@ -368,11 +384,14 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeTabContent.setVisibility(tab == TAB_HOME ? View.VISIBLE : View.GONE);
         gridTabContent.setVisibility(tab == TAB_GRID ? View.VISIBLE : View.GONE);
         teamTabContent.setVisibility(tab == TAB_TEAM ? View.VISIBLE : View.GONE);
+        devicesTabContent.setVisibility(tab == TAB_DEVICES
+                ? View.VISIBLE : View.GONE);
         trackTabContent.setVisibility(tab == TAB_TRACK ? View.VISIBLE : View.GONE);
 
         homeTabButton.setEnabled(tab != TAB_HOME);
         gridTabButton.setEnabled(tab != TAB_GRID);
         teamTabButton.setEnabled(tab != TAB_TEAM);
+        devicesTabButton.setEnabled(tab != TAB_DEVICES);
         trackTabButton.setEnabled(tab != TAB_TRACK);
     }
 
@@ -436,10 +455,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 ? mapController.getTeamName() + " | " + mapController
                         .getTeamId()
                 : (leaderView ? "No team created" : "Not in a team"));
+        int visibleTeamCount = mapController.getVisibleTeamAdvertisementCount();
         saveTeamSetupButton.setText(leaderView
                 ? (teamCreated ? "Edit Team Setup"
                         : "Create Team")
-                : (teamCreated ? "Leave Team" : "Join Team"));
+                : (teamCreated ? "Leave Team" : "Join Team ("
+                        + visibleTeamCount + " visible)"));
         refreshAtakContactsButton.setVisibility(leaderView
                 && teamCreated ? View.VISIBLE : View.GONE);
         removeTeamButton.setVisibility(leaderView && teamCreated
@@ -459,6 +480,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         atakContactStatusValue.setText(mapController.getTeamSyncSummary());
         renderTeamMemberCards();
         renderInvitesAndRequests();
+        renderDeviceCards();
         teamAlertsValue.setText(alertSummary);
         homeAlertsValue.setText(alertSummary);
         trackStatusValue.setText(mapController.getTrackStatusSummary());
@@ -679,7 +701,18 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private void pollTeamCotMessages() {
         mapController.advertiseTeamIfDue();
 
+        for (SearchTeamCotMessage removal
+                : mapController.getMemberRemovalsForMe()) {
+            if (handledTeamMessages.add(removal.getUid()))
+                handleMemberRemoval(removal);
+        }
+
         if (leaderView && mapController.isTeamCreated()) {
+            for (SearchTeamCotMessage left
+                    : mapController.getMemberLeavesForLeader()) {
+                if (handledTeamMessages.add(left.getUid()))
+                    handleMemberLeft(left);
+            }
             for (SearchTeamCotMessage request
                     : mapController.getPendingJoinRequests()) {
                 if (handledTeamMessages.add(request.getUid()))
@@ -821,6 +854,27 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
     }
 
+    private void handleMemberRemoval(SearchTeamCotMessage removal) {
+        if (!mapController.applyMemberRemoval(removal))
+            return;
+        resolvedTeamMessages.clear();
+        Toast.makeText(getMapView().getContext(),
+                removal.getLeaderCallsign() + " removed you from "
+                        + removal.getTeamName(),
+                Toast.LENGTH_LONG).show();
+        refreshGridUi();
+    }
+
+    private void handleMemberLeft(SearchTeamCotMessage left) {
+        String callsign = mapController.applyMemberLeft(left);
+        if (callsign.length() == 0)
+            return;
+        Toast.makeText(getMapView().getContext(),
+                callsign + " has left the team",
+                Toast.LENGTH_LONG).show();
+        refreshGridUi();
+    }
+
     private void showAddMemberDialog() {
         final java.util.List<AtakTeamContactDataSource.ContactSnapshot>
                 contacts = mapController.getAvailableContacts();
@@ -959,6 +1013,29 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
     }
 
+    private void renderDeviceCards() {
+        devicesCardsContainer.removeAllViews();
+        java.util.List<DeviceConnectivitySnapshot> devices =
+                mapController.getVisibleDevices();
+        int atakCount = 0;
+        int dittoCount = 0;
+        for (DeviceConnectivitySnapshot device : devices) {
+            String connection = device.getConnectionSummary();
+            if (connection.contains("ATAK"))
+                atakCount++;
+            if (connection.contains("Ditto"))
+                dittoCount++;
+            devicesCardsContainer.addView(createDeviceCard(device));
+        }
+        devicesSummaryValue.setText(devices.size() + " device(s) visible | "
+                + atakCount + " via ATAK/CoT | " + dittoCount
+                + " via Ditto");
+        if (devices.isEmpty())
+            devicesCardsContainer.addView(createCardText(
+                    "No ATAK contacts or Ditto peers visible yet", 13,
+                    false));
+    }
+
     private void renderInvitesAndRequests() {
         invitesRequestsContainer.removeAllViews();
         int count = 0;
@@ -981,6 +1058,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 count++;
             }
         } else if (!leaderView) {
+            java.util.List<SearchTeamCotMessage> joinResponses = mapController
+                    .getJoinResponsesForMe();
             for (SearchTeamCotMessage invite : mapController.getInvitesForMe()) {
                 if (resolvedTeamMessages.contains(invite.getUid()))
                     continue;
@@ -989,7 +1068,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             }
             for (SearchTeamCotMessage request
                     : mapController.getOutgoingJoinRequests()) {
-                if (resolvedTeamMessages.contains(request.getUid()))
+                if (resolvedTeamMessages.contains(request.getUid())
+                        || hasJoinResponse(request, joinResponses))
                     continue;
                 invitesRequestsContainer.addView(
                         createOutgoingJoinRequestCard(request));
@@ -1151,9 +1231,20 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private boolean hasInviteResponse(SearchTeamCotMessage invite,
             java.util.List<SearchTeamCotMessage> responses) {
         for (SearchTeamCotMessage response : responses) {
-            if (invite.getTargetUid().equals(response.getSenderUid())
-                    || invite.getTargetCallsign().equalsIgnoreCase(
-                            response.getSenderCallsign()))
+            if (response.getCreated() >= invite.getCreated()
+                    && (invite.getTargetUid().equals(response.getSenderUid())
+                            || invite.getTargetCallsign().equalsIgnoreCase(
+                                    response.getSenderCallsign())))
+                return true;
+        }
+        return false;
+    }
+
+    private boolean hasJoinResponse(SearchTeamCotMessage request,
+            java.util.List<SearchTeamCotMessage> responses) {
+        for (SearchTeamCotMessage response : responses) {
+            if (response.getCreated() >= request.getCreated()
+                    && request.getTeamId().equals(response.getTeamId()))
                 return true;
         }
         return false;
@@ -1259,6 +1350,44 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         card.addView(createCardText("Membership: "
                 + member.getMembershipStatus().name(), 12, false));
         return card;
+    }
+
+    private View createDeviceCard(DeviceConnectivitySnapshot device) {
+        LinearLayout card = createActionCard();
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(43, 48, 52));
+        background.setStroke(dp(device.isSelf() ? 2 : 1),
+                device.isSelf() ? Color.rgb(216, 182, 76)
+                        : deviceConnectionColor(device));
+        card.setBackground(background);
+
+        card.addView(createCardText(device.getCallsign(), 15, true));
+        card.addView(createCardText("Connected by: "
+                + device.getConnectionSummary(), 13, false));
+        card.addView(createCardText(device.getLastUpdateSummary(),
+                13, false));
+        card.addView(createCardText("SARtak team: "
+                + device.getTeamSummary(), 13, false));
+        card.addView(createCardText("ATAK group: "
+                + device.getAtakGroupName(), 13, false));
+        card.addView(createCardText("Role: " + device.getRole(),
+                13, false));
+        card.addView(createCardText("UID: " + device.getUid(),
+                12, false));
+        return card;
+    }
+
+    private int deviceConnectionColor(DeviceConnectivitySnapshot device) {
+        String connection = device.getConnectionSummary();
+        if (connection.contains("stale"))
+            return Color.rgb(216, 182, 76);
+        if (connection.contains("ATAK") && connection.contains("Ditto"))
+            return Color.rgb(66, 195, 106);
+        if (connection.contains("Ditto"))
+            return Color.rgb(74, 163, 255);
+        if (connection.contains("ATAK"))
+            return Color.rgb(180, 124, 255);
+        return Color.rgb(138, 143, 152);
     }
 
     private void showRemoveMemberDialog(final SearchTeamMember member) {

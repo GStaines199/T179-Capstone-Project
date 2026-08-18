@@ -2,8 +2,10 @@ package com.atakmap.android.plugintemplate.grid;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
@@ -20,6 +22,7 @@ public class SearchPartyAssignmentManager {
     public static final long DISCONNECTED_AFTER_MS = 60000L;
 
     private static final int COLOR_WHITE = 0xFFFFFFFF;
+    private static final int COLOR_UNASSIGNED = 0xFF8A8F98;
     private static final int COLOR_BLUE = 0xFF4AA3FF;
     private static final int COLOR_GREEN = 0xFF42C36A;
     private static final int COLOR_YELLOW = 0xFFD8B64C;
@@ -34,10 +37,11 @@ public class SearchPartyAssignmentManager {
 
     private String teamId = "";
     private String teamName = "";
-    private String teamColorName = "White";
-    private int teamColorArgb = COLOR_WHITE;
+    private String teamColorName = "Unassigned";
+    private int teamColorArgb = COLOR_UNASSIGNED;
     private String selfMemberId = "TL-A-001";
     private final List<SearchTeamMember> members = new ArrayList<>();
+    private final Set<String> blockedRosterMemberKeys = new HashSet<>();
     private int lastAtakMatchedMembers;
     private boolean teamCreated;
 
@@ -47,7 +51,8 @@ public class SearchPartyAssignmentManager {
     public SearchPartyAssignmentManager(SearcherRepository searcherRepository) {
         this.searcherRepository = searcherRepository;
         members.add(new SearchTeamMember("TL-A-001", "Alpha Lead",
-                SearchTeamMember.TeamRole.TEAM_LEADER, "White", COLOR_WHITE,
+                SearchTeamMember.TeamRole.TEAM_LEADER, "Unassigned",
+                COLOR_UNASSIGNED,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.CONNECTED, 1,
                 -27.4705, 153.0260, 0.0,
@@ -171,6 +176,7 @@ public class SearchPartyAssignmentManager {
     }
 
     public void createTeam(String teamName, String teamId) {
+        blockedRosterMemberKeys.clear();
         setTeamDetails(teamName, teamId);
         teamCreated = true;
         SearchTeamMember self = findMemberById(selfMemberId);
@@ -180,6 +186,7 @@ public class SearchPartyAssignmentManager {
     }
 
     public void joinTeam(String teamName, String teamId) {
+        blockedRosterMemberKeys.clear();
         setTeamDetails(teamName, teamId);
         teamCreated = true;
         SearchTeamMember self = findMemberById(selfMemberId);
@@ -192,14 +199,17 @@ public class SearchPartyAssignmentManager {
         teamId = "";
         teamName = "";
         teamCreated = false;
-        teamColorName = "White";
-        teamColorArgb = COLOR_WHITE;
+        blockedRosterMemberKeys.clear();
+        teamColorName = "Unassigned";
+        teamColorArgb = COLOR_UNASSIGNED;
         for (SearchTeamMember member : members) {
             if (member.getUniqueId().equals(selfMemberId)) {
                 member.setRole(SearchTeamMember.TeamRole.TEAM_LEADER);
                 member.setLaneNumber(1);
                 member.setMembershipStatus(
                         SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
+                member.setMarkerStyle("Unassigned", COLOR_UNASSIGNED,
+                        "Unassigned", COLOR_UNASSIGNED);
             } else {
                 member.setMembershipStatus(
                         SearchTeamMember.MembershipStatus.REMOVED);
@@ -225,8 +235,8 @@ public class SearchPartyAssignmentManager {
         SearchTeamMember self = findAnyMemberById(trimmedUid);
         if (self == null) {
             members.add(new SearchTeamMember(trimmedUid, trimmedCallsign,
-                    SearchTeamMember.TeamRole.TEAM_LEADER, "White",
-                    COLOR_WHITE,
+                    SearchTeamMember.TeamRole.TEAM_LEADER, "Unassigned",
+                    COLOR_UNASSIGNED,
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                     SearchTeamMember.ConnectionStatus.STALE, 1,
                     -27.4705, 153.0260, 0.0,
@@ -331,7 +341,30 @@ public class SearchPartyAssignmentManager {
         if (member == null || member.getUniqueId().equals(selfMemberId))
             return false;
         member.setMembershipStatus(SearchTeamMember.MembershipStatus.REMOVED);
+        blockRosterMember(member.getUniqueId(), member.getCallsign());
         return true;
+    }
+
+    public boolean removeTeamMemberByIdentity(String uid, String callsign) {
+        SearchTeamMember member = findMemberById(uid);
+        if (member == null && callsign != null) {
+            for (SearchTeamMember candidate : getVisibleMembers()) {
+                if (candidate.getCallsign().equalsIgnoreCase(callsign.trim())) {
+                    member = candidate;
+                    break;
+                }
+            }
+        }
+        if (member == null || member.getUniqueId().equals(selfMemberId))
+            return false;
+        member.setMembershipStatus(SearchTeamMember.MembershipStatus.REMOVED);
+        blockRosterMember(member.getUniqueId(), member.getCallsign());
+        return true;
+    }
+
+    public void unblockRosterMember(String uid, String callsign) {
+        blockedRosterMemberKeys.remove(memberKey(uid));
+        blockedRosterMemberKeys.remove(memberKey(callsign));
     }
 
     public void updateSelfFromAtak(AtakLocationStatus.Snapshot snapshot,
@@ -416,6 +449,9 @@ public class SearchPartyAssignmentManager {
                 continue;
             if (selfMemberId.equals(presence.getSenderUid()))
                 continue;
+            if (isBlockedRosterMember(presence.getSenderUid(),
+                    presence.getSenderCallsign()))
+                continue;
 
             SearchTeamMember.TeamRole role = sameMember(
                     presence.getSenderUid(), presence.getSenderCallsign(),
@@ -467,6 +503,9 @@ public class SearchPartyAssignmentManager {
             if (!teamId.equals(snapshot.getTeamId()))
                 continue;
             if (selfMemberId.equals(snapshot.getUid()))
+                continue;
+            if (isBlockedRosterMember(snapshot.getUid(),
+                    snapshot.getCallsign()))
                 continue;
 
             SearchTeamMember.TeamRole role = sameMember(snapshot.getUid(),
@@ -628,11 +667,39 @@ public class SearchPartyAssignmentManager {
         return null;
     }
 
+    private void blockRosterMember(String uid, String callsign) {
+        String uidKey = memberKey(uid);
+        if (uidKey.length() > 0)
+            blockedRosterMemberKeys.add(uidKey);
+        String callsignKey = memberKey(callsign);
+        if (callsignKey.length() > 0)
+            blockedRosterMemberKeys.add(callsignKey);
+    }
+
+    private boolean isBlockedRosterMember(String uid, String callsign) {
+        String uidKey = memberKey(uid);
+        if (uidKey.length() > 0 && blockedRosterMemberKeys.contains(uidKey))
+            return true;
+        String callsignKey = memberKey(callsign);
+        return callsignKey.length() > 0
+                && blockedRosterMemberKeys.contains(callsignKey);
+    }
+
+    private String memberKey(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.US);
+    }
+
     public SearchTeamMember getSelfMember() {
         return findMemberById(selfMemberId);
     }
 
     private void applyTeamStyle() {
+        if (!teamCreated && teamId.length() == 0 && teamName.length() == 0) {
+            SearchTeamStyle.ColorChoice unassigned =
+                    SearchTeamStyle.unassignedColor();
+            setTeamStyle(unassigned.getName(), unassigned.getArgb());
+            return;
+        }
         SearchTeamStyle.ColorChoice teamColor = SearchTeamStyle.teamColorFor(
                 teamId, teamName, "");
         setTeamStyle(teamColor.getName(), teamColor.getArgb());

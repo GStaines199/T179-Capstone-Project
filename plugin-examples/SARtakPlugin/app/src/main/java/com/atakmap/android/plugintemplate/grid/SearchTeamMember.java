@@ -25,8 +25,8 @@ public class SearchTeamMember {
     private TeamRole role;
     private String colorName;
     private int displayColor;
-    private String teamColorName = "White";
-    private int teamColorArgb = 0xFFFFFFFF;
+    private String teamColorName = "Unassigned";
+    private int teamColorArgb = 0xFF8A8F98;
     private double latitude;
     private double longitude;
     private double headingDegrees;

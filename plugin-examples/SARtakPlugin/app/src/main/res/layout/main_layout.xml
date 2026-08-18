@@ -46,6 +46,15 @@
                 android:text="@string/tab_team" />
 
             <Button
+                android:id="@+id/devices_tab_button"
+                style="@style/SARtakActionButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="4dp"
+                android:layout_weight="1"
+                android:text="@string/tab_devices" />
+
+            <Button
                 android:id="@+id/track_tab_button"
                 style="@style/SARtakActionButton"
                 android:layout_width="0dp"
@@ -878,6 +887,45 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:text="@string/other_team_summary" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/devices_tab_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/sartak_panel"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/SARtakSectionTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/devices_heading" />
+
+                <TextView
+                    android:id="@+id/devices_summary_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/sartak_status_yellow"
+                    android:padding="6dp"
+                    android:text="@string/devices_waiting" />
+
+                <LinearLayout
+                    android:id="@+id/devices_cards_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
 

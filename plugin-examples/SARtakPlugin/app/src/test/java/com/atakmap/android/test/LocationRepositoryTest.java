@@ -2,11 +2,8 @@ package com.atakmap.android.test;
 
 import android.content.Context;
 
-import android.location.Location;
-
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.database.LocationRepository;
-import com.atakmap.android.plugintemplate.runtime.RawGnssCapture;
 
 import org.junit.After;
 import org.junit.Before;
@@ -115,70 +112,6 @@ public class LocationRepositoryTest {
 
         assertEquals(1, repo.countPointsInSession("sessionA"));
         assertEquals(1, repo.countPointsInSession("sessionB"));
-    }
-
-    @Test
-    public void insertRaw_storesAccuracyMetadataUnmodified() {
-        Location location = new Location("gps");
-        location.setLatitude(-27.47);
-        location.setLongitude(153.02);
-        location.setAltitude(10.0);
-        location.setAccuracy(5.0f);
-        location.setBearing(90.0f);
-        location.setSpeed(1.5f);
-        location.setTime(1000L);
-        location.setVerticalAccuracyMeters(2.5f);
-        location.setBearingAccuracyDegrees(3.5f);
-        location.setSpeedAccuracyMetersPerSecond(0.5f);
-
-        repo.insertRaw("uid1", "Alice", "sessionRaw1", RawGnssCapture.from(location));
-
-        SQLiteCursorRow row = queryRawColumns("sessionRaw1");
-        assertEquals("gps", row.provider);
-        assertEquals(2.5, row.verticalAccuracy, 0.0001);
-        assertEquals(3.5, row.bearingAccuracy, 0.0001);
-        assertEquals(0.5, row.speedAccuracy, 0.0001);
-    }
-
-    @Test
-    public void insertRaw_withUnavailableAccuracyExtras_storesNull() {
-        Location location = new Location("network");
-        location.setLatitude(-27.47);
-        location.setLongitude(153.02);
-        location.setTime(1000L);
-        // No vertical/bearing/speed accuracy set on this fix.
-
-        repo.insertRaw("uid1", "Alice", "sessionRaw2", RawGnssCapture.from(location));
-
-        SQLiteCursorRow row = queryRawColumns("sessionRaw2");
-        assertEquals("network", row.provider);
-        assertNull(row.verticalAccuracy);
-        assertNull(row.bearingAccuracy);
-        assertNull(row.speedAccuracy);
-    }
-
-    private static class SQLiteCursorRow {
-        String provider;
-        Double verticalAccuracy;
-        Double bearingAccuracy;
-        Double speedAccuracy;
-    }
-
-    private SQLiteCursorRow queryRawColumns(String sessionId) {
-        android.database.Cursor cursor = dbHelper.getReadableDatabase().query(
-                "location_points",
-                new String[]{"provider", "vertical_accuracy_meters",
-                        "bearing_accuracy_degrees", "speed_accuracy_mps"},
-                "session_id = ?", new String[]{sessionId},
-                null, null, null);
-        assertTrue(cursor.moveToFirst());
-        SQLiteCursorRow row = new SQLiteCursorRow();
-        row.provider = cursor.getString(0);
-        row.verticalAccuracy = cursor.isNull(1) ? null : cursor.getDouble(1);
-        row.bearingAccuracy = cursor.isNull(2) ? null : cursor.getDouble(2);
-        row.speedAccuracy = cursor.isNull(3) ? null : cursor.getDouble(3);
-        cursor.close();
-        return row;
     }
 
 }

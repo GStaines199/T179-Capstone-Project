@@ -4,6 +4,23 @@ public class PluginHealthManager {
 
     public static final long LOCATION_STALE_MS = 30000L;
 
+    /**
+     * Source of the current time. Exists so the staleness boundary can be
+     * driven exactly in tests; production always reads the wall clock.
+     */
+    interface Clock {
+        long now();
+    }
+
+    private static final Clock SYSTEM_CLOCK = new Clock() {
+        @Override
+        public long now() {
+            return System.currentTimeMillis();
+        }
+    };
+
+    private final Clock clock;
+
     private boolean started;
     private boolean storageReady;
     private boolean identityResolved;
@@ -12,6 +29,14 @@ public class PluginHealthManager {
     private String identityMessage = "Identity pending";
     private String locationMessage = "Waiting for GPS";
     private String storageMessage = "Storage pending";
+
+    public PluginHealthManager() {
+        this(SYSTEM_CLOCK);
+    }
+
+    PluginHealthManager(Clock clock) {
+        this.clock = clock;
+    }
 
     public void start() {
         started = true;
@@ -58,16 +83,24 @@ public class PluginHealthManager {
                 && locationMessage.startsWith("GPS active");
     }
 
+    /**
+     * Current health, worst cause first. Setup problems outrank GPS loss: when
+     * identity cannot be resolved the capture loop clears the last fix too, and
+     * reporting that as GPS_LOST would blame the receiver for a problem that is
+     * not the receiver's.
+     */
     public PluginHealthState getState() {
         if (!started || !storageReady)
             return PluginHealthState.INACTIVE;
-        if (!identityResolved || !trackingActive || !hasFreshLocation())
+        if (!identityResolved || !trackingActive)
             return PluginHealthState.DEGRADED;
+        if (!hasFreshLocation())
+            return PluginHealthState.GPS_LOST;
         return PluginHealthState.ACTIVE;
     }
 
     public String getSummary() {
-        return "SARtak " + getState().name() + "\n"
+        return "SARtak " + getState().getLabel() + "\n"
                 + identityMessage + "\n"
                 + locationMessage + "\n"
                 + storageMessage;
@@ -79,7 +112,6 @@ public class PluginHealthManager {
 
     private boolean hasFreshLocation() {
         return lastLocationTimestamp > 0L
-                && System.currentTimeMillis() - lastLocationTimestamp
-                        <= LOCATION_STALE_MS;
+                && clock.now() - lastLocationTimestamp <= LOCATION_STALE_MS;
     }
 }

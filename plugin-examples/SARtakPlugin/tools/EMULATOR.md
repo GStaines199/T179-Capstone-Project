@@ -148,6 +148,23 @@ it unloaded until you enable it in **Settings > Tool Preferences > Plugins**. Co
 adb logcat -d | findstr AtakPluginRegistry
 ```
 
+**Reinstalling the apk resets that toggle.** ATAK treats an upgrade as an uninstall/reinstall and
+sets `shouldLoad-<pkg>` back to `false`, so the plugin silently vanishes from the Tools menu after
+every `install`. The descriptor still loads cleanly — it is not a load failure, and logcat shows
+`!should load, skipping` rather than an error. Re-enable it in the plugin preferences, or headlessly
+with ATAK stopped, then restart ATAK.
+
+The plugin panel cannot be opened with `adb shell am broadcast`: `SHOW_PLUGIN` is registered on
+ATAK's internal `AtakBroadcast` bus, not the system one, so the broadcast returns `result=0` and
+nothing happens. Open it through the UI (Tools menu > SARtak).
+
+To read the plugin's own state without the UI, the track log is a plain SQLite database — the
+quickest way to confirm points are, or are not, being written:
+
+```bash
+adb shell "su 0 sqlite3 /data/data/com.atakmap.app.civ/databases/sar_database.db 'SELECT COUNT(*) FROM location_points;'"
+```
+
 The plugin flavor must match the installed ATAK flavor — the SDK apk is **CIV**
 (`com.atakmap.app.civ`), so build the `civ` flavor, not the default `mil`.
 
@@ -160,3 +177,4 @@ The plugin flavor must match the installed ATAK flavor — the SDK apk is **CIV*
 | ATAK crash loop after a bad session | `tools/atak-emulator.ps1 reset` (wipes data), then `install`, `run`, `fixgl` |
 | Emulator won't start | `emulator -accel-check` — WHPX must report "installed and usable" |
 | Plugin not listed in ATAK | Wrong flavor (`mil` vs `civ`), or plugin `ATAK_VERSION` != installed ATAK version |
+| Plugin gone from Tools after reinstalling it | `shouldLoad-<pkg>` reset to `false`; re-enable in plugin preferences |

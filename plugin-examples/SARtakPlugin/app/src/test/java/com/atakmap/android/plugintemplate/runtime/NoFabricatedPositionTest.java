@@ -183,6 +183,23 @@ public class NoFabricatedPositionTest {
         assertEquals(3, listenerCalls);
     }
 
+    // --- nothing fabricated is broadcast to the team ----------------------
+
+    @Test
+    public void anUnavailableSnapshot_isNotPublishableAsAPosition() {
+        assertTrue(!CotPublishPoint.hasPublishablePosition(
+                AtakLocationStatus.Snapshot.unavailable("No GPS Signal")));
+    }
+
+    @Test
+    public void aMissingSnapshot_isNotPublishableAsAPosition() {
+        assertTrue(!CotPublishPoint.hasPublishablePosition(null));
+    }
+
+    // That an unpublishable snapshot yields CotPoint.ZERO cannot be
+    // asserted here: CotPoint fails JVM verification off-device, under
+    // Robolectric too. That half is verified on the emulator instead.
+
     private void capture(LocationCaptureManager.Fix fix) {
         captureManager.applyCapture(true, "Identity: " + CALLSIGN, UID,
                 CALLSIGN, fix);

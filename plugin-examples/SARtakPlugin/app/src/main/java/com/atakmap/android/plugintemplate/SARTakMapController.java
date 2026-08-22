@@ -113,19 +113,20 @@ public class SARTakMapController {
                 identityManager);
         this.searchLineCotWorkflow = new SearchLineCotWorkflow(mapView,
                 identityManager);
-        this.locationCaptureManager = new LocationCaptureManager(mapView,
-                identityManager, trackManager, healthManager,
-                new LocationCaptureManager.Listener() {
-                    @Override
-                    public void onLocationCaptured() {
-                        refreshOverlay();
-                    }
-                });
         this.rawGnssCaptureManager = new RawGnssCaptureManager(runtimeContext,
                 identityManager, trackManager, locationRepository,
                 new RawGnssCaptureManager.Listener() {
                     @Override
                     public void onRawGnssCaptured(RawGnssCapture capture) {
+                        refreshOverlay();
+                    }
+                });
+        this.locationCaptureManager = new LocationCaptureManager(mapView,
+                identityManager, trackManager, healthManager,
+                rawGnssCaptureManager,
+                new LocationCaptureManager.Listener() {
+                    @Override
+                    public void onLocationCaptured() {
                         refreshOverlay();
                     }
                 });

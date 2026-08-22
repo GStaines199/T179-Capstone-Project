@@ -91,6 +91,8 @@ public class RawGnssCaptureManager {
         IdentityManager.Identity identity = identityManager.resolveIdentity();
         if (!identity.isResolved())
             return;
+        if (!trackManager.isRecording())
+            return;
 
         String sessionId = trackManager.getActiveSessionId();
         if (sessionId == null) {

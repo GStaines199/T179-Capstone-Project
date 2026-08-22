@@ -18,6 +18,7 @@ public class LocationCaptureManager {
     private final IdentityManager identityManager;
     private final SearchTrackManager trackManager;
     private final PluginHealthManager healthManager;
+    private final RawGnssCaptureManager rawGnssCaptureManager;
     private final Listener listener;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean running;
@@ -33,11 +34,13 @@ public class LocationCaptureManager {
 
     public LocationCaptureManager(MapView mapView,
             IdentityManager identityManager, SearchTrackManager trackManager,
-            PluginHealthManager healthManager, Listener listener) {
+            PluginHealthManager healthManager,
+            RawGnssCaptureManager rawGnssCaptureManager, Listener listener) {
         this.mapView = mapView;
         this.identityManager = identityManager;
         this.trackManager = trackManager;
         this.healthManager = healthManager;
+        this.rawGnssCaptureManager = rawGnssCaptureManager;
         this.listener = listener;
     }
 
@@ -74,10 +77,18 @@ public class LocationCaptureManager {
 
         long timestamp = snapshot.getTimestamp();
         double accuracy = snapshot.getPoint().getCE();
-        trackManager.recordLocation(identity.getUid(), identity.getCallsign(),
-                snapshot.getPoint(), accuracy,
-                mapView.getSelfMarker().getTrackHeading(),
-                mapView.getSelfMarker().getTrackSpeed(), timestamp);
+        // Raw GNSS capture (when running) is the authoritative track source -
+        // it preserves unmodified device accuracy metadata per the Sprint 1
+        // requirement. Skip also logging the ATAK self-marker fix here so
+        // SearchTrackOverlay/getTrackPoints never blend two position sources
+        // into one session. The self-marker snapshot below still drives
+        // identity/health reporting regardless of which source is logging.
+        if (rawGnssCaptureManager == null || !rawGnssCaptureManager.isRunning()) {
+            trackManager.recordLocation(identity.getUid(), identity.getCallsign(),
+                    snapshot.getPoint(), accuracy,
+                    mapView.getSelfMarker().getTrackHeading(),
+                    mapView.getSelfMarker().getTrackSpeed(), timestamp);
+        }
         healthManager.setTrackingActive(trackManager.isRecording());
         healthManager.recordLocationSuccess(timestamp, accuracy,
                 snapshot.getSource());

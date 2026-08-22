@@ -34,6 +34,8 @@ import com.atakmap.android.plugintemplate.runtime.AtakTrackBridge;
 import com.atakmap.android.plugintemplate.runtime.IdentityManager;
 import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
+import com.atakmap.android.plugintemplate.runtime.RawGnssCapture;
+import com.atakmap.android.plugintemplate.runtime.RawGnssCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchLineCotMessage;
@@ -60,6 +62,7 @@ public class SARTakMapController {
     private final PluginHealthManager healthManager;
     private final IdentityManager identityManager;
     private final LocationCaptureManager locationCaptureManager;
+    private final RawGnssCaptureManager rawGnssCaptureManager;
     private final AtakTeamContactDataSource teamContactDataSource;
     private final SearchTeamCotWorkflow teamCotWorkflow;
     private final SearchGridCotWorkflow gridCotWorkflow;
@@ -115,6 +118,14 @@ public class SARTakMapController {
                 new LocationCaptureManager.Listener() {
                     @Override
                     public void onLocationCaptured() {
+                        refreshOverlay();
+                    }
+                });
+        this.rawGnssCaptureManager = new RawGnssCaptureManager(runtimeContext,
+                identityManager, trackManager, locationRepository,
+                new RawGnssCaptureManager.Listener() {
+                    @Override
+                    public void onRawGnssCaptured(RawGnssCapture capture) {
                         refreshOverlay();
                     }
                 });
@@ -759,6 +770,7 @@ public class SARTakMapController {
 
     public void dispose() {
         locationCaptureManager.stop();
+        rawGnssCaptureManager.stop();
         healthManager.stop();
         teamCotWorkflow.dispose();
         gridCotWorkflow.dispose();
@@ -900,6 +912,7 @@ public class SARTakMapController {
             healthManager.setTrackingActive(false);
         }
         locationCaptureManager.start();
+        rawGnssCaptureManager.start();
     }
 
     private void refreshLocationAvailability() {

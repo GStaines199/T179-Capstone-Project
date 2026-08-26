@@ -1,6 +1,7 @@
 package com.atakmap.android.plugintemplate.grid;
 
 import com.atakmap.coremap.maps.coords.GeoPoint;
+import com.atakmap.coremap.maps.coords.UTMPoint;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,17 +23,27 @@ public class SearchGridManager {
         // Fallback grid alignment snaps directly to ATAK's UTM metre
         // coordinates at 100 m boundaries. If ATAK exposes the exact visible
         // MGRS 100 m square later, this is the method to replace.
-        selectedCell = converter.cellForPoint(point, stateStore);
-        selectedAggregateId = selectedCell.getAggregateId();
-        if (selectedCell.getStatus() == SearchGridStatus.NOT_STARTED) {
-            // Selecting a cell means the team has started operating in it, but
-            // IN_PROGRESS intentionally has no fill colour and does not count
-            // toward zoomed-out progress aggregation.
-            selectedCell.setStatus(SearchGridStatus.IN_PROGRESS);
-            stateStore.setStatus(selectedCell.getId(),
-                    SearchGridStatus.IN_PROGRESS);
+        UTMPoint utm = UTMPoint.fromGeoPoint(point);
+        return selectCell(converter.cellForUtmPoint(utm.getZoneDescriptor(),
+                utm.getEasting(), utm.getNorthing(), stateStore));
+    }
+
+    /**
+     * Makes the given cell the active selection. Selecting a cell means the
+     * team has started operating in it; IN_PROGRESS intentionally has no fill
+     * colour and does not count toward zoomed-out progress aggregation.
+     * <p>
+     * Kept free of ATAK types (unlike {@link #selectCellAt(GeoPoint)}) so the
+     * selection logic can be unit tested on a plain JVM.
+     */
+    SearchGridCell selectCell(SearchGridCell cell) {
+        selectedCell = cell;
+        selectedAggregateId = cell.getAggregateId();
+        if (cell.getStatus() == SearchGridStatus.NOT_STARTED) {
+            cell.setStatus(SearchGridStatus.IN_PROGRESS);
+            stateStore.setStatus(cell.getId(), SearchGridStatus.IN_PROGRESS);
         }
-        return selectedCell;
+        return cell;
     }
 
     public SearchGridCell getSelectedCell() {

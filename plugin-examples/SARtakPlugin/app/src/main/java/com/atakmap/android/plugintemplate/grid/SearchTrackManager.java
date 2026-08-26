@@ -142,14 +142,33 @@ public class SearchTrackManager {
 
     private double calculateDistance(List<double[]> points) {
         double total = 0.0;
-        GeoPoint previous = null;
+        double prevLat = Double.NaN;
+        double prevLng = Double.NaN;
         for (double[] point : points) {
-            GeoPoint current = new GeoPoint(point[0], point[1]);
-            if (previous != null)
-                total += previous.distanceTo(current);
-            previous = current;
+            double lat = point[0];
+            double lng = point[1];
+            if (!Double.isNaN(prevLat))
+                total += haversineDistance(prevLat, prevLng, lat, lng);
+            prevLat = lat;
+            prevLng = lng;
         }
         return total;
+    }
+
+    /**
+     * Great-circle distance between two coordinates in metres. Kept free of
+     * ATAK types so the track-summary logic can be unit tested on a plain JVM;
+     * the ATAK GeoPoint#distanceTo path is not used here.
+     */
+    public static double haversineDistance(double lat1, double lng1,
+            double lat2, double lng2) {
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return 6371000.0 * c;
     }
 
     private String formatDuration(long elapsedSeconds) {
@@ -158,5 +177,16 @@ public class SearchTrackManager {
         return String.format(Locale.US, "%d min %02d sec", minutes, seconds);
     }
 
+    public void stopSession() {
+        if (activeSessionId != null) {
+            trackSessionRepository.closeSession(
+                    activeSessionId,
+                    System.currentTimeMillis()
+                    /// completed push
+            );
+            activeSessionId = null;
+            sessionStartedAt = 0L;
+        }
+    }
 }
 

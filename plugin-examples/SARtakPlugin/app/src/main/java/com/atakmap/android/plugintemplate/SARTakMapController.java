@@ -123,7 +123,6 @@ public class SARTakMapController {
                 });
         this.locationCaptureManager = new LocationCaptureManager(mapView,
                 identityManager, trackManager, healthManager,
-                rawGnssCaptureManager,
                 new LocationCaptureManager.Listener() {
                     @Override
                     public void onLocationCaptured() {

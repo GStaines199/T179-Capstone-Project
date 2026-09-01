@@ -12,6 +12,7 @@ import com.atakmap.android.plugintemplate.database.LocationRepository;
 import com.atakmap.android.plugintemplate.database.SearcherRepository;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
+import com.atakmap.android.plugintemplate.grid.MemberPositionPolicy;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
 import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
@@ -691,8 +692,12 @@ public class SARTakMapController {
             return null;
 
         teamMarkerOverlay.setSelectedMemberId(uniqueId);
-        mapView.getMapController().panTo(new GeoPoint(member.getLatitude(),
-                member.getLongitude()), true);
+        // Selecting a member whose position ATAK has not reported is fine --
+        // their card still opens. Flying the map to their placeholder
+        // coordinates is not: it tells the operator we know where they are.
+        if (MemberPositionPolicy.hasUsablePosition(member))
+            mapView.getMapController().panTo(new GeoPoint(member.getLatitude(),
+                    member.getLongitude()), true);
         return member;
     }
 

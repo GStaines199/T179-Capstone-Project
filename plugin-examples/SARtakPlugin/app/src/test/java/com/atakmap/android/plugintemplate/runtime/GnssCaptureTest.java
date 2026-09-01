@@ -759,14 +759,31 @@ public class GnssCaptureTest {
     }
 
     @Test
-    public void getPointsForSession_collapsesNullAccuracyToZero() {
-        // Pins the current reader: it returns a double[] with no room for
-        // "unknown", so a NULL accuracy arrives at the caller as 0 m. Whatever
-        // consumes accuracy has to gain a way to see the difference.
+    public void getPointsForSession_reportsNullAccuracyAsNotANumber() {
+        // This test used to pin the opposite: the reader returned a double[]
+        // with no room for "unknown", so a NULL accuracy arrived at the caller
+        // as 0 m, and its comment said whatever consumes accuracy has to gain
+        // a way to see the difference. It now has one -- NaN, which no real
+        // fix can carry -- so the collapse is gone rather than pinned.
         insertRawWithNulls("accuracy_meters");
 
         List<double[]> points = repo.getPointsForSession(SESSION);
         assertEquals(1, points.size());
+        assertTrue("an unreported accuracy must not read back as 0 m",
+                Double.isNaN(points.get(0)[3]));
+    }
+
+    @Test
+    public void getPointsForSession_stillReportsAMeasuredZeroAccuracy() {
+        // The other side of it: 0 m is a legitimate reading and must survive.
+        Location fix = gpsFix();
+        fix.setAccuracy(0.0f);
+        insert(fix);
+
+        List<double[]> points = repo.getPointsForSession(SESSION);
+        assertEquals(1, points.size());
+        assertFalse("a measured 0 m is a reading, not a missing value",
+                Double.isNaN(points.get(0)[3]));
         assertEquals(0.0, points.get(0)[3], 0.0);
     }
 

@@ -232,14 +232,33 @@ public class SearchTeamMarkerOverlay {
 
     private boolean hasWarningOutline(SearchTeamMember member,
             List<SearchLineMemberStatus> lineStatuses) {
+        return hasWarningOutline(member, lineStatuses,
+                searchLineManager.isStarted());
+    }
+
+    /**
+     * Whether a member's marker gets a warning outline.
+     *
+     * <p>Static and package-private so a unit test can reach it: the rest of
+     * this class needs a MapView, which a JVM test cannot build. Taking
+     * lineStarted as a parameter rather than reading the manager is what makes
+     * that possible.
+     *
+     * <p>Asks {@link SearchLineMemberStatus#isOffLine(double)} rather than
+     * comparing the raw distance itself. Reading the distance directly is how
+     * this method previously came to test a number without first asking
+     * whether there was a position behind it.
+     */
+    static boolean hasWarningOutline(SearchTeamMember member,
+            List<SearchLineMemberStatus> lineStatuses, boolean lineStarted) {
         if (member.needsConnectionAlert())
             return true;
-        if (!searchLineManager.isStarted())
+        if (!lineStarted)
             return false;
         for (SearchLineMemberStatus status : lineStatuses) {
             if (member.getUniqueId().equals(status.getMember().getUniqueId())
-                    && Math.abs(status.getDistanceFromLineMeters())
-                            > SearchLineManager.SLOW_DOWN_THRESHOLD_METERS)
+                    && status.isOffLine(
+                            SearchLineManager.SLOW_DOWN_THRESHOLD_METERS))
                 return true;
         }
         return false;

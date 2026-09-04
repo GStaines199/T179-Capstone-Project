@@ -918,7 +918,7 @@ public class SARTakMapController {
         healthManager.setStorageReady(storage.isReady(), storage.getMessage());
         if (!storage.isReady()) {
             healthManager.setTrackingActive(false);
-            healthManager.recordLocationFailure(
+            healthManager.reportNotCapturing(
                     "Not capturing: local storage unavailable");
             return;
         }

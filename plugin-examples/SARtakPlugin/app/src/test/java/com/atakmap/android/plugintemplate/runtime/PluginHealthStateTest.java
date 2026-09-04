@@ -231,6 +231,91 @@ public class PluginHealthStateTest {
     }
 
     @Test
+    public void recordLocationSuccess_whileInactive_keepsTheStorageReason() {
+        PluginHealthManager manager = readyManager();
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+        manager.setTrackingActive(false);
+        manager.reportNotCapturing("Not capturing: local storage unavailable");
+
+        // The panel calls this on every refresh, not just the capture loop, so
+        // before the guard it overwrote the line above and the panel read
+        // "GPS active" while nothing was being logged. Found on the emulator.
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+
+        assertEquals("Not capturing: local storage unavailable",
+                manager.getLocationMessage());
+        assertFalse(manager.isLocationActive());
+        assertEquals(PluginHealthState.INACTIVE, manager.getState());
+    }
+
+    @Test
+    public void recordLocationSuccess_whileInactive_doesNotCreateAFreshFix() {
+        PluginHealthManager manager = new PluginHealthManager(clock);
+        manager.setIdentityResolved(true, "Identity: RESCUE-1");
+        manager.setTrackingActive(true);
+
+        // Never started, so INACTIVE. A refresh must not leave a timestamp
+        // behind that would later read as a live fix.
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+        manager.start();
+        manager.setStorageReady(true, "Local storage ready");
+
+        assertEquals(PluginHealthState.GPS_LOST, manager.getState());
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void recordLocationFailure_whileInactive_cannotBlameTheReceiver() {
+        PluginHealthManager manager = readyManager();
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+        manager.reportNotCapturing("Not capturing: local storage unavailable");
+
+        // On the emulator a refresh landed before ATAK's first fix and pinned
+        // the line to "No GPS Signal" with the receiver working fine. While
+        // nothing is being captured the receiver is not the story.
+        manager.recordLocationFailure("No GPS Signal");
+
+        assertEquals("Not capturing: local storage unavailable",
+                manager.getLocationMessage());
+    }
+
+    @Test
+    public void reportNotCapturing_isTheOneWayInWhileInactive() {
+        PluginHealthManager manager = readyManager();
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+
+        manager.reportNotCapturing("Not capturing: local storage unavailable");
+
+        assertEquals("Not capturing: local storage unavailable",
+                manager.getLocationMessage());
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void recordLocationFailure_whenCapturing_stillReportsTheFault() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+
+        // The guard must not swallow a genuine GPS fault on a healthy plugin.
+        manager.recordLocationFailure("GPS stale; ATAK fix is 45 seconds old");
+
+        assertEquals("GPS stale; ATAK fix is 45 seconds old",
+                manager.getLocationMessage());
+        assertEquals(PluginHealthState.GPS_LOST, manager.getState());
+    }
+
+    @Test
+    public void recordLocationSuccess_whenHealthy_stillReports() {
+        PluginHealthManager manager = readyManager();
+
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+
+        assertEquals("GPS active | Source GPS | Accuracy 5 m",
+                manager.getLocationMessage());
+        assertTrue(manager.isLocationActive());
+    }
+
+    @Test
     public void getSummary_namesTheStateInOperatorWording() {
         PluginHealthManager manager = readyManager();
 

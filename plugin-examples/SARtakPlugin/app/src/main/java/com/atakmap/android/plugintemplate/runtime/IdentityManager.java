@@ -90,17 +90,45 @@ public class IdentityManager {
         currentIdentity = resolve(MapView.getDeviceUid(),
                 mapView.getDeviceCallsign(), selfUid, selfCallsign,
                 deviceFallback);
-        if (currentIdentity.isResolved()) {
-            long now = System.currentTimeMillis();
+        if (currentIdentity.isResolved())
+            remember(searcherRepository, currentIdentity, Build.MODEL,
+                    System.currentTimeMillis());
+        return currentIdentity;
+    }
+
+    /**
+     * Stores the resolved identity as this device's self row, and reports
+     * whether that succeeded.
+     *
+     * <p>A storage fault must not propagate out of identity resolution. Who we
+     * are comes from ATAK, not from SQLite, and the callers that ask for it --
+     * the CoT workflows, the capture loop, the panel -- run on ATAK's thread
+     * every few seconds. Before this guard, a database that failed to open
+     * turned every one of those into a crash, which meant the INACTIVE state
+     * {@code StorageAvailability} exists to report was never on screen long
+     * enough to read.
+     *
+     * <p>Swallowing the failure is only acceptable because it is already
+     * reported: the startup probe puts the reason on the health panel and holds
+     * the plugin in INACTIVE. This is not a silent catch, it is a second
+     * symptom of a fault that is announced elsewhere.
+     *
+     * <p>Static and package-private so the failure path is reachable from a
+     * test; the rest of this class needs a {@code MapView}.
+     */
+    static boolean remember(SearcherRepository repository, Identity identity,
+            String deviceModel, long now) {
+        try {
             // The UID changes when ATAK gains or loses an identity mid-session.
             // Without this the old row keeps its self flag and the stored self
             // identity becomes whichever of the two the query happens to hit.
-            searcherRepository.clearSelfFlagExcept(currentIdentity.getUid());
-            searcherRepository.insertOrUpdate(currentIdentity.getUid(),
-                    currentIdentity.getCallsign(), Build.MODEL, now, now,
-                    true);
+            repository.clearSelfFlagExcept(identity.getUid());
+            repository.insertOrUpdate(identity.getUid(),
+                    identity.getCallsign(), deviceModel, now, now, true);
+            return true;
+        } catch (RuntimeException e) {
+            return false;
         }
-        return currentIdentity;
     }
 
     /**

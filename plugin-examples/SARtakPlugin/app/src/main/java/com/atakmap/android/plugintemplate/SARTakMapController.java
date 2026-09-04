@@ -10,6 +10,7 @@ import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.database.LocationRepository;
 import com.atakmap.android.plugintemplate.database.SearcherRepository;
+import com.atakmap.android.plugintemplate.database.StorageAvailability;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
 import com.atakmap.android.plugintemplate.grid.MemberPositionPolicy;
@@ -69,6 +70,7 @@ public class SARTakMapController {
     private final SearchGridCotWorkflow gridCotWorkflow;
     private final SearchLineCotWorkflow searchLineCotWorkflow;
     private final SearchTeamStateStore teamStateStore;
+    private final DatabaseHelper databaseHelper;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
     private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
     private final Runnable backgroundRunnable;
@@ -81,7 +83,7 @@ public class SARTakMapController {
         // ATAK plugin contexts are suitable for resources/layout inflation, but
         // runtime files belong under ATAK's writable app context.
         Context runtimeContext = mapView.getContext();
-        DatabaseHelper databaseHelper = DatabaseHelper.getInstance(runtimeContext);
+        this.databaseHelper = DatabaseHelper.getInstance(runtimeContext);
         SearcherRepository searcherRepository = new SearcherRepository(
                 databaseHelper);
         TrackSessionRepository trackSessionRepository =
@@ -898,9 +900,28 @@ public class SARTakMapController {
         return null;
     }
 
+    /**
+     * Brings the runtime up, but only as far as storage allows.
+     *
+     * <p>The storage probe gates everything after it rather than only setting a
+     * flag. Every step below writes to SQLite -- {@code resolveIdentity} stores
+     * the self row, {@code startOrResume} opens a track session, and the capture
+     * loop resolves identity again every cycle -- so running them against a
+     * database that did not open would throw on ATAK's thread instead of
+     * reporting INACTIVE. Reporting the failure is the whole point of the
+     * check; crashing past it would report nothing.
+     */
     private void initialiseRuntime() {
         healthManager.start();
-        healthManager.setStorageReady(true, "Local storage ready");
+        StorageAvailability.Result storage =
+                StorageAvailability.probe(databaseHelper);
+        healthManager.setStorageReady(storage.isReady(), storage.getMessage());
+        if (!storage.isReady()) {
+            healthManager.setTrackingActive(false);
+            healthManager.recordLocationFailure(
+                    "Not capturing: local storage unavailable");
+            return;
+        }
         IdentityManager.Identity identity = identityManager.resolveIdentity();
         healthManager.setIdentityResolved(identity.isResolved(),
                 identity.getMessage());

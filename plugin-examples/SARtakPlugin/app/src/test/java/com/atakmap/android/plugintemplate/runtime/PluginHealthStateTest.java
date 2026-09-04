@@ -164,6 +164,73 @@ public class PluginHealthStateTest {
     }
 
     @Test
+    public void isLocationActive_whenStorageIsNotReady_isFalseDespiteAFreshFix() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+        assertTrue(manager.isLocationActive());
+
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+
+        // The plugin is INACTIVE, so nothing is being logged. Reporting the GPS
+        // as fine here would tell the operator the one thing they must not be
+        // told: that the search is being recorded when it is not.
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void isLocationActive_whenStopped_isFalseDespiteAFreshFix() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+
+        manager.stop();
+
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void isLocationActive_whenRecordingIsPaused_staysTrue() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+
+        // A paused recording reads as DEGRADED, but the receiver is working and
+        // the message beside the indicator still says so. This pins the
+        // divergence from the audit's "isLocationActive should be
+        // getState() == ACTIVE": that would paint the GPS field red while the
+        // text next to it read "GPS active".
+        manager.setTrackingActive(false);
+
+        assertEquals(PluginHealthState.DEGRADED, manager.getState());
+        assertTrue(manager.isLocationActive());
+        assertTrue(manager.getLocationMessage().startsWith("GPS active"));
+    }
+
+    @Test
+    public void isLocationActive_whenIdentityIsUnresolved_isFalse() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+
+        // The other half of DEGRADED. The capture loop clears the fix when it
+        // cannot resolve who we are, so there is genuinely nothing to report.
+        manager.setIdentityResolved(false, "Identity unavailable");
+        manager.recordLocationFailure("Identity unavailable; tracking degraded");
+
+        assertEquals(PluginHealthState.DEGRADED, manager.getState());
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void isLocationActive_isNotDecidedByTheWordingOfTheMessage() {
+        PluginHealthManager manager = readyManager();
+
+        // A failure whose prose happens to open with the old magic prefix. The
+        // indicator must follow the model, not the sentence: this used to be
+        // decided by startsWith("GPS active") on exactly this string.
+        manager.recordLocationFailure("GPS active earlier; no fix since 09:51");
+
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
     public void getSummary_namesTheStateInOperatorWording() {
         PluginHealthManager manager = readyManager();
 

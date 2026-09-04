@@ -77,10 +77,29 @@ public class PluginHealthManager {
         locationMessage = message;
     }
 
+    /**
+     * Whether the panel's GPS field may be shown as working.
+     *
+     * <p>Answered from the health model, never from
+     * {@link #getLocationMessage()}. This used to prefix-match "GPS active" on
+     * that message -- prose assembled for a human, which any rewording would
+     * have silently pinned to red. The match was redundant as well as fragile:
+     * only {@link #recordLocationSuccess} sets a fix timestamp and only
+     * {@link #recordLocationFailure} clears it, so freshness already carried
+     * the whole answer.
+     *
+     * <p><b>Deliberately not {@code getState() == ACTIVE}.</b> DEGRADED merges
+     * two unrelated causes. One is an unresolved identity, where the capture
+     * loop clears the fix and there is genuinely nothing to report. The other
+     * is a recording the operator paused, where the receiver is working
+     * normally and the message printed beside this indicator still reads "GPS
+     * active" -- colouring that red would contradict the text next to it and
+     * blame the receiver for a deliberate act. Ruling out INACTIVE is enough:
+     * a storage failure stops {@code initialiseRuntime} before the capture loop
+     * starts, so it can never leave a fresh fix behind.
+     */
     public boolean isLocationActive() {
-        return hasFreshLocation()
-                && locationMessage != null
-                && locationMessage.startsWith("GPS active");
+        return getState() != PluginHealthState.INACTIVE && hasFreshLocation();
     }
 
     /**
@@ -108,6 +127,14 @@ public class PluginHealthManager {
 
     public String getLocationMessage() {
         return locationMessage;
+    }
+
+    /**
+     * Why storage is or is not usable. Set from the startup probe rather than
+     * asserted, so this carries a real reason when the state is INACTIVE.
+     */
+    public String getStorageMessage() {
+        return storageMessage;
     }
 
     private boolean hasFreshLocation() {

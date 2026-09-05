@@ -211,6 +211,15 @@ public class LocationCaptureManager {
             return;
         }
 
+        long timestamp = snapshot.getTimestamp();
+        double accuracy = snapshot.getPoint().getCE();
+        // Track points are only ever logged by raw GNSS capture
+        // (RawGnssCaptureManager) so the track never mixes ATAK's
+        // internally-fused self-marker fix with unmodified raw device
+        // readings - see Sprint 1 "preserve accuracy metadata without
+        // modification". This self-marker snapshot is used purely to drive
+        // identity/health reporting (Active/Degraded/GPS Lost) below, not
+        // to log a track point.
         trackManager.recordLocation(identity.getUid(), identity.getCallsign(),
                 fix.getLatitude(), fix.getLongitude(), fix.getAltitude(),
                 fix.getAccuracy(), fix.getBearing(), fix.getSpeed(),

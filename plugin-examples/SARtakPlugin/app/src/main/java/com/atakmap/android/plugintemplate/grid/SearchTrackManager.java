@@ -1,6 +1,7 @@
 package com.atakmap.android.plugintemplate.grid;
 
 import com.atakmap.android.plugintemplate.database.LocationRepository;
+import com.atakmap.android.plugintemplate.database.ReportedMeasurement;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
@@ -110,17 +111,42 @@ public class SearchTrackManager {
                 speed, timestamp);
     }
 
+    /**
+     * Records a fix whose measurements are all known to have been reported.
+     *
+     * <p>Delegates to {@link #recordFix} rather than to the primitive
+     * {@code insert}, so a NaN arriving through this path is resolved to "not
+     * reported" explicitly rather than relying on SQLite to coerce it.
+     */
     public void recordLocation(String uid, String callsign, double latitude,
             double longitude, double altitude, double accuracy, double bearing,
             double speed, long timestamp) {
+        recordFix(uid, callsign, latitude, longitude, altitude, accuracy,
+                bearing, speed, timestamp);
+    }
+
+    /**
+     * Records a fix, preserving which measurements the receiver actually
+     * reported.
+     *
+     * <p>Null means "not reported" and is stored as NULL. That distinction
+     * cannot be recovered once written, because 0 m accuracy and a due-north
+     * bearing are both values a real fix can legitimately have.
+     */
+    public void recordFix(String uid, String callsign, double latitude,
+            double longitude, Double altitude, Double accuracy, Double bearing,
+            Double speed, long timestamp) {
         if (!recording || !hasActiveOperation())
             return;
         if (activeSessionId == null || activeUid == null
                 || !activeUid.equals(uid))
             startOrResume(uid, callsign);
 
-        locationRepository.insert(uid, callsign, latitude, longitude, altitude,
-                (float) accuracy, (float) bearing, (float) speed, timestamp,
+        locationRepository.insertFix(uid, callsign, latitude, longitude,
+                ReportedMeasurement.of(altitude),
+                ReportedMeasurement.toFloat(accuracy),
+                ReportedMeasurement.toFloat(bearing),
+                ReportedMeasurement.toFloat(speed), timestamp,
                 activeSessionId);
         trackSessionRepository.incrementPointCount(activeSessionId);
     }
@@ -157,14 +183,33 @@ public class SearchTrackManager {
 
     private double calculateDistance(List<double[]> points) {
         double total = 0.0;
-        GeoPoint previous = null;
+        double prevLat = Double.NaN;
+        double prevLng = Double.NaN;
         for (double[] point : points) {
-            GeoPoint current = new GeoPoint(point[0], point[1]);
-            if (previous != null)
-                total += previous.distanceTo(current);
-            previous = current;
+            double lat = point[0];
+            double lng = point[1];
+            if (!Double.isNaN(prevLat))
+                total += haversineDistance(prevLat, prevLng, lat, lng);
+            prevLat = lat;
+            prevLng = lng;
         }
         return total;
+    }
+
+    /**
+     * Great-circle distance between two coordinates in metres. Kept free of
+     * ATAK types so the track-summary logic can be unit tested on a plain JVM;
+     * the ATAK GeoPoint#distanceTo path is not used here.
+     */
+    public static double haversineDistance(double lat1, double lng1,
+            double lat2, double lng2) {
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return 6371000.0 * c;
     }
 
     private String formatDuration(long elapsedSeconds) {
@@ -192,6 +237,8 @@ public class SearchTrackManager {
                     System.currentTimeMillis()
                     /// completed push
             );
+            activeSessionId = null;
+            sessionStartedAt = 0L;
         }
     }
 }

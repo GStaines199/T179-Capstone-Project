@@ -13,8 +13,10 @@ import com.atakmap.android.maps.Marker;
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.database.LocationRepository;
 import com.atakmap.android.plugintemplate.database.SearcherRepository;
+import com.atakmap.android.plugintemplate.database.StorageAvailability;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
+import com.atakmap.android.plugintemplate.grid.MemberPositionPolicy;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
@@ -46,6 +48,8 @@ import com.atakmap.android.plugintemplate.runtime.LocationCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.OperationProfile;
 import com.atakmap.android.plugintemplate.runtime.OperationStateStore;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
+import com.atakmap.android.plugintemplate.runtime.RawGnssCapture;
+import com.atakmap.android.plugintemplate.runtime.RawGnssCaptureManager;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchLineCotMessage;
@@ -81,6 +85,7 @@ public class SARTakMapController {
     private final PluginHealthManager healthManager;
     private final IdentityManager identityManager;
     private final LocationCaptureManager locationCaptureManager;
+    private final RawGnssCaptureManager rawGnssCaptureManager;
     private final AtakTeamContactDataSource teamContactDataSource;
     private final SearchTeamCotWorkflow teamCotWorkflow;
     private final SearchGridCotWorkflow gridCotWorkflow;
@@ -89,6 +94,7 @@ public class SARTakMapController {
     private final DittoCredentialStore dittoCredentialStore;
     private final SearchTeamStateStore teamStateStore;
     private final OperationStateStore operationStateStore;
+    private final DatabaseHelper databaseHelper;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
     private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
     private final Runnable backgroundRunnable;
@@ -109,7 +115,7 @@ public class SARTakMapController {
         // ATAK plugin contexts are suitable for resources/layout inflation, but
         // runtime files belong under ATAK's writable app context.
         Context runtimeContext = mapView.getContext();
-        DatabaseHelper databaseHelper = DatabaseHelper.getInstance(runtimeContext);
+        this.databaseHelper = DatabaseHelper.getInstance(runtimeContext);
         SearcherRepository searcherRepository = new SearcherRepository(
                 databaseHelper);
         TrackSessionRepository trackSessionRepository =
@@ -154,6 +160,14 @@ public class SARTakMapController {
         this.gridCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.searchLineCotWorkflow.setDittoSyncManager(dittoSyncManager);
         applyOperationIdToWorkflows();
+        this.rawGnssCaptureManager = new RawGnssCaptureManager(runtimeContext,
+                identityManager, trackManager, locationRepository,
+                new RawGnssCaptureManager.Listener() {
+                    @Override
+                    public void onRawGnssCaptured(RawGnssCapture capture) {
+                        refreshOverlay();
+                    }
+                });
         this.locationCaptureManager = new LocationCaptureManager(mapView,
                 identityManager, trackManager, healthManager,
                 new LocationCaptureManager.Listener() {
@@ -1135,8 +1149,12 @@ public class SARTakMapController {
             return null;
 
         teamMarkerOverlay.setSelectedMemberId(uniqueId);
-        mapView.getMapController().panTo(new GeoPoint(member.getLatitude(),
-                member.getLongitude()), true);
+        // Selecting a member whose position ATAK has not reported is fine --
+        // their card still opens. Flying the map to their placeholder
+        // coordinates is not: it tells the operator we know where they are.
+        if (MemberPositionPolicy.hasUsablePosition(member))
+            mapView.getMapController().panTo(new GeoPoint(member.getLatitude(),
+                    member.getLongitude()), true);
         return member;
     }
 
@@ -1214,6 +1232,7 @@ public class SARTakMapController {
 
     public void dispose() {
         locationCaptureManager.stop();
+        rawGnssCaptureManager.stop();
         healthManager.stop();
         dittoSyncManager.stop();
         teamCotWorkflow.dispose();
@@ -1342,9 +1361,28 @@ public class SARTakMapController {
         return null;
     }
 
+    /**
+     * Brings the runtime up, but only as far as storage allows.
+     *
+     * <p>The storage probe gates everything after it rather than only setting a
+     * flag. Every step below writes to SQLite -- {@code resolveIdentity} stores
+     * the self row, {@code startOrResume} opens a track session, and the capture
+     * loop resolves identity again every cycle -- so running them against a
+     * database that did not open would throw on ATAK's thread instead of
+     * reporting INACTIVE. Reporting the failure is the whole point of the
+     * check; crashing past it would report nothing.
+     */
     private void initialiseRuntime() {
         healthManager.start();
-        healthManager.setStorageReady(true, "Local storage ready");
+        StorageAvailability.Result storage =
+                StorageAvailability.probe(databaseHelper);
+        healthManager.setStorageReady(storage.isReady(), storage.getMessage());
+        if (!storage.isReady()) {
+            healthManager.setTrackingActive(false);
+            healthManager.reportNotCapturing(
+                    "Not capturing: local storage unavailable");
+            return;
+        }
         IdentityManager.Identity identity = identityManager.resolveIdentity();
         healthManager.setIdentityResolved(identity.isResolved(),
                 identity.getMessage());
@@ -1366,6 +1404,7 @@ public class SARTakMapController {
         }
         locationCaptureManager.start();
         dittoSyncManager.start();
+        rawGnssCaptureManager.start();
     }
 
     private void activateOperation(OperationProfile profile,

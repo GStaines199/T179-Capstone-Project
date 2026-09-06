@@ -235,16 +235,26 @@ public class SearchLineManager {
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
             if (!member.contributesLane())
                 continue;
-            if (!member.hasLiveAtakContact())
+            GeoPoint returnMark = returnMarkForMember(member, laneCount);
+
+            // A member with no live ATAK fix keeps their place in the line and
+            // keeps their return mark -- both come from the lane assignment,
+            // not from where they are -- but no distance is measured from
+            // coordinates we do not have. Dropping them from the list instead
+            // would hide a searcher from their leader.
+            if (!MemberPositionPolicy.hasUsablePosition(member)) {
+                statuses.add(new SearchLineMemberStatus(member, Double.NaN,
+                        Double.NaN, paceFor(member), returnMark, false));
                 continue;
+            }
+
             UTMPoint memberPoint = UTMPoint.fromGeoPoint(new GeoPoint(
                     member.getLatitude(), member.getLongitude()));
-            GeoPoint returnMark = returnMarkForMember(member, laneCount);
             UTMPoint returnPoint = UTMPoint.fromGeoPoint(returnMark);
             double distanceFromLine = memberPoint.getNorthing() - lineNorthing;
             double distanceFromReturnMark = distance(memberPoint, returnPoint);
             statuses.add(new SearchLineMemberStatus(member, distanceFromLine,
-                    distanceFromReturnMark, paceFor(member), returnMark));
+                    distanceFromReturnMark, paceFor(member), returnMark, true));
         }
         return statuses;
     }
@@ -271,13 +281,16 @@ public class SearchLineManager {
         for (SearchLineMemberStatus status : getMemberStatuses()) {
             builder.append(status.getMember().getCallsign())
                     .append(": ")
-                    .append(formatLineDistance(status
-                            .getDistanceFromLineMeters()))
+                    .append(MemberPositionPolicy.lineDistanceLabel(
+                            status.hasKnownPosition(),
+                            status.getDistanceFromLineMeters()))
                     .append(" | Pace ")
                     .append(formatPace(status.getPaceMetersPerMinute()));
             if (status.isTooFarAhead(SLOW_DOWN_THRESHOLD_METERS))
                 builder.append(" | Slow down");
-            if (state == SearchLineState.PAUSED)
+            // Math.round turns NaN into 0, so an unmeasured member would
+            // otherwise be reported as standing exactly on their return mark.
+            if (state == SearchLineState.PAUSED && status.hasKnownPosition())
                 builder.append(" | Return mark ")
                         .append(Math.round(status
                                 .getDistanceFromReturnMarkMeters()))
@@ -292,8 +305,9 @@ public class SearchLineManager {
             return "Line not started";
         for (SearchLineMemberStatus status : getMemberStatuses()) {
             if (status.getMember().getUniqueId().equals(uniqueId)) {
-                String summary = formatLineDistance(status
-                        .getDistanceFromLineMeters()) + " | Pace "
+                String summary = MemberPositionPolicy.lineDistanceLabel(
+                        status.hasKnownPosition(),
+                        status.getDistanceFromLineMeters()) + " | Pace "
                         + formatPace(status.getPaceMetersPerMinute());
                 if (status.isTooFarAhead(SLOW_DOWN_THRESHOLD_METERS))
                     summary += " | Slow down";
@@ -414,13 +428,6 @@ public class SearchLineManager {
                 return member;
         }
         return null;
-    }
-
-    private String formatLineDistance(double distanceMeters) {
-        long rounded = Math.round(Math.abs(distanceMeters));
-        if (rounded <= 2)
-            return "On line";
-        return rounded + " m " + (distanceMeters > 0 ? "ahead" : "behind");
     }
 
     private String formatPace(double pace) {

@@ -9,8 +9,6 @@ import com.atakmap.comms.CommsMapComponent;
 import com.atakmap.comms.CotServiceRemote;
 import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
-import com.atakmap.coremap.cot.event.CotPoint;
-import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.util.ArrayList;
@@ -147,7 +145,8 @@ public class SearchGridCotWorkflow {
         event.setStart(now);
         event.setStale(now.addMinutes(5));
         event.setHow(CotEvent.HOW_MACHINE_GENERATED);
-        event.setPoint(new CotPoint(getPublishPoint()));
+        event.setPoint(CotPublishPoint.forSnapshot(
+                AtakLocationStatus.from(mapView)));
         event.setDetail(root);
         return event;
     }
@@ -199,15 +198,6 @@ public class SearchGridCotWorkflow {
     private boolean isExpired(SearchGridCotMessage message) {
         return System.currentTimeMillis() - message.getCreated()
                 > GRID_MESSAGE_MAX_AGE_MS;
-    }
-
-    private GeoPoint getPublishPoint() {
-        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
-        if (snapshot.isAvailable())
-            return snapshot.getPoint();
-        return mapView.getSelfMarker() != null
-                ? mapView.getSelfMarker().getPoint()
-                : new GeoPoint(0.0, 0.0);
     }
 
     private SearchGridStatus statusValue(String value) {

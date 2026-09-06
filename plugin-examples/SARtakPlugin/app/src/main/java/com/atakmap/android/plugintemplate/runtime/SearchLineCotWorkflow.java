@@ -16,8 +16,6 @@ import com.atakmap.comms.CommsMapComponent;
 import com.atakmap.comms.CotServiceRemote;
 import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
-import com.atakmap.coremap.cot.event.CotPoint;
-import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.util.Collections;
@@ -204,7 +202,8 @@ public class SearchLineCotWorkflow {
         event.setStart(now);
         event.setStale(now.addMinutes(1));
         event.setHow(CotEvent.HOW_MACHINE_GENERATED);
-        event.setPoint(new CotPoint(getPublishPoint()));
+        event.setPoint(CotPublishPoint.forSnapshot(
+                AtakLocationStatus.from(mapView)));
         event.setDetail(root);
         return event;
     }
@@ -288,15 +287,6 @@ public class SearchLineCotWorkflow {
     private boolean isExpired(SearchLineCotMessage message) {
         long age = System.currentTimeMillis() - message.getCreated();
         return age > LINE_MESSAGE_MAX_AGE_MS;
-    }
-
-    private GeoPoint getPublishPoint() {
-        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
-        if (snapshot.isAvailable())
-            return snapshot.getPoint();
-        return mapView.getSelfMarker() != null
-                ? mapView.getSelfMarker().getPoint()
-                : new GeoPoint(0.0, 0.0);
     }
 
     private String getSelfCotType() {

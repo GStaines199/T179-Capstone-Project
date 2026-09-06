@@ -45,7 +45,7 @@ import static org.junit.Assert.assertTrue;
  * rather than going through {@code getPointsForSession}, so these tests pin
  * the stored row itself and stay independent of how any reader presents it.
  *
- * <p>Drives the real write path -- {@link LocationCaptureManager#applyCapture}
+ * <p>Drives the real write path -- {@link LocationCaptureManager#captureWith}
  * through {@link SearchTrackManager} into a real SQLite database.
  * {@code mapView} and {@code identityManager} are null because that path never
  * touches them.
@@ -88,9 +88,18 @@ public class AccuracyMetadataTest {
     // ---- helpers ---------------------------------------------------------
 
     private void capture(Double altitude, Double bearing, Double speed) {
-        captureManager.applyCapture(true, "Identity: " + CALLSIGN, UID,
-                CALLSIGN, LocationCaptureManager.Fix.available(LAT, LON,
-                        altitude, ACCURACY, bearing, speed, 1000L, "GPS"));
+        // Null means the receiver reported nothing; LocationFix carries that
+        // as NaN, which SearchTrackManager resolves back to a NULL column.
+        captureManager.captureWith(
+                new IdentityManager.Identity(UID, CALLSIGN,
+                        "Identity: " + CALLSIGN, true),
+                LocationCaptureManager.LocationFix.available(LAT, LON,
+                        notReportedAsNaN(altitude), ACCURACY, 1000L, "GPS",
+                        notReportedAsNaN(bearing), notReportedAsNaN(speed)));
+    }
+
+    private static double notReportedAsNaN(Double value) {
+        return value == null ? Double.NaN : value;
     }
 
     /** True where the column is SQL NULL, in insertion order. */
@@ -237,8 +246,9 @@ public class AccuracyMetadataTest {
 
     @Test
     public void theFixItselfKnowsWhatWasReported() {
-        LocationCaptureManager.Fix fix = LocationCaptureManager.Fix.available(
-                LAT, LON, null, ACCURACY, 90.0, Double.NaN, 1000L, "GPS");
+        LocationCaptureManager.LocationFix fix =
+                LocationCaptureManager.LocationFix.available(LAT, LON,
+                        Double.NaN, ACCURACY, 1000L, "GPS", 90.0, Double.NaN);
 
         assertFalse("no altitude was reported", fix.hasAltitude());
         assertTrue("a bearing was reported", fix.hasBearing());

@@ -25,7 +25,7 @@ import static org.junit.Assert.assertTrue;
  * not given. Every assertion is made against the real track database, so a
  * fabricated, carried-over or interpolated point would show up as a row.
  *
- * <p>Drives {@link LocationCaptureManager#applyCapture} — the ATAK-free half of
+ * <p>Drives {@link LocationCaptureManager#captureWith} — the ATAK-free half of
  * a capture cycle. {@code mapView} and {@code identityManager} are null because
  * that path never touches them; the ATAK half is covered on-device.
  */
@@ -74,14 +74,14 @@ public class NoFabricatedPositionTest {
 
     @Test
     public void anUnavailableFix_writesNoPoint() {
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
 
         assertEquals(0, trackManager.getTrackPoints().size());
     }
 
     @Test
     public void anUnavailableFix_reportsGpsLostAndKeepsTheReason() {
-        capture(LocationCaptureManager.Fix.unavailable(
+        capture(LocationCaptureManager.LocationFix.unavailable(
                 "GPS stale; ATAK fix is 45 seconds old"));
 
         assertEquals(PluginHealthState.GPS_LOST, healthManager.getState());
@@ -99,8 +99,8 @@ public class NoFabricatedPositionTest {
 
     @Test
     public void anUnresolvedIdentity_writesNoPointEvenWithAGoodFix() {
-        captureManager.applyCapture(false, "Identity unavailable", UID,
-                CALLSIGN, fixAt(-27.4698, 153.0251, 1000L));
+        captureManager.captureWith(unresolvedIdentity(),
+                fixAt(-27.4698, 153.0251, 1000L));
 
         assertEquals(0, trackManager.getTrackPoints().size());
         assertEquals(PluginHealthState.DEGRADED, healthManager.getState());
@@ -126,9 +126,9 @@ public class NoFabricatedPositionTest {
         capture(fixAt(-27.4698, 153.0251, 1000L));
         assertEquals(1, trackManager.getTrackPoints().size());
 
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
 
         assertEquals(1, trackManager.getTrackPoints().size());
     }
@@ -137,7 +137,7 @@ public class NoFabricatedPositionTest {
     public void losingSignalAfterAFix_leavesTheStoredPointUntouched() {
         capture(fixAt(-27.4698, 153.0251, 1000L));
 
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
 
         List<double[]> points = trackManager.getTrackPoints();
         assertEquals(1, points.size());
@@ -151,8 +151,8 @@ public class NoFabricatedPositionTest {
         // that filled the gap in would leave more than the two points it was
         // actually given.
         capture(fixAt(-27.4698, 153.0251, 1000L));
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
         capture(fixAt(-27.4800, 153.0400, 40000L));
 
         List<double[]> points = trackManager.getTrackPoints();
@@ -176,9 +176,8 @@ public class NoFabricatedPositionTest {
     @Test
     public void everyOutcome_notifiesTheListenerSoTheUiCannotFreezeOnStaleData() {
         capture(fixAt(-27.4698, 153.0251, 1000L));
-        capture(LocationCaptureManager.Fix.unavailable("No GPS Signal"));
-        captureManager.applyCapture(false, "Identity unavailable", UID,
-                CALLSIGN, null);
+        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
+        captureManager.captureWith(unresolvedIdentity(), null);
 
         assertEquals(3, listenerCalls);
     }
@@ -200,14 +199,28 @@ public class NoFabricatedPositionTest {
     // asserted here: CotPoint fails JVM verification off-device, under
     // Robolectric too. That half is verified on the emulator instead.
 
-    private void capture(LocationCaptureManager.Fix fix) {
-        captureManager.applyCapture(true, "Identity: " + CALLSIGN, UID,
-                CALLSIGN, fix);
+    private void capture(LocationCaptureManager.LocationFix fix) {
+        captureManager.captureWith(resolvedIdentity(), fix);
     }
 
-    private LocationCaptureManager.Fix fixAt(double latitude, double longitude,
-            long timestamp) {
-        return LocationCaptureManager.Fix.available(latitude, longitude, 42.0,
-                5.0, 90.0, 1.2, timestamp, "GPS");
+    private IdentityManager.Identity resolvedIdentity() {
+        return new IdentityManager.Identity(UID, CALLSIGN,
+                "Identity: " + CALLSIGN, true);
+    }
+
+    /**
+     * Identity.isResolved() is derived from the uid and callsign, not from the
+     * atakIdentity flag, so an unresolved identity has to actually be missing
+     * them -- passing a uid with the flag false still reads as resolved.
+     */
+    private IdentityManager.Identity unresolvedIdentity() {
+        return new IdentityManager.Identity(null, null,
+                "Identity unavailable", false);
+    }
+
+    private LocationCaptureManager.LocationFix fixAt(double latitude,
+            double longitude, long timestamp) {
+        return LocationCaptureManager.LocationFix.available(latitude, longitude,
+                42.0, 5.0, timestamp, "GPS", 90.0, 1.2);
     }
 }

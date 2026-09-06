@@ -48,7 +48,7 @@ public class SearchLineNoFabricationTest {
     @Before
     public void setUp() {
         converter = new GridCoordinateConverter();
-        assignment = new SearchPartyAssignmentManager();
+        assignment = new SearchPartyAssignmentManager(null);
         assignment.setTeamCreated(true);
         manager = new SearchLineManager(converter, assignment);
         cell = new SearchGridCell("agg-1", "cell-1", 7, 3, ZONE,

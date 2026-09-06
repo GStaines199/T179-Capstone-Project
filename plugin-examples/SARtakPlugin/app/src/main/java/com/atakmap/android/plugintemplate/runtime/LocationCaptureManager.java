@@ -18,6 +18,14 @@ public class LocationCaptureManager {
      * A location fix reduced to plain-Java values. Kept free of ATAK types so
      * the capture decision logic can be unit tested on a plain JVM; the ATAK
      * plumbing that produces it lives in {@link MapViewLocationFixSource}.
+     * <p>
+     * The measurement fields are primitive, so "not reported" travels as
+     * {@code Double.NaN} rather than as null. Nothing downstream treats NaN as
+     * a measurement: {@link SearchTrackManager#recordLocation} routes through
+     * {@code recordFix}, which resolves NaN to a NULL column. Producers must
+     * therefore pass NaN, never a stand-in zero -- 0 m accuracy and a
+     * due-north bearing are both values a real fix can legitimately have, so a
+     * substituted zero cannot be told apart from a reading afterwards.
      */
     public static class LocationFix {
 
@@ -55,8 +63,8 @@ public class LocationCaptureManager {
         }
 
         static LocationFix unavailable(String message) {
-            return new LocationFix(false, message, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0L, "");
+            return new LocationFix(false, message, 0.0, 0.0, Double.NaN,
+                    Double.NaN, Double.NaN, Double.NaN, 0L, "");
         }
 
         public boolean isAvailable() {
@@ -75,20 +83,35 @@ public class LocationCaptureManager {
             return longitude;
         }
 
+        /** {@code NaN} when the receiver reported no altitude. */
         public double getAltitude() {
             return altitude;
+        }
+
+        public boolean hasAltitude() {
+            return !Double.isNaN(altitude);
         }
 
         public double getAccuracy() {
             return accuracy;
         }
 
+        /** {@code NaN} when the receiver reported no bearing. */
         public double getBearing() {
             return bearing;
         }
 
+        public boolean hasBearing() {
+            return !Double.isNaN(bearing);
+        }
+
+        /** {@code NaN} when the receiver reported no speed. */
         public double getSpeed() {
             return speed;
+        }
+
+        public boolean hasSpeed() {
+            return !Double.isNaN(speed);
         }
 
         public long getTimestamp() {
@@ -125,12 +148,21 @@ public class LocationCaptureManager {
                 return LocationFix.unavailable(snapshot.getMessage());
 
             GeoPoint point = snapshot.getPoint();
+            if (point == null || !point.isValid())
+                return LocationFix.unavailable("No GPS Signal");
+
+            // Altitude, track heading and track speed are all NaN when ATAK has
+            // no reading for them, and NaN is what the rest of the pipeline
+            // reads as "not reported". A missing self marker is the same
+            // situation, so it yields NaN too rather than a zero heading and
+            // speed, which would be indistinguishable from a stationary
+            // north-facing searcher.
             Marker self = mapView.getSelfMarker();
             return LocationFix.available(point.getLatitude(),
                     point.getLongitude(), point.getAltitude(), point.getCE(),
                     snapshot.getTimestamp(), snapshot.getSource(),
-                    self == null ? 0.0 : self.getTrackHeading(),
-                    self == null ? 0.0 : self.getTrackSpeed());
+                    self == null ? Double.NaN : self.getTrackHeading(),
+                    self == null ? Double.NaN : self.getTrackSpeed());
         }
     }
 
@@ -177,16 +209,13 @@ public class LocationCaptureManager {
         if (running)
             return;
         running = true;
-        if (handler == null)
-            handler = new Handler(Looper.getMainLooper());
         captureNow();
         handler.postDelayed(captureRunnable, UPDATE_INTERVAL_MS);
     }
 
     public void stop() {
         running = false;
-        if (handler != null)
-            handler.removeCallbacks(captureRunnable);
+        handler.removeCallbacks(captureRunnable);
     }
 
     public void captureNow() {
@@ -197,6 +226,11 @@ public class LocationCaptureManager {
     /**
      * Capture decision logic, kept free of ATAK types so it can be unit tested
      * on a plain JVM. The ATAK plumbing lives in {@link #captureNow()}.
+     * <p>
+     * A position is written only when the identity resolved <i>and</i> ATAK
+     * supplied a usable fix; every other path records the failure and writes
+     * nothing, so a lost signal can never be filled in with a stale or
+     * inferred position.
      */
     void captureWith(IdentityManager.Identity identity, LocationFix fix) {
         healthManager.setIdentityResolved(identity.isResolved(),
@@ -208,19 +242,13 @@ public class LocationCaptureManager {
             return;
         }
 
-        if (!fix.isAvailable()) {
-            healthManager.recordLocationFailure(fix.getMessage());
+        if (fix == null || !fix.isAvailable()) {
+            healthManager.recordLocationFailure(
+                    fix == null ? "No GPS Signal" : fix.getMessage());
             notifyListener();
             return;
         }
 
-        // Track points are only ever logged by raw GNSS capture
-        // (RawGnssCaptureManager) so the track never mixes ATAK's
-        // internally-fused self-marker fix with unmodified raw device
-        // readings - see Sprint 1 "preserve accuracy metadata without
-        // modification". This self-marker snapshot is used purely to drive
-        // identity/health reporting (Active/Degraded/GPS Lost) below, not
-        // to log a track point.
         trackManager.recordLocation(identity.getUid(), identity.getCallsign(),
                 fix.getLatitude(), fix.getLongitude(), fix.getAltitude(),
                 fix.getAccuracy(), fix.getBearing(), fix.getSpeed(),
@@ -229,23 +257,6 @@ public class LocationCaptureManager {
         healthManager.recordLocationSuccess(fix.getTimestamp(),
                 fix.getAccuracy(), fix.getSource());
         notifyListener();
-    }
-
-    /** Reads ATAK's current fix. Returns an unavailable Fix rather than null. */
-    private Fix readFix() {
-        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
-        if (!snapshot.isAvailable())
-            return Fix.unavailable(snapshot.getMessage());
-
-        GeoPoint point = snapshot.getPoint();
-        if (point == null || !point.isValid())
-            return Fix.unavailable("No GPS Signal");
-
-        Marker self = mapView.getSelfMarker();
-        return Fix.available(point.getLatitude(), point.getLongitude(),
-                point.getAltitude(), point.getCE(), self.getTrackHeading(),
-                self.getTrackSpeed(), snapshot.getTimestamp(),
-                snapshot.getSource());
     }
 
     private void notifyListener() {

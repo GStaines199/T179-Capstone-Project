@@ -140,7 +140,9 @@ public class GnssCaptureTest {
     private static final Set<String> EXPECTED_SCHEMA = new HashSet<>(
             Arrays.asList("id", "uid", "callsign", "latitude", "longitude",
                     "altitude", "accuracy_meters", "bearing_degrees",
-                    "speed_mps", "timestamp", "session_id"));
+                    "speed_mps", "timestamp", "session_id", "provider",
+                    "vertical_accuracy_meters", "bearing_accuracy_degrees",
+                    "speed_accuracy_mps"));
 
     /** What LocationCaptureManager polls at; the subscription must match. */
     private static final long UPDATE_INTERVAL_MS =
@@ -1058,12 +1060,13 @@ public class GnssCaptureTest {
 
     @Test
     public void locationPointsSchema_isExactlyTheColumnsWeStoreToday() {
-        // A tripwire, not a preference. Vertical, speed and bearing accuracy,
-        // the satellite count, the elapsed realtime and the provider name all
-        // arrive on the fix and have nowhere to go, so "preserve accuracy
-        // metadata" is only partly met. Adding a column has to come with a
-        // DATABASE_VERSION bump - onUpgrade drops every table - so this failing
-        // is the reminder to do both.
+        // A tripwire, not a preference. Provider, vertical accuracy, bearing
+        // accuracy and speed accuracy now have columns (DATABASE_VERSION 2,
+        // written by LocationRepository.insertRaw). The satellite count and
+        // the elapsed realtime still arrive on the fix and have nowhere to go,
+        // so "preserve accuracy metadata" is only partly met. Adding a column
+        // has to come with a DATABASE_VERSION bump, so this failing is the
+        // reminder to do both.
         assertEquals(EXPECTED_SCHEMA, columnsOf("location_points"));
     }
 

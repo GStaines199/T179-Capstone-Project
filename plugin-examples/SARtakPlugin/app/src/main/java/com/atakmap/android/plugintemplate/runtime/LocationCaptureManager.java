@@ -211,8 +211,6 @@ public class LocationCaptureManager {
             return;
         }
 
-        long timestamp = snapshot.getTimestamp();
-        double accuracy = snapshot.getPoint().getCE();
         // Track points are only ever logged by raw GNSS capture
         // (RawGnssCaptureManager) so the track never mixes ATAK's
         // internally-fused self-marker fix with unmodified raw device

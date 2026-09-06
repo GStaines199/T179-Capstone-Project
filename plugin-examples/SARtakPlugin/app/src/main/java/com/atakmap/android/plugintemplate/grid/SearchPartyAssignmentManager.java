@@ -31,11 +31,22 @@ public class SearchPartyAssignmentManager {
             "Blue", "Green", "Yellow", "Red", "Purple"
     };
 
+    /**
+     * Placeholder stored for a member whose position ATAK has not reported.
+     * It is not a location. A member holding it always has
+     * {@link SearchTeamMember#hasLiveAtakContact()} false, and that flag -- not
+     * these coordinates -- is what callers must test before using a position.
+     */
+    private static final double NO_POSITION = 0.0;
+
     private String teamId = "";
     private String teamName = "";
     private String teamColorName = "White";
     private int teamColorArgb = COLOR_WHITE;
-    private String selfMemberId = "TL-A-001";
+    // Empty until ATAK tells us who we are, via setSelfIdentity().
+    private String selfMemberId = "";
+    // Starts empty. Every member arrives from a real ATAK contact or an
+    // explicit roster action -- nothing is seeded.
     private final List<SearchTeamMember> members = new ArrayList<>();
     private int lastAtakMatchedMembers;
     private boolean teamCreated;
@@ -45,13 +56,6 @@ public class SearchPartyAssignmentManager {
 
     public SearchPartyAssignmentManager(SearcherRepository searcherRepository) {
         this.searcherRepository = searcherRepository;
-        members.add(new SearchTeamMember("TL-A-001", "Alpha Lead",
-                SearchTeamMember.TeamRole.TEAM_LEADER, "White", COLOR_WHITE,
-                SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
-                SearchTeamMember.ConnectionStatus.CONNECTED, 1,
-                -27.4705, 153.0260, 0.0,
-                "No GPS Signal", "No GPS Signal", "No GPS Signal",
-                "No GPS Signal", "No GPS Signal", "No GPS Signal"));
     }
 
     public String getTeamId() {
@@ -228,7 +232,7 @@ public class SearchPartyAssignmentManager {
                     COLOR_WHITE,
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                     SearchTeamMember.ConnectionStatus.STALE, 1,
-                    -27.4705, 153.0260, 0.0,
+                    NO_POSITION, NO_POSITION, 0.0,
                     "No GPS Signal", "No GPS Signal", "No GPS Signal",
                     "No GPS Signal", "No GPS Signal", "No GPS Signal"));
         } else {
@@ -270,8 +274,8 @@ public class SearchPartyAssignmentManager {
                 hasLocation ? SearchTeamMember.ConnectionStatus.CONNECTED
                         : SearchTeamMember.ConnectionStatus.STALE,
                 getLaneMemberCount() + 1,
-                hasLocation ? contactPoint.getLatitude() : 0.0,
-                hasLocation ? contactPoint.getLongitude() : 0.0,
+                hasLocation ? contactPoint.getLatitude() : NO_POSITION,
+                hasLocation ? contactPoint.getLongitude() : NO_POSITION,
                 contact.getHeadingDegrees(), formatGeo(contact.getPoint()),
                 formatAltitude(contact.getPoint()),
                 hasLocation ? converter.cellIdForPoint(contactPoint)
@@ -315,7 +319,7 @@ public class SearchPartyAssignmentManager {
                 colorName, displayColor,
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.STALE,
-                getLaneMemberCount() + 1, 0.0, 0.0, 0.0,
+                getLaneMemberCount() + 1, NO_POSITION, NO_POSITION, 0.0,
                 "ATAK contact pending", "ATAK contact pending",
                 "ATAK contact pending", "ATAK contact pending",
                 "ATAK contact pending", "ATAK contact pending");

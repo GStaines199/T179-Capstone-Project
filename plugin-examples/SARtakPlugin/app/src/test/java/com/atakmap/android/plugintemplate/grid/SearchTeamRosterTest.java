@@ -43,7 +43,7 @@ public class SearchTeamRosterTest {
 
     @Before
     public void setUp() {
-        manager = new SearchPartyAssignmentManager();
+        manager = new SearchPartyAssignmentManager(null);
     }
 
     // ---- A fresh manager invents nothing --------------------------------

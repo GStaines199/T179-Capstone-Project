@@ -243,6 +243,15 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
+            // The ATAK SDK jar predates stackmap frames, so GeoPoint,
+            // UTMPoint and CotEvent throw VerifyError under the default
+            // verifier and were long assumed untestable off-device. They load
+            // fine with verification off, which lets unit tests reach the code
+            // that uses them. Scoped to unit tests only -- nothing shipped is
+            // affected.
+            all {
+                jvmArgs '-noverify'
+            }
         }
     }
 }

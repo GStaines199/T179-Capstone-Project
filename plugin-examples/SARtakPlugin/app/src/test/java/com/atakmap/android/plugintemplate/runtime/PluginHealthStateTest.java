@@ -164,6 +164,158 @@ public class PluginHealthStateTest {
     }
 
     @Test
+    public void isLocationActive_whenStorageIsNotReady_isFalseDespiteAFreshFix() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+        assertTrue(manager.isLocationActive());
+
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+
+        // The plugin is INACTIVE, so nothing is being logged. Reporting the GPS
+        // as fine here would tell the operator the one thing they must not be
+        // told: that the search is being recorded when it is not.
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void isLocationActive_whenStopped_isFalseDespiteAFreshFix() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+
+        manager.stop();
+
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void isLocationActive_whenRecordingIsPaused_staysTrue() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+
+        // A paused recording reads as DEGRADED, but the receiver is working and
+        // the message beside the indicator still says so. This pins the
+        // divergence from the audit's "isLocationActive should be
+        // getState() == ACTIVE": that would paint the GPS field red while the
+        // text next to it read "GPS active".
+        manager.setTrackingActive(false);
+
+        assertEquals(PluginHealthState.DEGRADED, manager.getState());
+        assertTrue(manager.isLocationActive());
+        assertTrue(manager.getLocationMessage().startsWith("GPS active"));
+    }
+
+    @Test
+    public void isLocationActive_whenIdentityIsUnresolved_isFalse() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 6.0);
+
+        // The other half of DEGRADED. The capture loop clears the fix when it
+        // cannot resolve who we are, so there is genuinely nothing to report.
+        manager.setIdentityResolved(false, "Identity unavailable");
+        manager.recordLocationFailure("Identity unavailable; tracking degraded");
+
+        assertEquals(PluginHealthState.DEGRADED, manager.getState());
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void isLocationActive_isNotDecidedByTheWordingOfTheMessage() {
+        PluginHealthManager manager = readyManager();
+
+        // A failure whose prose happens to open with the old magic prefix. The
+        // indicator must follow the model, not the sentence: this used to be
+        // decided by startsWith("GPS active") on exactly this string.
+        manager.recordLocationFailure("GPS active earlier; no fix since 09:51");
+
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void recordLocationSuccess_whileInactive_keepsTheStorageReason() {
+        PluginHealthManager manager = readyManager();
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+        manager.setTrackingActive(false);
+        manager.reportNotCapturing("Not capturing: local storage unavailable");
+
+        // The panel calls this on every refresh, not just the capture loop, so
+        // before the guard it overwrote the line above and the panel read
+        // "GPS active" while nothing was being logged. Found on the emulator.
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+
+        assertEquals("Not capturing: local storage unavailable",
+                manager.getLocationMessage());
+        assertFalse(manager.isLocationActive());
+        assertEquals(PluginHealthState.INACTIVE, manager.getState());
+    }
+
+    @Test
+    public void recordLocationSuccess_whileInactive_doesNotCreateAFreshFix() {
+        PluginHealthManager manager = new PluginHealthManager(clock);
+        manager.setIdentityResolved(true, "Identity: RESCUE-1");
+        manager.setTrackingActive(true);
+
+        // Never started, so INACTIVE. A refresh must not leave a timestamp
+        // behind that would later read as a live fix.
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+        manager.start();
+        manager.setStorageReady(true, "Local storage ready");
+
+        assertEquals(PluginHealthState.GPS_LOST, manager.getState());
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void recordLocationFailure_whileInactive_cannotBlameTheReceiver() {
+        PluginHealthManager manager = readyManager();
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+        manager.reportNotCapturing("Not capturing: local storage unavailable");
+
+        // On the emulator a refresh landed before ATAK's first fix and pinned
+        // the line to "No GPS Signal" with the receiver working fine. While
+        // nothing is being captured the receiver is not the story.
+        manager.recordLocationFailure("No GPS Signal");
+
+        assertEquals("Not capturing: local storage unavailable",
+                manager.getLocationMessage());
+    }
+
+    @Test
+    public void reportNotCapturing_isTheOneWayInWhileInactive() {
+        PluginHealthManager manager = readyManager();
+        manager.setStorageReady(false, "Storage unavailable: read-only");
+
+        manager.reportNotCapturing("Not capturing: local storage unavailable");
+
+        assertEquals("Not capturing: local storage unavailable",
+                manager.getLocationMessage());
+        assertFalse(manager.isLocationActive());
+    }
+
+    @Test
+    public void recordLocationFailure_whenCapturing_stillReportsTheFault() {
+        PluginHealthManager manager = readyManager();
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+
+        // The guard must not swallow a genuine GPS fault on a healthy plugin.
+        manager.recordLocationFailure("GPS stale; ATAK fix is 45 seconds old");
+
+        assertEquals("GPS stale; ATAK fix is 45 seconds old",
+                manager.getLocationMessage());
+        assertEquals(PluginHealthState.GPS_LOST, manager.getState());
+    }
+
+    @Test
+    public void recordLocationSuccess_whenHealthy_stillReports() {
+        PluginHealthManager manager = readyManager();
+
+        manager.recordLocationSuccess(clock.now(), 5.0, "GPS");
+
+        assertEquals("GPS active | Source GPS | Accuracy 5 m",
+                manager.getLocationMessage());
+        assertTrue(manager.isLocationActive());
+    }
+
+    @Test
     public void getSummary_namesTheStateInOperatorWording() {
         PluginHealthManager manager = readyManager();
 

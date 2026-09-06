@@ -288,6 +288,17 @@ public class SearchTeamMember {
                 : "Lane " + laneNumber;
     }
 
+    /**
+     * Whether this member is rostered onto a lane of the search line.
+     *
+     * <p>Deliberately a membership question only. It stays true while a
+     * member's GPS is down: they are still assigned to walk their lane, we
+     * simply do not know where they are. Do not add a position check here --
+     * lane count divides the cell into lanes, so a member dropping out on a
+     * lost fix would re-shape the search line for everybody else. Ask
+     * {@link MemberPositionPolicy#hasUsablePosition(SearchTeamMember)} instead
+     * before doing anything with the coordinates.
+     */
     public boolean contributesLane() {
         return membershipStatus == MembershipStatus.ACTIVE_MEMBER;
     }

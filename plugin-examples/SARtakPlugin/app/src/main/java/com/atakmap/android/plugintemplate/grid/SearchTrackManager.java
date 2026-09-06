@@ -1,6 +1,7 @@
 package com.atakmap.android.plugintemplate.grid;
 
 import com.atakmap.android.plugintemplate.database.LocationRepository;
+import com.atakmap.android.plugintemplate.database.ReportedMeasurement;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
@@ -99,17 +100,42 @@ public class SearchTrackManager {
                 speed, timestamp);
     }
 
+    /**
+     * Records a fix whose measurements are all known to have been reported.
+     *
+     * <p>Delegates to {@link #recordFix} rather than to the primitive
+     * {@code insert}, so a NaN arriving through this path is resolved to "not
+     * reported" explicitly rather than relying on SQLite to coerce it.
+     */
     public void recordLocation(String uid, String callsign, double latitude,
             double longitude, double altitude, double accuracy, double bearing,
             double speed, long timestamp) {
+        recordFix(uid, callsign, latitude, longitude, altitude, accuracy,
+                bearing, speed, timestamp);
+    }
+
+    /**
+     * Records a fix, preserving which measurements the receiver actually
+     * reported.
+     *
+     * <p>Null means "not reported" and is stored as NULL. That distinction
+     * cannot be recovered once written, because 0 m accuracy and a due-north
+     * bearing are both values a real fix can legitimately have.
+     */
+    public void recordFix(String uid, String callsign, double latitude,
+            double longitude, Double altitude, Double accuracy, Double bearing,
+            Double speed, long timestamp) {
         if (!recording)
             return;
         if (activeSessionId == null || activeUid == null
                 || !activeUid.equals(uid))
             startOrResume(uid, callsign);
 
-        locationRepository.insert(uid, callsign, latitude, longitude, altitude,
-                (float) accuracy, (float) bearing, (float) speed, timestamp,
+        locationRepository.insertFix(uid, callsign, latitude, longitude,
+                ReportedMeasurement.of(altitude),
+                ReportedMeasurement.toFloat(accuracy),
+                ReportedMeasurement.toFloat(bearing),
+                ReportedMeasurement.toFloat(speed), timestamp,
                 activeSessionId);
         trackSessionRepository.incrementPointCount(activeSessionId);
     }

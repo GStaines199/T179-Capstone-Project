@@ -2,7 +2,6 @@ package com.atakmap.android.plugintemplate.runtime;
 
 import android.content.Context;
 import android.os.Build;
-import android.provider.Settings;
 
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
@@ -46,36 +45,40 @@ public class IdentityManager {
         }
     }
 
-    /** Device identifiers used when ATAK cannot supply an identity. */
+    /** Identity values used when ATAK cannot supply one. */
     interface DeviceFallback {
-        String getDeviceId();
+        String getFallbackUid();
 
-        String getDeviceModel();
+        String getFallbackCallsign();
     }
 
-    private final Context context;
     private final MapView mapView;
     private final SearcherRepository searcherRepository;
+    private final DeviceIdentityStore identityStore;
     private Identity currentIdentity;
 
     private final DeviceFallback deviceFallback = new DeviceFallback() {
         @Override
-        public String getDeviceId() {
-            return Settings.Secure.getString(context.getContentResolver(),
-                    Settings.Secure.ANDROID_ID);
+        public String getFallbackUid() {
+            return identityStore.getOrCreateUid();
         }
 
         @Override
-        public String getDeviceModel() {
-            return Build.MODEL;
+        public String getFallbackCallsign() {
+            return identityStore.getFallbackCallsign(Build.MODEL);
         }
     };
 
     public IdentityManager(Context context, MapView mapView,
             SearcherRepository searcherRepository) {
-        this.context = context;
+        this(mapView, searcherRepository, new DeviceIdentityStore(context));
+    }
+
+    IdentityManager(MapView mapView, SearcherRepository searcherRepository,
+            DeviceIdentityStore identityStore) {
         this.mapView = mapView;
         this.searcherRepository = searcherRepository;
+        this.identityStore = identityStore;
     }
 
     public Identity resolveIdentity() {
@@ -89,6 +92,10 @@ public class IdentityManager {
                 deviceFallback);
         if (currentIdentity.isResolved()) {
             long now = System.currentTimeMillis();
+            // The UID changes when ATAK gains or loses an identity mid-session.
+            // Without this the old row keeps its self flag and the stored self
+            // identity becomes whichever of the two the query happens to hit.
+            searcherRepository.clearSelfFlagExcept(currentIdentity.getUid());
             searcherRepository.insertOrUpdate(currentIdentity.getUid(),
                     currentIdentity.getCallsign(), Build.MODEL, now, now,
                     true);
@@ -98,8 +105,8 @@ public class IdentityManager {
 
     /**
      * Picks the UID and callsign to track under. ATAK's device identity wins,
-     * then the self marker, then the device fallback. Kept free of ATAK types
-     * so it can be unit tested on a plain JVM.
+     * then the self marker, then this install's own persistent identity. Kept
+     * free of ATAK types so it can be unit tested on a plain JVM.
      */
     static Identity resolve(String atakUid, String atakCallsign, String selfUid,
             String selfCallsign, DeviceFallback fallback) {
@@ -112,9 +119,9 @@ public class IdentityManager {
             message = "Identity: " + callsign;
         } else {
             if (isEmpty(uid))
-                uid = fallback.getDeviceId();
+                uid = fallback.getFallbackUid();
             if (isEmpty(callsign))
-                callsign = fallback.getDeviceModel();
+                callsign = fallback.getFallbackCallsign();
             message = "Using device identity fallback";
         }
 

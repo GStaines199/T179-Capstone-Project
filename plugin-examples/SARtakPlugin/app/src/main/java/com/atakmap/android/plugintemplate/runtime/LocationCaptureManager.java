@@ -177,13 +177,16 @@ public class LocationCaptureManager {
         if (running)
             return;
         running = true;
+        if (handler == null)
+            handler = new Handler(Looper.getMainLooper());
         captureNow();
         handler.postDelayed(captureRunnable, UPDATE_INTERVAL_MS);
     }
 
     public void stop() {
         running = false;
-        handler.removeCallbacks(captureRunnable);
+        if (handler != null)
+            handler.removeCallbacks(captureRunnable);
     }
 
     public void captureNow() {
@@ -226,6 +229,23 @@ public class LocationCaptureManager {
         healthManager.recordLocationSuccess(fix.getTimestamp(),
                 fix.getAccuracy(), fix.getSource());
         notifyListener();
+    }
+
+    /** Reads ATAK's current fix. Returns an unavailable Fix rather than null. */
+    private Fix readFix() {
+        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
+        if (!snapshot.isAvailable())
+            return Fix.unavailable(snapshot.getMessage());
+
+        GeoPoint point = snapshot.getPoint();
+        if (point == null || !point.isValid())
+            return Fix.unavailable("No GPS Signal");
+
+        Marker self = mapView.getSelfMarker();
+        return Fix.available(point.getLatitude(), point.getLongitude(),
+                point.getAltitude(), point.getCE(), self.getTrackHeading(),
+                self.getTrackSpeed(), snapshot.getTimestamp(),
+                snapshot.getSource());
     }
 
     private void notifyListener() {

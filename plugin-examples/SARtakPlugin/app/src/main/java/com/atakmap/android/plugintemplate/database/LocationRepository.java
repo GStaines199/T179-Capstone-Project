@@ -4,6 +4,8 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
+import com.atakmap.android.plugintemplate.runtime.RawGnssCapture;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,7 +23,18 @@ public class LocationRepository {
                     "bearing_degrees REAL," +
                     "speed_mps REAL," +
                     "timestamp INTEGER," +
-                    "session_id TEXT)";
+                    "session_id TEXT," +
+                    "provider TEXT," +
+                    "vertical_accuracy_meters REAL," +
+                    "bearing_accuracy_degrees REAL," +
+                    "speed_accuracy_mps REAL)";
+
+    public static final String[] RAW_GNSS_COLUMNS = {
+            "provider",
+            "vertical_accuracy_meters",
+            "bearing_accuracy_degrees",
+            "speed_accuracy_mps"
+    };
 
     private final DatabaseHelper dbHelper;
 
@@ -47,33 +60,24 @@ public class LocationRepository {
         db.insert("location_points", null, values);
     }
 
-    /**
-     * Inserts a fix, writing NULL for anything the receiver did not report.
-     * <p>
-     * {@link #insert} takes primitives, so it cannot tell a measurement from a
-     * missing one: a fix carrying no accuracy lands as "accurate to 0 m", and a
-     * fix carrying no bearing lands as "heading due north". Both are values a
-     * real fix can legitimately have, so the difference cannot be recovered
-     * afterwards. Callers holding a {@code Location} should branch on its
-     * {@code hasAltitude()}, {@code hasAccuracy()}, {@code hasBearing()} and
-     * {@code hasSpeed()} flags and pass null for whatever was not reported.
-     */
-    public void insertFix(String uid, String callsign, double latitude,
-                          double longitude, Double altitude, Float accuracy,
-                          Float bearing, Float speed, long timestamp,
-                          String sessionId) {
+    public void insertRaw(String uid, String callsign, String sessionId,
+                          RawGnssCapture capture) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put("uid", uid);
         values.put("callsign", callsign);
-        values.put("latitude", latitude);
-        values.put("longitude", longitude);
-        values.put("altitude", altitude);
-        values.put("accuracy_meters", accuracy);
-        values.put("bearing_degrees", bearing);
-        values.put("speed_mps", speed);
-        values.put("timestamp", timestamp);
+        values.put("latitude", capture.getLatitude());
+        values.put("longitude", capture.getLongitude());
+        values.put("altitude", capture.getAltitude());
+        values.put("accuracy_meters", capture.getAccuracyMeters());
+        values.put("bearing_degrees", capture.getBearingDegrees());
+        values.put("speed_mps", capture.getSpeedMps());
+        values.put("timestamp", capture.getTimestamp());
         values.put("session_id", sessionId);
+        values.put("provider", capture.getProvider());
+        values.put("vertical_accuracy_meters", capture.getVerticalAccuracyMeters());
+        values.put("bearing_accuracy_degrees", capture.getBearingAccuracyDegrees());
+        values.put("speed_accuracy_mps", capture.getSpeedAccuracyMps());
         db.insert("location_points", null, values);
     }
 

@@ -14,14 +14,13 @@ public class LocationCaptureManager {
         void onLocationCaptured();
     }
 
-    public static final long UPDATE_INTERVAL_MS = 10000L;
-
     /**
-     * A GPS fix, or the reason there isn't one. Free of ATAK types so the rule
-     * that no position is written without a fix can be unit tested; the ATAK
-     * plumbing lives in {@link #readFix()}.
+     * A location fix reduced to plain-Java values. Kept free of ATAK types so
+     * the capture decision logic can be unit tested on a plain JVM; the ATAK
+     * plumbing that produces it lives in {@link MapViewLocationFixSource}.
      */
-    static final class Fix {
+    public static class LocationFix {
+
         private final boolean available;
         private final String message;
         private final double latitude;
@@ -33,7 +32,7 @@ public class LocationCaptureManager {
         private final long timestamp;
         private final String source;
 
-        private Fix(boolean available, String message, double latitude,
+        private LocationFix(boolean available, String message, double latitude,
                 double longitude, double altitude, double accuracy,
                 double bearing, double speed, long timestamp, String source) {
             this.available = available;
@@ -48,65 +47,101 @@ public class LocationCaptureManager {
             this.source = source;
         }
 
-        static Fix unavailable(String message) {
-            return new Fix(false, message, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0L,
-                    "");
+        static LocationFix available(double latitude, double longitude,
+                double altitude, double accuracy, long timestamp, String source,
+                double bearing, double speed) {
+            return new LocationFix(true, "", latitude, longitude, altitude,
+                    accuracy, bearing, speed, timestamp, source);
         }
 
-        static Fix available(double latitude, double longitude, double altitude,
-                double accuracy, double bearing, double speed, long timestamp,
-                String source) {
-            return new Fix(true, "", latitude, longitude, altitude, accuracy,
-                    bearing, speed, timestamp, source);
+        static LocationFix unavailable(String message) {
+            return new LocationFix(false, message, 0.0, 0.0, 0.0, 0.0, 0.0,
+                    0.0, 0L, "");
         }
 
-        boolean isAvailable() {
+        public boolean isAvailable() {
             return available;
         }
 
-        String getMessage() {
+        public String getMessage() {
             return message;
         }
 
-        double getLatitude() {
+        public double getLatitude() {
             return latitude;
         }
 
-        double getLongitude() {
+        public double getLongitude() {
             return longitude;
         }
 
-        double getAltitude() {
+        public double getAltitude() {
             return altitude;
         }
 
-        double getAccuracy() {
+        public double getAccuracy() {
             return accuracy;
         }
 
-        double getBearing() {
+        public double getBearing() {
             return bearing;
         }
 
-        double getSpeed() {
+        public double getSpeed() {
             return speed;
         }
 
-        long getTimestamp() {
+        public long getTimestamp() {
             return timestamp;
         }
 
-        String getSource() {
+        public String getSource() {
             return source;
         }
     }
 
-    private final MapView mapView;
+    /**
+     * Supplies a {@link LocationFix}. The ATAK-bound implementation reads
+     * {@link MapView}; tests provide a canned implementation instead.
+     */
+    interface LocationFixSource {
+        LocationFix readFix();
+    }
+
+    /** Reads the self-marker fix and heading/speed from an ATAK MapView. */
+    private static class MapViewLocationFixSource implements LocationFixSource {
+
+        private final MapView mapView;
+
+        MapViewLocationFixSource(MapView mapView) {
+            this.mapView = mapView;
+        }
+
+        @Override
+        public LocationFix readFix() {
+            AtakLocationStatus.Snapshot snapshot =
+                    AtakLocationStatus.from(mapView);
+            if (!snapshot.isAvailable())
+                return LocationFix.unavailable(snapshot.getMessage());
+
+            GeoPoint point = snapshot.getPoint();
+            Marker self = mapView.getSelfMarker();
+            return LocationFix.available(point.getLatitude(),
+                    point.getLongitude(), point.getAltitude(), point.getCE(),
+                    snapshot.getTimestamp(), snapshot.getSource(),
+                    self == null ? 0.0 : self.getTrackHeading(),
+                    self == null ? 0.0 : self.getTrackSpeed());
+        }
+    }
+
+    public static final long UPDATE_INTERVAL_MS = 10000L;
+
+    private final LocationFixSource locationFixSource;
     private final IdentityManager identityManager;
     private final SearchTrackManager trackManager;
     private final PluginHealthManager healthManager;
     private final Listener listener;
-    private Handler handler;
+    private final Handler handler;
     private boolean running;
 
     private final Runnable captureRunnable = new Runnable() {
@@ -121,11 +156,21 @@ public class LocationCaptureManager {
     public LocationCaptureManager(MapView mapView,
             IdentityManager identityManager, SearchTrackManager trackManager,
             PluginHealthManager healthManager, Listener listener) {
-        this.mapView = mapView;
+        this(new MapViewLocationFixSource(mapView), identityManager,
+                trackManager, healthManager, listener,
+                new Handler(Looper.getMainLooper()));
+    }
+
+    LocationCaptureManager(LocationFixSource locationFixSource,
+            IdentityManager identityManager, SearchTrackManager trackManager,
+            PluginHealthManager healthManager, Listener listener,
+            Handler handler) {
+        this.locationFixSource = locationFixSource;
         this.identityManager = identityManager;
         this.trackManager = trackManager;
         this.healthManager = healthManager;
         this.listener = listener;
+        this.handler = handler;
     }
 
     public void start() {
@@ -145,38 +190,41 @@ public class LocationCaptureManager {
     }
 
     public void captureNow() {
-        IdentityManager.Identity identity = identityManager.resolveIdentity();
-        applyCapture(identity.isResolved(), identity.getMessage(),
-                identity.getUid(), identity.getCallsign(),
-                identity.isResolved() ? readFix() : null);
+        captureWith(identityManager.resolveIdentity(),
+                locationFixSource.readFix());
     }
 
     /**
-     * Applies one capture cycle. A position is written only when the identity
-     * resolved <i>and</i> ATAK supplied a usable fix; every other path records
-     * the failure and writes nothing, so a lost signal can never be filled in
-     * with a stale or inferred position.
+     * Capture decision logic, kept free of ATAK types so it can be unit tested
+     * on a plain JVM. The ATAK plumbing lives in {@link #captureNow()}.
      */
-    void applyCapture(boolean identityResolved, String identityMessage,
-            String uid, String callsign, Fix fix) {
-        healthManager.setIdentityResolved(identityResolved, identityMessage);
-        if (!identityResolved) {
+    void captureWith(IdentityManager.Identity identity, LocationFix fix) {
+        healthManager.setIdentityResolved(identity.isResolved(),
+                identity.getMessage());
+        if (!identity.isResolved()) {
             healthManager.recordLocationFailure(
                     "Identity unavailable; tracking degraded");
             notifyListener();
             return;
         }
 
-        if (fix == null || !fix.isAvailable()) {
-            healthManager.recordLocationFailure(
-                    fix == null ? "No GPS Signal" : fix.getMessage());
+        if (!fix.isAvailable()) {
+            healthManager.recordLocationFailure(fix.getMessage());
             notifyListener();
             return;
         }
 
-        trackManager.recordLocation(uid, callsign, fix.getLatitude(),
-                fix.getLongitude(), fix.getAltitude(), fix.getAccuracy(),
-                fix.getBearing(), fix.getSpeed(), fix.getTimestamp());
+        // Track points are only ever logged by raw GNSS capture
+        // (RawGnssCaptureManager) so the track never mixes ATAK's
+        // internally-fused self-marker fix with unmodified raw device
+        // readings - see Sprint 1 "preserve accuracy metadata without
+        // modification". This self-marker snapshot is used purely to drive
+        // identity/health reporting (Active/Degraded/GPS Lost) below, not
+        // to log a track point.
+        trackManager.recordLocation(identity.getUid(), identity.getCallsign(),
+                fix.getLatitude(), fix.getLongitude(), fix.getAltitude(),
+                fix.getAccuracy(), fix.getBearing(), fix.getSpeed(),
+                fix.getTimestamp());
         healthManager.setTrackingActive(trackManager.isRecording());
         healthManager.recordLocationSuccess(fix.getTimestamp(),
                 fix.getAccuracy(), fix.getSource());

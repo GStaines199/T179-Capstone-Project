@@ -3,6 +3,7 @@ package com.atakmap.android.plugintemplate.runtime;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.atakmap.android.maps.Marker;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 
@@ -13,6 +14,8 @@ public class LocationCaptureManager {
     }
 
     public static final long UPDATE_INTERVAL_MS = 10000L;
+    private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
+            12.0;
 
     private final MapView mapView;
     private final IdentityManager identityManager;
@@ -74,14 +77,27 @@ public class LocationCaptureManager {
 
         long timestamp = snapshot.getTimestamp();
         double accuracy = snapshot.getPoint().getCE();
+        Marker selfMarker = mapView == null ? null : mapView.getSelfMarker();
+        double bearing = selfMarker == null ? 0.0
+                : selfMarker.getTrackHeading();
+        double speed = selfMarker == null ? 0.0
+                : sanitizeSpeed(selfMarker.getTrackSpeed());
         trackManager.recordLocation(identity.getUid(), identity.getCallsign(),
-                snapshot.getPoint(), accuracy,
-                mapView.getSelfMarker().getTrackHeading(),
-                mapView.getSelfMarker().getTrackSpeed(), timestamp);
+                snapshot.getPoint(), accuracy, bearing, speed, timestamp);
         healthManager.setTrackingActive(trackManager.isRecording());
         healthManager.recordLocationSuccess(timestamp, accuracy,
                 snapshot.getSource());
         notifyListener();
+    }
+
+    private double sanitizeSpeed(double speedMetersPerSecond) {
+        if (Double.isNaN(speedMetersPerSecond)
+                || Double.isInfinite(speedMetersPerSecond)
+                || speedMetersPerSecond < 0.0
+                || speedMetersPerSecond
+                        > MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND)
+            return 0.0;
+        return speedMetersPerSecond;
     }
 
     private void notifyListener() {

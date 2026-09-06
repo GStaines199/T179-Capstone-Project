@@ -18,6 +18,7 @@ public class SearchTrackManager {
     private String activeSessionId;
     private String activeUid;
     private String activeCallsign;
+    private String operationId = "";
     private long sessionStartedAt;
 
     public SearchTrackManager(TrackSessionRepository trackSessionRepository,
@@ -29,9 +30,16 @@ public class SearchTrackManager {
     public void startOrResume(String uid, String callsign) {
         activeUid = uid;
         activeCallsign = callsign;
-        String existingSession = trackSessionRepository.getActiveSessionId(uid);
+        if (!hasActiveOperation()) {
+            activeSessionId = null;
+            sessionStartedAt = 0L;
+            recording = true;
+            return;
+        }
+        String existingSession = trackSessionRepository.getActiveSessionId(uid,
+                sessionPrefix(uid));
         if (existingSession == null) {
-            existingSession = "track-" + uid + "-" + UUID.randomUUID();
+            existingSession = sessionPrefix(uid) + UUID.randomUUID();
             sessionStartedAt = System.currentTimeMillis();
             trackSessionRepository.insert(existingSession, uid, callsign,
                     sessionStartedAt);
@@ -41,6 +49,17 @@ public class SearchTrackManager {
         }
         activeSessionId = existingSession;
         recording = true;
+    }
+
+    public void setOperationId(String operationId) {
+        String nextOperationId = sanitize(operationId);
+        if (nextOperationId.equals(this.operationId))
+            return;
+        this.operationId = nextOperationId;
+        activeSessionId = null;
+        sessionStartedAt = 0L;
+        if (activeUid != null && activeCallsign != null && recording)
+            startOrResume(activeUid, activeCallsign);
     }
 
     public boolean toggleRecording() {
@@ -94,7 +113,7 @@ public class SearchTrackManager {
     public void recordLocation(String uid, String callsign, double latitude,
             double longitude, double altitude, double accuracy, double bearing,
             double speed, long timestamp) {
-        if (!recording)
+        if (!recording || !hasActiveOperation())
             return;
         if (activeSessionId == null || activeUid == null
                 || !activeUid.equals(uid))
@@ -113,6 +132,8 @@ public class SearchTrackManager {
     }
 
     public String getStatusSummary() {
+        if (!hasActiveOperation())
+            return "Waiting for active operation";
         if (activeSessionId == null)
             return "Waiting for first GPS fix";
         return recording ? "Recording - local track active"
@@ -120,6 +141,8 @@ public class SearchTrackManager {
     }
 
     public String getDetailsSummary() {
+        if (!hasActiveOperation())
+            return "Create or join an operation to start operation-scoped track logging.";
         int trackPoints = activeSessionId == null ? 0
                 : locationRepository.countPointsInSession(activeSessionId);
         long elapsedSeconds = sessionStartedAt <= 0L ? 0L
@@ -148,6 +171,18 @@ public class SearchTrackManager {
         long minutes = elapsedSeconds / 60L;
         long seconds = elapsedSeconds % 60L;
         return String.format(Locale.US, "%d min %02d sec", minutes, seconds);
+    }
+
+    private String sessionPrefix(String uid) {
+        return "track-" + operationId + "-" + sanitize(uid) + "-";
+    }
+
+    private boolean hasActiveOperation() {
+        return operationId.length() > 0;
+    }
+
+    private String sanitize(String value) {
+        return value == null ? "" : value.trim();
     }
 
     public void stopSession() {

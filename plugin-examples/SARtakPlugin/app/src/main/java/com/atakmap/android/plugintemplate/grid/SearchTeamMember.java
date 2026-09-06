@@ -2,6 +2,10 @@ package com.atakmap.android.plugintemplate.grid;
 
 public class SearchTeamMember {
 
+    private static final double MIN_HEADING_SPEED_METERS_PER_SECOND = 0.4;
+    private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
+            12.0;
+
     public enum TeamRole {
         TEAM_LEADER,
         SEARCHER
@@ -132,7 +136,9 @@ public class SearchTeamMember {
     }
 
     public boolean hasReliableHeading() {
-        return headingReliable && speedMetersPerSecond > 0.4;
+        return headingReliable
+                && speedMetersPerSecond
+                        > MIN_HEADING_SPEED_METERS_PER_SECOND;
     }
 
     public double getSpeedMetersPerSecond() {
@@ -241,8 +247,9 @@ public class SearchTeamMember {
     public void updateMovement(double headingDegrees,
             boolean headingReliable, double speedMetersPerSecond) {
         this.headingDegrees = headingDegrees;
+        double safeSpeed = sanitizeSpeed(speedMetersPerSecond);
         this.headingReliable = headingReliable;
-        this.speedMetersPerSecond = speedMetersPerSecond;
+        this.speedMetersPerSecond = safeSpeed;
     }
 
     public void updateMapPosition(double latitude, double longitude,
@@ -273,11 +280,11 @@ public class SearchTeamMember {
         lastPing = lastPingMessage;
         lastPresenceTimestamp = System.currentTimeMillis();
         if (!liveAtakContact) {
-            gpsCoordinates = "ATAK contact pending";
-            altitude = "ATAK contact pending";
-            currentGridCell = "ATAK contact pending";
-            distanceFromYou = "ATAK contact pending";
-            distanceFromSearchLine = "ATAK contact pending";
+            gpsCoordinates = "Location unavailable";
+            altitude = "Location unavailable";
+            currentGridCell = "Location unavailable";
+            distanceFromYou = "Location unavailable";
+            distanceFromSearchLine = "Location unavailable";
         }
     }
 
@@ -299,5 +306,15 @@ public class SearchTeamMember {
     public boolean needsConnectionAlert() {
         return membershipStatus == MembershipStatus.ACTIVE_MEMBER
                 && connectionStatus != ConnectionStatus.CONNECTED;
+    }
+
+    private double sanitizeSpeed(double speedMetersPerSecond) {
+        if (Double.isNaN(speedMetersPerSecond)
+                || Double.isInfinite(speedMetersPerSecond)
+                || speedMetersPerSecond < 0.0
+                || speedMetersPerSecond
+                        > MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND)
+            return 0.0;
+        return speedMetersPerSecond;
     }
 }

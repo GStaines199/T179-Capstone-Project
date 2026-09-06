@@ -58,6 +58,14 @@ public class PluginHealthManager {
                 && locationMessage.startsWith("GPS active");
     }
 
+    public boolean isStorageReady() {
+        return storageReady;
+    }
+
+    public boolean isTrackingActive() {
+        return trackingActive;
+    }
+
     public PluginHealthState getState() {
         if (!started || !storageReady)
             return PluginHealthState.INACTIVE;

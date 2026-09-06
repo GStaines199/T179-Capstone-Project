@@ -6,6 +6,7 @@ import org.json.JSONObject;
 public class DittoDeviceSnapshot {
 
     private final String uid;
+    private final String operationId;
     private final String callsign;
     private final String teamId;
     private final String teamName;
@@ -27,14 +28,15 @@ public class DittoDeviceSnapshot {
     private final String gridCellId;
     private final long updatedAt;
 
-    private DittoDeviceSnapshot(String uid, String callsign, String teamId,
-            String teamName, String leaderUid, String leaderCallsign,
-            String role, String teamColorName, int teamColorArgb,
-            String memberColorName, int memberColorArgb, boolean hasLocation,
-            double latitude, double longitude, double altitude,
-            double accuracy, double heading, double speed,
+    private DittoDeviceSnapshot(String uid, String operationId,
+            String callsign, String teamId, String teamName, String leaderUid,
+            String leaderCallsign, String role, String teamColorName,
+            int teamColorArgb, String memberColorName, int memberColorArgb,
+            boolean hasLocation, double latitude, double longitude,
+            double altitude, double accuracy, double heading, double speed,
             boolean headingReliable, String gridCellId, long updatedAt) {
         this.uid = uid;
+        this.operationId = operationId;
         this.callsign = callsign;
         this.teamId = teamId;
         this.teamName = teamName;
@@ -62,6 +64,7 @@ public class DittoDeviceSnapshot {
         JSONObject object = new JSONObject(json);
         return new DittoDeviceSnapshot(
                 object.optString("uid", ""),
+                object.optString("operationId", ""),
                 object.optString("callsign", ""),
                 object.optString("teamId", ""),
                 object.optString("teamName", ""),
@@ -86,6 +89,10 @@ public class DittoDeviceSnapshot {
 
     public String getUid() {
         return uid;
+    }
+
+    public String getOperationId() {
+        return operationId;
     }
 
     public String getCallsign() {

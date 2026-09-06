@@ -1,5 +1,6 @@
-# Copy this file and rename the copy to local.properties
-# Do not commit local.properties
+# Copy this file and rename the copy to local.properties.
+# Do not commit local.properties because it may contain local paths, signing
+# details, and Ditto credentials.
 
 # Android SDK location
 # Windows example:
@@ -23,8 +24,13 @@ takReleaseKeyFilePassword=android
 takReleaseKeyAlias=androiddebugkey
 takReleaseKeyPassword=android
 
-# Optional: Ditto SDK sync test credentials
-# Get these from https://portal.ditto.live/ and keep them out of git.
-DITTO_APP_ID=88ed3c0c-bf9b-4da2-bc94-6c3ac95751a3
-DITTO_PLAYGROUND_TOKEN=801317b0-9885-42e9-af80-ea3b27a0e41b
-DITTO_AUTH_URL=https://i83inp.cloud.dittolive.app
+# Optional: Ditto SDK sync test credentials.
+# Only the machine/device that creates SARtak operation QR/join codes needs
+# these values at build time. Joining devices receive the operation profile from
+# the QR/code.
+#
+# Get these from the Ditto Portal database/app Connect tab and keep them out of
+# git.
+DITTO_DATABASE_ID=YOUR_DITTO_DATABASE_ID
+DITTO_DEVELOPMENT_TOKEN=YOUR_DITTO_DEVELOPMENT_OR_PLAYGROUND_TOKEN
+DITTO_AUTH_URL=https://YOUR_DITTO_AUTH_URL

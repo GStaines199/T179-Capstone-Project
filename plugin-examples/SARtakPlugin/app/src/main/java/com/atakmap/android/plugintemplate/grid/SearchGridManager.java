@@ -39,6 +39,11 @@ public class SearchGridManager {
         return selectedCell;
     }
 
+    public void refreshSelectedCellStatus() {
+        if (selectedCell != null)
+            selectedCell.setStatus(stateStore.getStatus(selectedCell.getId()));
+    }
+
     public String getSelectedAggregateId() {
         return selectedAggregateId;
     }

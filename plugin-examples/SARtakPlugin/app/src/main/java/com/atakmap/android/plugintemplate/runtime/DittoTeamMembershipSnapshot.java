@@ -10,6 +10,7 @@ public class DittoTeamMembershipSnapshot {
     public static final String STATUS_REMOVED = "REMOVED";
 
     private final String teamId;
+    private final String operationId;
     private final String teamName;
     private final String leaderUid;
     private final String leaderCallsign;
@@ -25,6 +26,17 @@ public class DittoTeamMembershipSnapshot {
             String leaderUid, String leaderCallsign, String memberUid,
             String memberCallsign, String status, String role,
             String updatedByUid, String updatedByCallsign, long updatedAt) {
+        this("", teamId, teamName, leaderUid, leaderCallsign, memberUid,
+                memberCallsign, status, role, updatedByUid,
+                updatedByCallsign, updatedAt);
+    }
+
+    public DittoTeamMembershipSnapshot(String operationId, String teamId,
+            String teamName, String leaderUid, String leaderCallsign,
+            String memberUid, String memberCallsign, String status,
+            String role, String updatedByUid, String updatedByCallsign,
+            long updatedAt) {
+        this.operationId = safe(operationId);
         this.teamId = safe(teamId);
         this.teamName = safe(teamName);
         this.leaderUid = safe(leaderUid);
@@ -42,6 +54,7 @@ public class DittoTeamMembershipSnapshot {
             throws JSONException {
         JSONObject object = new JSONObject(json);
         return new DittoTeamMembershipSnapshot(
+                object.optString("operationId", ""),
                 object.optString("teamId", ""),
                 object.optString("teamName", ""),
                 object.optString("leaderUid", ""),
@@ -57,6 +70,10 @@ public class DittoTeamMembershipSnapshot {
 
     public String getTeamId() {
         return teamId;
+    }
+
+    public String getOperationId() {
+        return operationId;
     }
 
     public String getTeamName() {

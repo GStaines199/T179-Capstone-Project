@@ -15,22 +15,29 @@ public class SearchTeamStateStore {
     private static final String KEY_TEAM_CREATED = "team_created";
 
     private final SharedPreferences preferences;
+    private String operationId = "";
 
     public SearchTeamStateStore(Context context) {
         preferences = context.getSharedPreferences(PREFS_NAME,
                 Context.MODE_PRIVATE);
     }
 
+    public void setOperationId(String operationId) {
+        this.operationId = sanitize(operationId);
+    }
+
     public void load(SearchPartyAssignmentManager assignmentManager) {
+        if (!isOperationScoped())
+            return;
         assignmentManager.setTeamDetails(
-                preferences.getString(KEY_TEAM_NAME,
+                preferences.getString(key(KEY_TEAM_NAME),
                         assignmentManager.getTeamName()),
-                preferences.getString(KEY_TEAM_ID,
+                preferences.getString(key(KEY_TEAM_ID),
                         assignmentManager.getTeamId()));
         assignmentManager.setTeamCreated(preferences.getBoolean(
-                KEY_TEAM_CREATED, false));
+                key(KEY_TEAM_CREATED), false));
 
-        Set<String> members = preferences.getStringSet(KEY_MEMBERS,
+        Set<String> members = preferences.getStringSet(key(KEY_MEMBERS),
                 new HashSet<String>());
         if (members == null)
             return;
@@ -47,6 +54,8 @@ public class SearchTeamStateStore {
     }
 
     public void save(SearchPartyAssignmentManager assignmentManager) {
+        if (!isOperationScoped())
+            return;
         Set<String> members = new HashSet<>();
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
             if (member.isTeamLeader())
@@ -55,20 +64,34 @@ public class SearchTeamStateStore {
         }
 
         preferences.edit()
-                .putString(KEY_TEAM_NAME, assignmentManager.getTeamName())
-                .putString(KEY_TEAM_ID, assignmentManager.getTeamId())
-                .putBoolean(KEY_TEAM_CREATED,
+                .putString(key(KEY_TEAM_NAME), assignmentManager.getTeamName())
+                .putString(key(KEY_TEAM_ID), assignmentManager.getTeamId())
+                .putBoolean(key(KEY_TEAM_CREATED),
                         assignmentManager.isTeamCreated())
-                .putStringSet(KEY_MEMBERS, members)
+                .putStringSet(key(KEY_MEMBERS), members)
                 .apply();
     }
 
     public void clear() {
+        if (!isOperationScoped())
+            return;
         preferences.edit()
-                .remove(KEY_TEAM_NAME)
-                .remove(KEY_TEAM_ID)
-                .remove(KEY_MEMBERS)
-                .putBoolean(KEY_TEAM_CREATED, false)
+                .remove(key(KEY_TEAM_NAME))
+                .remove(key(KEY_TEAM_ID))
+                .remove(key(KEY_MEMBERS))
+                .putBoolean(key(KEY_TEAM_CREATED), false)
                 .apply();
+    }
+
+    private String key(String baseKey) {
+        return operationId + "." + baseKey;
+    }
+
+    private boolean isOperationScoped() {
+        return operationId.length() > 0;
+    }
+
+    private String sanitize(String value) {
+        return value == null ? "" : value.trim();
     }
 }

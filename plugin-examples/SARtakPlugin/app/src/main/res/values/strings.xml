@@ -34,8 +34,10 @@
     <string name="area_cleared_status">Cleared cells appear after manual marking.</string>
     <string name="show_lanes">Show Grid Overlay</string>
     <string name="hide_lanes">Hide Grid Overlay</string>
+    <string name="grid_overlay_switch_label">Grid overlay</string>
     <string name="show_grid_labels">Show Grid Labels</string>
     <string name="hide_grid_labels">Hide Grid Labels</string>
+    <string name="grid_labels_switch_label">Grid labels</string>
     <string name="grid_selected_cell">Selected Cell</string>
     <string name="grid_no_cell">No cell selected</string>
     <string name="grid_assignment">Assignments</string>
@@ -63,6 +65,17 @@
     <string name="leader_view">Team Leader</string>
     <string name="member_view">Team Member</string>
     <string name="current_operation">Current Operation</string>
+    <string name="operation_profile_heading">Operation Sync Profile</string>
+    <string name="operation_no_active">No active operation selected</string>
+    <string name="ditto_setup_heading">Ditto Setup</string>
+    <string name="ditto_no_profile">No Ditto profile saved</string>
+    <string name="manage_ditto_profiles">Manage Ditto Profiles</string>
+    <string name="operation_readiness_heading">Operation Readiness</string>
+    <string name="operation_readiness_waiting">Waiting for operation checks</string>
+    <string name="create_operation">Create Operation</string>
+    <string name="show_operation_join_code">Show / Copy Join Code</string>
+    <string name="join_operation">Join Operation With Code</string>
+    <string name="leave_operation">Leave Operation</string>
     <string name="current_grid_info">Current Grid Info</string>
     <string name="current_search_cell">Current Search Cell</string>
     <string name="team_name">Team Alpha</string>
@@ -88,8 +101,10 @@
     <string name="team_marker_mode_all">All Visible</string>
     <string name="track_pause">Pause</string>
     <string name="track_resume">Resume</string>
+    <string name="track_recording_switch_label">Track recording</string>
     <string name="track_hide">Hide Track</string>
     <string name="track_show">Show Track</string>
+    <string name="track_visibility_switch_label">Show track on map</string>
     <string name="track_clear">Clear Visible Track</string>
     <string name="search_line_heading">Search Line</string>
     <string name="search_line_not_started">Line not started</string>
@@ -104,6 +119,7 @@
     <string name="grid_progress_empty">Select the current GPS cell to show grid progress.</string>
     <string name="hide_callsigns">Hide Callsigns</string>
     <string name="show_callsigns">Show Callsigns</string>
+    <string name="callsigns_switch_label">Map callsigns</string>
     <string name="devices_heading">Connected Devices</string>
     <string name="devices_waiting">Waiting for ATAK or Ditto devices</string>
     <string name="reset_sync_state">Reset Local Sync State</string>

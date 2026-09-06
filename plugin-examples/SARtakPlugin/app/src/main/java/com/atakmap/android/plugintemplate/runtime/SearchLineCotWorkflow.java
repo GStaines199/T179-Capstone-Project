@@ -45,6 +45,7 @@ public class SearchLineCotWorkflow {
             };
     private long lastUpdatePublishTime;
     private DittoSyncManager dittoSyncManager;
+    private String operationId = "";
 
     public SearchLineCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -63,6 +64,10 @@ public class SearchLineCotWorkflow {
 
     public void setDittoSyncManager(DittoSyncManager dittoSyncManager) {
         this.dittoSyncManager = dittoSyncManager;
+    }
+
+    public void setOperationId(String operationId) {
+        this.operationId = safe(operationId);
     }
 
     public void clearLocalMessages() {
@@ -95,6 +100,8 @@ public class SearchLineCotWorkflow {
         SearchLineCotMessage latest = null;
         synchronized (messages) {
             for (SearchLineCotMessage message : messages.values()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
                 if (!teamId.equals(message.getTeamId()))
                     continue;
                 if (identity != null && identity.getUid().equals(
@@ -110,6 +117,8 @@ public class SearchLineCotWorkflow {
         if (dittoSyncManager != null) {
             for (SearchLineCotMessage message
                     : dittoSyncManager.getSearchLineMessages()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
                 if (!teamId.equals(message.getTeamId()))
                     continue;
                 if (identity != null && identity.getUid().equals(
@@ -130,6 +139,8 @@ public class SearchLineCotWorkflow {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (identity == null || !identity.isResolved())
             return;
+        if (operationId.length() == 0)
+            return;
         long created = System.currentTimeMillis();
         SearchGridCell cell = manager.getActiveCell();
         SearchLineCotMessage message = new SearchLineCotMessage(
@@ -146,7 +157,7 @@ public class SearchLineCotWorkflow {
                 cell == null ? 0.0 : cell.getEast(),
                 cell == null ? 0.0 : cell.getNorth(),
                 manager.getLineNorthing(), manager.getColorOption(),
-                manager.getReturnMarkToleranceMeters(), created);
+                manager.getReturnMarkToleranceMeters(), created, operationId);
         messages.put(message.getUid(), message);
         if (dittoSyncManager != null)
             dittoSyncManager.publishSearchLine(message);
@@ -161,6 +172,7 @@ public class SearchLineCotWorkflow {
         CotDetail detail = new CotDetail(DETAIL_NAME);
         detail.setAttribute("messageUid", message.getUid());
         detail.setAttribute("action", message.getAction());
+        detail.setAttribute("operationId", message.getOperationId());
         detail.setAttribute("teamId", message.getTeamId());
         detail.setAttribute("senderUid", message.getSenderUid());
         detail.setAttribute("senderCallsign", message.getSenderCallsign());
@@ -219,6 +231,8 @@ public class SearchLineCotWorkflow {
         SearchLineCotMessage message = fromCotEvent(event);
         if (message == null || isExpired(message))
             return false;
+        if (!matchesOperation(message.getOperationId()))
+            return false;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (identity == null || !identity.getUid().equals(
                 message.getSenderUid()))
@@ -246,7 +260,8 @@ public class SearchLineCotWorkflow {
                 doubleValue(detail, "north"),
                 doubleValue(detail, "lineNorthing"),
                 colorValue(value(detail, "color")),
-                doubleValue(detail, "tolerance"), created);
+                doubleValue(detail, "tolerance"), created,
+                value(detail, "operationId"));
     }
 
     private void addStandardContactDetails(CotDetail root, String callsign) {
@@ -425,6 +440,11 @@ public class SearchLineCotWorkflow {
 
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private boolean matchesOperation(String messageOperationId) {
+        return operationId.length() > 0
+                && operationId.equals(safe(messageOperationId));
     }
 }
 

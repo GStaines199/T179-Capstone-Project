@@ -37,6 +37,7 @@ public class SearchGridCotWorkflow {
                 }
             };
     private DittoSyncManager dittoSyncManager;
+    private String operationId = "";
 
     public SearchGridCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -57,6 +58,10 @@ public class SearchGridCotWorkflow {
         this.dittoSyncManager = dittoSyncManager;
     }
 
+    public void setOperationId(String operationId) {
+        this.operationId = safe(operationId);
+    }
+
     public void clearLocalMessages() {
         synchronized (messages) {
             messages.clear();
@@ -68,6 +73,8 @@ public class SearchGridCotWorkflow {
         if (teamId == null || teamId.length() == 0 || cellId == null
                 || cellId.length() == 0 || status == null)
             return;
+        if (operationId.length() == 0)
+            return;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (identity == null || !identity.isResolved())
             return;
@@ -76,7 +83,7 @@ public class SearchGridCotWorkflow {
                 "sartak-grid-" + teamId + "-" + cellId + "-"
                         + identity.getUid() + "-" + created,
                 teamId, identity.getUid(), identity.getCallsign(), cellId,
-                status, created);
+                status, created, operationId);
         messages.put(message.getUid(), message);
         if (dittoSyncManager != null)
             dittoSyncManager.publishSearchGridStatus(message);
@@ -92,6 +99,8 @@ public class SearchGridCotWorkflow {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         synchronized (messages) {
             for (SearchGridCotMessage message : messages.values()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
                 if (!teamId.equals(message.getTeamId()) || isExpired(message))
                     continue;
                 if (identity != null && identity.getUid().equals(
@@ -103,6 +112,8 @@ public class SearchGridCotWorkflow {
         if (dittoSyncManager != null) {
             for (SearchGridCotMessage message
                     : dittoSyncManager.getSearchGridMessages()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
                 if (!teamId.equals(message.getTeamId()) || isExpired(message))
                     continue;
                 if (identity != null && identity.getUid().equals(
@@ -120,6 +131,7 @@ public class SearchGridCotWorkflow {
         CotDetail detail = new CotDetail(DETAIL_NAME);
         detail.setAttribute("messageUid", message.getUid());
         detail.setAttribute("action", SearchGridCotMessage.ACTION_GRID_STATUS);
+        detail.setAttribute("operationId", message.getOperationId());
         detail.setAttribute("teamId", message.getTeamId());
         detail.setAttribute("senderUid", message.getSenderUid());
         detail.setAttribute("senderCallsign", message.getSenderCallsign());
@@ -162,6 +174,8 @@ public class SearchGridCotWorkflow {
         SearchGridCotMessage message = fromCotEvent(event);
         if (message == null || isExpired(message))
             return false;
+        if (!matchesOperation(message.getOperationId()))
+            return false;
         messages.put(message.getUid(), message);
         return true;
     }
@@ -179,7 +193,7 @@ public class SearchGridCotWorkflow {
         return new SearchGridCotMessage(messageUid, value(detail, "teamId"),
                 value(detail, "senderUid"), value(detail, "senderCallsign"),
                 value(detail, "cellId"), statusValue(value(detail, "status")),
-                created);
+                created, value(detail, "operationId"));
     }
 
     private boolean isExpired(SearchGridCotMessage message) {
@@ -207,6 +221,15 @@ public class SearchGridCotWorkflow {
     private String value(CotDetail detail, String key) {
         String value = detail.getAttribute(key);
         return value == null ? "" : value;
+    }
+
+    private boolean matchesOperation(String messageOperationId) {
+        return operationId.length() > 0
+                && operationId.equals(safe(messageOperationId));
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private long longValue(CotDetail detail, String key, long fallback) {

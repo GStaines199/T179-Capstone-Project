@@ -35,6 +35,7 @@
         android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="tiramisu" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <application 
         android:allowBackup="false"
@@ -57,6 +58,12 @@
               <action android:name="com.atakmap.app.component" />
            </intent-filter>
        </activity>
+
+       <activity
+           android:name="com.atakmap.android.plugintemplate.OperationQrScanActivity"
+           android:exported="false"
+           android:screenOrientation="portrait"
+           android:theme="@style/AppTheme" />
 
 
     </application>

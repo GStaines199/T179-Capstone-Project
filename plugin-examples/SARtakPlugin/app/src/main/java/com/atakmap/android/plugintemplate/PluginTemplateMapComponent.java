@@ -45,6 +45,7 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
         Log.d(TAG, "registering the plugin filter");
         DocumentedIntentFilter ddFilter = new DocumentedIntentFilter();
         ddFilter.addAction(PluginTemplateDropDownReceiver.SHOW_PLUGIN);
+        ddFilter.addAction(OperationQrScanActivity.ACTION_SCAN_RESULT);
         registerDropDownReceiver(ddr, ddFilter);
     }
 

@@ -26,6 +26,9 @@ import java.util.Map;
  */
 public class AtakTeamContactDataSource {
 
+    private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
+            12.0;
+
     public static class ContactSnapshot {
         private final String uid;
         private final String callsign;
@@ -301,7 +304,10 @@ public class AtakTeamContactDataSource {
             speed = marker.getMetaDouble("trackSpeed", Double.NaN);
         if (Double.isNaN(speed))
             speed = marker.getMetaDouble("est.speed", 0.0);
-        return Math.max(0.0, speed);
+        if (Double.isNaN(speed) || Double.isInfinite(speed) || speed < 0.0
+                || speed > MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND)
+            return 0.0;
+        return speed;
     }
 
     private long getTimestamp(Marker marker) {

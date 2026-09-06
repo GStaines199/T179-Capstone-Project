@@ -60,6 +60,7 @@ public class SearchTeamCotWorkflow {
     private long lastPresenceTime;
     private long lastStyleTime;
     private long lastPendingRepublishTime;
+    private String operationId = "";
 
     public SearchTeamCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -79,6 +80,10 @@ public class SearchTeamCotWorkflow {
 
     public void setDittoSyncManager(DittoSyncManager dittoSyncManager) {
         this.dittoSyncManager = dittoSyncManager;
+    }
+
+    public void setOperationId(String operationId) {
+        this.operationId = safe(operationId);
     }
 
     public void clearLocalState() {
@@ -397,6 +402,8 @@ public class SearchTeamCotWorkflow {
             String targetCallsign, String teamColorName, int teamColorArgb,
             String memberColorName, int memberColorArgb, String memberRole) {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        if (operationId.length() == 0)
+            return;
         long created = System.currentTimeMillis();
         SearchTeamCotMessage message = new SearchTeamCotMessage(
                 "sartak-team-" + action + "-" + teamId + "-"
@@ -404,7 +411,7 @@ public class SearchTeamCotWorkflow {
                 action, teamId, teamName, leaderUid, leaderCallsign,
                 identity.getUid(), identity.getCallsign(), targetUid,
                 targetCallsign, created, teamColorName, teamColorArgb,
-                memberColorName, memberColorArgb, memberRole);
+                memberColorName, memberColorArgb, memberRole, operationId);
         directMessages.put(message.getUid(), message);
         publishToDitto(message);
         dispatch(message);
@@ -447,6 +454,8 @@ public class SearchTeamCotWorkflow {
 
         List<SearchTeamCotMessage> filtered = new ArrayList<>();
         for (SearchTeamCotMessage message : messages.values()) {
+            if (!matchesOperation(message.getOperationId()))
+                continue;
             if (targetUid != null && targetUid.length() > 0
                     && !targetUid.equals(message.getTargetUid()))
                 continue;
@@ -490,7 +499,8 @@ public class SearchTeamCotWorkflow {
                     parseColor(item.getMetaString(meta("teamColorArgb"), "")),
                     item.getMetaString(meta("memberColorName"), ""),
                     parseColor(item.getMetaString(meta("memberColorArgb"), "")),
-                    item.getMetaString(meta("memberRole"), "")));
+                    item.getMetaString(meta("memberRole"), ""),
+                    item.getMetaString(meta("operationId"), "")));
         }
         return messages;
     }
@@ -616,12 +626,18 @@ public class SearchTeamCotWorkflow {
                 && firstCallsign.equalsIgnoreCase(secondCallsign));
     }
 
+    private boolean matchesOperation(String messageOperationId) {
+        return operationId.length() > 0
+                && operationId.equals(safe(messageOperationId));
+    }
+
     private CotEvent createCotEvent(SearchTeamCotMessage message) {
         CoordinatedTime now = new CoordinatedTime();
         CotDetail root = new CotDetail();
         CotDetail detail = new CotDetail(SearchTeamCotDetailHandler.DETAIL_NAME);
         detail.setAttribute("messageUid", message.getUid());
         detail.setAttribute("action", message.getAction());
+        detail.setAttribute("operationId", message.getOperationId());
         detail.setAttribute("teamId", message.getTeamId());
         detail.setAttribute("teamName", message.getTeamName());
         detail.setAttribute("leaderUid", message.getLeaderUid());
@@ -711,6 +727,8 @@ public class SearchTeamCotWorkflow {
             return false;
         if (isExpired(message))
             return false;
+        if (!matchesOperation(message.getOperationId()))
+            return false;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (!identity.getUid().equals(message.getSenderUid()))
             directMessages.put(message.getUid(), message);
@@ -766,7 +784,7 @@ public class SearchTeamCotWorkflow {
                 parseColor(value(detail, "teamColorArgb")),
                 value(detail, "memberColorName"),
                 parseColor(value(detail, "memberColorArgb")),
-                value(detail, "memberRole"));
+                value(detail, "memberRole"), value(detail, "operationId"));
     }
 
     private String value(CotDetail detail, String key) {

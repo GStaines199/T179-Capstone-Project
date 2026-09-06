@@ -26,6 +26,9 @@ public class DittoSyncManager {
 
     private static final String TAG = "SARtakDittoSync";
     private static final long PUBLISH_INTERVAL_MS = 5000L;
+    private static final double MIN_HEADING_SPEED_METERS_PER_SECOND = 0.4;
+    private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
+            12.0;
     private static final String DEVICE_COLLECTION = "sartak_devices";
     private static final String DEVICE_QUERY = "SELECT * FROM "
             + DEVICE_COLLECTION;
@@ -79,6 +82,7 @@ public class DittoSyncManager {
     private String status = "Ditto: not started";
     private long lastPublishTime;
     private long lastReceiveTime;
+    private OperationProfile operationProfile;
 
     public DittoSyncManager(MapView mapView,
             IdentityManager identityManager) {
@@ -91,17 +95,19 @@ public class DittoSyncManager {
             return;
         configured = hasDittoCredentials();
         if (!configured) {
-            status = "Ditto: not configured (" + missingCredentialSummary()
-                    + ")";
+            status = operationProfile == null
+                    ? "Ditto: no operation selected"
+                    : "Ditto: not configured (" + missingCredentialSummary()
+                            + ")";
             return;
         }
 
         try {
             DittoSdkBridge.initialize(mapView.getContext());
-            ditto = DittoSdkBridge.createDitto(BuildConfig.DITTO_APP_ID,
-                    BuildConfig.DITTO_AUTH_URL);
+            ditto = DittoSdkBridge.createDitto(operationProfile
+                    .getDittoDatabaseId(), operationProfile.getDittoAuthUrl());
             DittoSdkBridge.setupAuth(ditto,
-                    BuildConfig.DITTO_PLAYGROUND_TOKEN);
+                    operationProfile.getDittoDevelopmentToken());
             deviceSubscription = DittoSdkBridge.registerSubscription(ditto,
                     DEVICE_QUERY);
             deviceObserver = DittoSdkBridge.registerJsonObserver(ditto,
@@ -153,7 +159,8 @@ public class DittoSyncManager {
                     });
             DittoSdkBridge.startSync(ditto);
             started = true;
-            status = "Ditto: active";
+            status = "Ditto: active for " + operationProfile
+                    .getOperationName();
         } catch (Throwable throwable) {
             status = "Ditto: unavailable - " + describeFailure(throwable);
             Log.w(TAG, "Ditto startup failed", throwable);
@@ -169,7 +176,9 @@ public class DittoSyncManager {
         }
         started = false;
         status = configured ? "Ditto: stopped"
-                : "Ditto: not configured (" + missingCredentialSummary() + ")";
+                : (operationProfile == null ? "Ditto: no operation selected"
+                        : "Ditto: not configured ("
+                                + missingCredentialSummary() + ")");
         deviceObserver = null;
         deviceSubscription = null;
         teamEventObserver = null;
@@ -181,6 +190,34 @@ public class DittoSyncManager {
         searchLineObserver = null;
         searchLineSubscription = null;
         ditto = null;
+    }
+
+    public void useOperationProfile(OperationProfile profile) {
+        boolean shouldStart = started || profile != null;
+        if (started)
+            stop();
+        operationProfile = profile;
+        clearLocalCaches();
+        if (shouldStart)
+            start();
+    }
+
+    public OperationProfile getOperationProfile() {
+        return operationProfile;
+    }
+
+    public boolean isStarted() {
+        return started;
+    }
+
+    public boolean isConfigured() {
+        return configured;
+    }
+
+    public boolean canCreateOperationFromBuildConfig() {
+        return notEmpty(BuildConfig.DITTO_APP_ID)
+                && notEmpty(BuildConfig.DITTO_PLAYGROUND_TOKEN)
+                && notEmpty(BuildConfig.DITTO_AUTH_URL);
     }
 
     public void publishDeviceStateIfDue(boolean teamCreated, String teamId,
@@ -246,6 +283,7 @@ public class DittoSyncManager {
             return;
         Map<String, Object> document = new HashMap<>();
         document.put("_id", documentIdFor(message));
+        document.put("operationId", getOperationId());
         document.put("uid", safe(message.getUid()));
         document.put("action", safe(message.getAction()));
         document.put("teamId", safe(message.getTeamId()));
@@ -291,6 +329,7 @@ public class DittoSyncManager {
         long now = System.currentTimeMillis();
         Map<String, Object> document = new HashMap<>();
         document.put("_id", membershipDocumentId(teamId, memberUid));
+        document.put("operationId", getOperationId());
         document.put("teamId", safe(teamId));
         document.put("teamName", safe(teamName));
         document.put("leaderUid", safe(leaderUid));
@@ -322,8 +361,9 @@ public class DittoSyncManager {
         if (!started || ditto == null || message == null)
             return;
         Map<String, Object> document = new HashMap<>();
-        document.put("_id", "grid-status-" + safe(message.getTeamId())
-                + "-" + safe(message.getCellId()));
+        document.put("_id", "grid-status-" + getOperationId() + "-"
+                + safe(message.getTeamId()) + "-" + safe(message.getCellId()));
+        document.put("operationId", getOperationId());
         document.put("uid", safe(message.getUid()));
         document.put("teamId", safe(message.getTeamId()));
         document.put("senderUid", safe(message.getSenderUid()));
@@ -351,7 +391,9 @@ public class DittoSyncManager {
             return;
         SearchGridCell cell = message.toCell();
         Map<String, Object> document = new HashMap<>();
-        document.put("_id", "search-line-" + safe(message.getTeamId()));
+        document.put("_id", "search-line-" + getOperationId() + "-"
+                + safe(message.getTeamId()));
+        document.put("operationId", getOperationId());
         document.put("uid", safe(message.getUid()));
         document.put("action", safe(message.getAction()));
         document.put("teamId", safe(message.getTeamId()));
@@ -408,6 +450,7 @@ public class DittoSyncManager {
 
     public String getDiagnosticsSummary() {
         return getSummary()
+                + "\nOperation: " + getOperationSummary()
                 + "\nDocs: " + getDeviceSnapshots().size()
                 + " devices, " + getTeamEvents().size()
                 + " team events, " + getTeamMemberships().size()
@@ -418,8 +461,9 @@ public class DittoSyncManager {
 
     public String getSummary() {
         if (!configured)
-            return "Ditto: not configured (" + missingCredentialSummary()
-                    + ")";
+            return operationProfile == null ? "Ditto: no operation selected"
+                    : "Ditto: not configured (" + missingCredentialSummary()
+                            + ")";
         String active = "unknown";
         if (ditto != null) {
             try {
@@ -447,7 +491,9 @@ public class DittoSyncManager {
         }
 
         Map<String, Object> document = new HashMap<>();
-        document.put("_id", "device-" + identity.getUid());
+        document.put("_id", "device-" + getOperationId() + "-"
+                + identity.getUid());
+        document.put("operationId", getOperationId());
         document.put("uid", identity.getUid());
         document.put("callsign", identity.getCallsign());
         document.put("teamCreated", teamCreated);
@@ -475,12 +521,14 @@ public class DittoSyncManager {
             document.put("accuracy", point.getCE());
             document.put("source", location.getSource());
         }
+        double speed = selfMember == null ? 0.0
+                : sanitizeSpeed(selfMember.getSpeedMetersPerSecond());
         document.put("heading", selfMember == null ? 0.0
                 : selfMember.getHeadingDegrees());
-        document.put("speed", selfMember == null ? 0.0
-                : selfMember.getSpeedMetersPerSecond());
+        document.put("speed", speed);
         document.put("headingReliable", selfMember != null
-                && selfMember.hasReliableHeading());
+                && selfMember.hasReliableHeading()
+                && speed > MIN_HEADING_SPEED_METERS_PER_SECOND);
         document.put("gridCellId", selectedCell == null ? ""
                 : selectedCell.getId());
 
@@ -507,6 +555,8 @@ public class DittoSyncManager {
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
             try {
+                if (!isCurrentOperation(json))
+                    continue;
                 SearchTeamCotMessage message = teamEventFromJson(json);
                 if (message.getUid().length() == 0
                         || message.getAction().length() == 0)
@@ -548,7 +598,8 @@ public class DittoSyncManager {
                 object.optInt("teamColorArgb", 0),
                 object.optString("memberColorName", ""),
                 object.optInt("memberColorArgb", 0),
-                object.optString("memberRole", ""));
+                object.optString("memberRole", ""),
+                object.optString("operationId", ""));
     }
 
     private void updateTeamMemberships(List<String> jsonDocuments) {
@@ -560,6 +611,8 @@ public class DittoSyncManager {
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
             try {
+                if (!isCurrentOperation(json))
+                    continue;
                 DittoTeamMembershipSnapshot membership =
                         DittoTeamMembershipSnapshot.fromJson(json);
                 if (membership.getTeamId().length() == 0
@@ -593,6 +646,8 @@ public class DittoSyncManager {
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
             try {
+                if (!isCurrentOperation(json))
+                    continue;
                 SearchGridCotMessage message = gridStatusFromJson(json);
                 if (message.getUid().length() == 0
                         || message.getCellId().length() == 0)
@@ -625,7 +680,8 @@ public class DittoSyncManager {
                 object.optString("senderCallsign", ""),
                 object.optString("cellId", ""),
                 statusValue(object.optString("status", "")),
-                object.optLong("created", 0L));
+                object.optLong("created", 0L),
+                object.optString("operationId", ""));
     }
 
     private void updateSearchLines(List<String> jsonDocuments) {
@@ -637,6 +693,8 @@ public class DittoSyncManager {
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
             try {
+                if (!isCurrentOperation(json))
+                    continue;
                 SearchLineCotMessage message = searchLineFromJson(json);
                 if (message.getUid().length() == 0
                         || message.getTeamId().length() == 0)
@@ -680,21 +738,24 @@ public class DittoSyncManager {
                 object.optDouble("lineNorthing", 0.0),
                 lineColorValue(object.optString("color", "")),
                 object.optDouble("tolerance", 0.0),
-                object.optLong("created", 0L));
+                object.optLong("created", 0L),
+                object.optString("operationId", ""));
     }
 
     private String documentIdFor(SearchTeamCotMessage message) {
         String action = safe(message.getAction());
         if (SearchTeamCotMessage.ACTION_ADVERTISE.equals(action)
                 || SearchTeamCotMessage.ACTION_PRESENCE.equals(action)) {
-            return "team-event-" + action + "-"
+            return "team-event-" + getOperationId() + "-" + action + "-"
                     + safe(message.getSenderUid());
         }
-        return "team-event-" + safe(message.getUid());
+        return "team-event-" + getOperationId() + "-"
+                + safe(message.getUid());
     }
 
     private String membershipDocumentId(String teamId, String memberUid) {
-        return "team-membership-" + safe(teamId) + "-" + safe(memberUid);
+        return "team-membership-" + getOperationId() + "-" + safe(teamId)
+                + "-" + safe(memberUid);
     }
 
     private void updateSnapshots(List<String> jsonDocuments) {
@@ -706,6 +767,8 @@ public class DittoSyncManager {
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
             try {
+                if (!isCurrentOperation(json))
+                    continue;
                 DittoDeviceSnapshot snapshot = DittoDeviceSnapshot
                         .fromJson(json);
                 if (snapshot.getUid().length() == 0)
@@ -729,18 +792,19 @@ public class DittoSyncManager {
     }
 
     private boolean hasDittoCredentials() {
-        return notEmpty(BuildConfig.DITTO_APP_ID)
-                && notEmpty(BuildConfig.DITTO_PLAYGROUND_TOKEN)
-                && notEmpty(BuildConfig.DITTO_AUTH_URL);
+        return operationProfile != null
+                && operationProfile.hasDittoCredentials();
     }
 
     private String missingCredentialSummary() {
+        if (operationProfile == null)
+            return "no operation selected";
         List<String> missing = new ArrayList<>();
-        if (!notEmpty(BuildConfig.DITTO_APP_ID))
+        if (!notEmpty(operationProfile.getDittoDatabaseId()))
             missing.add("database ID");
-        if (!notEmpty(BuildConfig.DITTO_AUTH_URL))
+        if (!notEmpty(operationProfile.getDittoAuthUrl()))
             missing.add("auth URL");
-        if (!notEmpty(BuildConfig.DITTO_PLAYGROUND_TOKEN))
+        if (!notEmpty(operationProfile.getDittoDevelopmentToken()))
             missing.add("development token");
         if (missing.isEmpty())
             return "credentials loaded, restart required";
@@ -796,11 +860,40 @@ public class DittoSyncManager {
         return value == null ? "" : value.trim();
     }
 
+    private String getOperationId() {
+        return operationProfile == null ? "" : operationProfile
+                .getOperationId();
+    }
+
+    private String getOperationSummary() {
+        return operationProfile == null ? "No active operation selected"
+                : operationProfile.getOperationName() + " | "
+                        + operationProfile.getOperationId();
+    }
+
+    private boolean isCurrentOperation(String json) throws JSONException {
+        String activeOperationId = getOperationId();
+        if (activeOperationId.length() == 0)
+            return false;
+        JSONObject object = new JSONObject(json);
+        return activeOperationId.equals(object.optString("operationId", ""));
+    }
+
     private String formatAge(long timestamp) {
         if (timestamp <= 0L)
             return "never";
         long seconds = Math.max(0L, (System.currentTimeMillis() - timestamp)
                 / 1000L);
         return seconds <= 1L ? "now" : seconds + " sec ago";
+    }
+
+    private double sanitizeSpeed(double speedMetersPerSecond) {
+        if (Double.isNaN(speedMetersPerSecond)
+                || Double.isInfinite(speedMetersPerSecond)
+                || speedMetersPerSecond < 0.0
+                || speedMetersPerSecond
+                        > MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND)
+            return 0.0;
+        return speedMetersPerSecond;
     }
 }

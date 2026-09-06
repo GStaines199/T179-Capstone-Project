@@ -30,6 +30,7 @@ public class SearchLineCotMessage {
     private final SearchLineColorOption colorOption;
     private final double toleranceMeters;
     private final long created;
+    private final String operationId;
 
     public SearchLineCotMessage(String uid, String action, String teamId,
             String senderUid, String senderCallsign, String zoneDescriptor,
@@ -37,6 +38,17 @@ public class SearchLineCotMessage {
             double west, double south, double east, double north,
             double lineNorthing, SearchLineColorOption colorOption,
             double toleranceMeters, long created) {
+        this(uid, action, teamId, senderUid, senderCallsign, zoneDescriptor,
+                aggregateId, cellId, row, column, west, south, east, north,
+                lineNorthing, colorOption, toleranceMeters, created, "");
+    }
+
+    public SearchLineCotMessage(String uid, String action, String teamId,
+            String senderUid, String senderCallsign, String zoneDescriptor,
+            String aggregateId, String cellId, int row, int column,
+            double west, double south, double east, double north,
+            double lineNorthing, SearchLineColorOption colorOption,
+            double toleranceMeters, long created, String operationId) {
         this.uid = uid;
         this.action = action;
         this.teamId = teamId;
@@ -55,6 +67,7 @@ public class SearchLineCotMessage {
         this.colorOption = colorOption;
         this.toleranceMeters = toleranceMeters;
         this.created = created;
+        this.operationId = operationId == null ? "" : operationId;
     }
 
     public String getUid() { return uid; }
@@ -67,6 +80,7 @@ public class SearchLineCotMessage {
     public SearchLineColorOption getColorOption() { return colorOption; }
     public double getToleranceMeters() { return toleranceMeters; }
     public long getCreated() { return created; }
+    public String getOperationId() { return operationId; }
 
     public SearchGridCell toCell() {
         if (zoneDescriptor == null || zoneDescriptor.length() == 0

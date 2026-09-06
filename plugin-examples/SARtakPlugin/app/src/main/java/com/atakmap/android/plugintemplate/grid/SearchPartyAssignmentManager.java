@@ -20,6 +20,8 @@ public class SearchPartyAssignmentManager {
 
     public static final long STALE_AFTER_MS = 30000L;
     public static final long DISCONNECTED_AFTER_MS = 60000L;
+    private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
+            12.0;
 
     private static final int COLOR_WHITE = 0xFFFFFFFF;
     private static final int COLOR_UNASSIGNED = 0xFF8A8F98;
@@ -309,7 +311,7 @@ public class SearchPartyAssignmentManager {
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
             existing.setRole(role);
             if (!existing.hasLiveAtakContact())
-                existing.markLocationUnavailable("ATAK contact pending");
+                existing.markLocationUnavailable("Location unavailable");
             applyMemberStyle(existing);
             return existing;
         }
@@ -327,9 +329,9 @@ public class SearchPartyAssignmentManager {
                 SearchTeamMember.MembershipStatus.ACTIVE_MEMBER,
                 SearchTeamMember.ConnectionStatus.STALE,
                 getLaneMemberCount() + 1, 0.0, 0.0, 0.0,
-                "ATAK contact pending", "ATAK contact pending",
-                "ATAK contact pending", "ATAK contact pending",
-                "ATAK contact pending", "ATAK contact pending");
+                "Location unavailable", "Location unavailable",
+                "Location unavailable", "Location unavailable",
+                "Location unavailable", "Location unavailable");
         member.setLiveAtakContact(false);
         applyMemberStyle(member);
         members.add(member);
@@ -396,7 +398,7 @@ public class SearchPartyAssignmentManager {
         if (self == null)
             return;
         self.updateMovement(headingDegrees, headingReliable,
-                Math.max(0.0, speedMetersPerSecond));
+                sanitizeSpeed(speedMetersPerSecond));
     }
 
     public void updateFromAtakContacts(
@@ -856,6 +858,16 @@ public class SearchPartyAssignmentManager {
         double dx = first.getEasting() - second.getEasting();
         double dy = first.getNorthing() - second.getNorthing();
         return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private double sanitizeSpeed(double speedMetersPerSecond) {
+        if (Double.isNaN(speedMetersPerSecond)
+                || Double.isInfinite(speedMetersPerSecond)
+                || speedMetersPerSecond < 0.0
+                || speedMetersPerSecond
+                        > MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND)
+            return 0.0;
+        return speedMetersPerSecond;
     }
 
     private int clamp(int value, int min, int max) {

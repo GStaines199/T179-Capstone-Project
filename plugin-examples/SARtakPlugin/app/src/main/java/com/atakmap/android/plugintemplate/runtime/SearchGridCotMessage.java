@@ -13,10 +13,18 @@ public class SearchGridCotMessage {
     private final String cellId;
     private final SearchGridStatus status;
     private final long created;
+    private final String operationId;
 
     public SearchGridCotMessage(String uid, String teamId, String senderUid,
             String senderCallsign, String cellId, SearchGridStatus status,
             long created) {
+        this(uid, teamId, senderUid, senderCallsign, cellId, status, created,
+                "");
+    }
+
+    public SearchGridCotMessage(String uid, String teamId, String senderUid,
+            String senderCallsign, String cellId, SearchGridStatus status,
+            long created, String operationId) {
         this.uid = uid;
         this.teamId = teamId;
         this.senderUid = senderUid;
@@ -24,6 +32,7 @@ public class SearchGridCotMessage {
         this.cellId = cellId;
         this.status = status;
         this.created = created;
+        this.operationId = operationId == null ? "" : operationId;
     }
 
     public String getUid() { return uid; }
@@ -33,4 +42,5 @@ public class SearchGridCotMessage {
     public String getCellId() { return cellId; }
     public SearchGridStatus getStatus() { return status; }
     public long getCreated() { return created; }
+    public String getOperationId() { return operationId; }
 }

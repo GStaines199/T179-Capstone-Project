@@ -114,15 +114,12 @@ public class LocationRepository {
     /**
      * Inserts a fix along with the raw GNSS metadata columns.
      * <p>
-     * The three metadata accuracies are boxed on {@link RawGnssCapture}, so
-     * they land as NULL when the receiver did not report them. Horizontal
-     * accuracy, bearing and speed do not: {@code RawGnssCapture.from}
-     * substitutes 0f for each one the receiver omitted, so they arrive here
-     * already indistinguishable from real zeroes, and
-     * {@link #getPointsForSession} will report such a row as "accurate to 0 m"
-     * rather than NaN. Closing that gap means making those three fields
-     * nullable on {@code RawGnssCapture}; until then, prefer
-     * {@link #insertFix} on any path whose accuracy is read back.
+     * Every measurement on {@link RawGnssCapture} is boxed, so anything the
+     * receiver did not report arrives here as null and lands as a NULL column
+     * rather than as a fabricated zero. This path and {@link #insertFix} agree
+     * on that: a row written by either says the same thing about which
+     * measurements exist, and {@link #getPointsForSession} resolves a NULL
+     * accuracy to NaN from both.
      */
     public void insertRaw(String uid, String callsign, String sessionId,
                           RawGnssCapture capture) {

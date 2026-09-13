@@ -153,16 +153,16 @@ android {
 
     signingConfigs {
         debug {
-            storeFile file("${rootDir}/../../android_keystore")
-            storePassword "tnttnt"
-            keyAlias "wintec_mapping"
-            keyPassword "tnttnt"
+            storeFile file(getOptionalLocalProperty("takDebugKeyFile") ?: "${System.properties['user.home']}/.android/debug.keystore")
+            storePassword getOptionalLocalProperty("takDebugKeyFilePassword") ?: "android"
+            keyAlias getOptionalLocalProperty("takDebugKeyAlias") ?: "androiddebugkey"
+            keyPassword getOptionalLocalProperty("takDebugKeyPassword") ?: "android"
         }
         release {
-            storeFile file("${rootDir}/../../android_keystore")
-            storePassword "tnttnt"
-            keyAlias "wintec_mapping"
-            keyPassword "tnttnt"
+            storeFile file(getOptionalLocalProperty("takReleaseKeyFile") ?: getOptionalLocalProperty("takDebugKeyFile") ?: "${System.properties['user.home']}/.android/debug.keystore")
+            storePassword getOptionalLocalProperty("takReleaseKeyFilePassword") ?: getOptionalLocalProperty("takDebugKeyFilePassword") ?: "android"
+            keyAlias getOptionalLocalProperty("takReleaseKeyAlias") ?: getOptionalLocalProperty("takDebugKeyAlias") ?: "androiddebugkey"
+            keyPassword getOptionalLocalProperty("takReleaseKeyPassword") ?: getOptionalLocalProperty("takDebugKeyPassword") ?: "android"
         }
     }
 

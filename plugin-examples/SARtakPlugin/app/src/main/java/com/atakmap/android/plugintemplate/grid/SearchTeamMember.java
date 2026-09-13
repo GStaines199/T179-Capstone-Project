@@ -44,7 +44,7 @@ public class SearchTeamMember {
     private String distanceFromYou;
     private String distanceFromSearchLine;
     private boolean liveAtakContact;
-    private String atakGroupName = "Ungrouped ATAK";
+    private String atakGroupName = "Unassigned";
     private boolean headingReliable;
     private double speedMetersPerSecond;
     private long lastPresenceTimestamp;
@@ -212,7 +212,7 @@ public class SearchTeamMember {
     public void setAtakGroupName(String atakGroupName) {
         this.atakGroupName = atakGroupName == null
                 || atakGroupName.trim().length() == 0
-                        ? "Ungrouped ATAK" : atakGroupName.trim();
+                        ? "Unassigned" : atakGroupName.trim();
     }
 
     public void setLiveAtakContact(boolean liveAtakContact) {

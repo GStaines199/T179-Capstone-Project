@@ -55,6 +55,15 @@
                 android:text="@string/tab_devices" />
 
             <Button
+                android:id="@+id/alerts_tab_button"
+                style="@style/SARtakActionButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="4dp"
+                android:layout_weight="1"
+                android:text="@string/tab_alerts" />
+
+            <Button
                 android:id="@+id/track_tab_button"
                 style="@style/SARtakActionButton"
                 android:layout_width="0dp"
@@ -1020,6 +1029,76 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:text="@string/other_team_summary" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/alerts_tab_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/sartak_panel"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/SARtakSectionTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/alerts_heading" />
+
+                <TextView
+                    android:id="@+id/alerts_summary_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/sartak_status_yellow"
+                    android:padding="6dp"
+                    android:text="@string/no_active_alerts" />
+
+                <Button
+                    android:id="@+id/alert_hold_position_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/alert_hold_position" />
+
+                <Button
+                    android:id="@+id/alert_request_leader_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/alert_request_leader" />
+
+                <Button
+                    android:id="@+id/alert_emergency_stop_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/alert_emergency_stop" />
+
+                <TextView
+                    style="@style/SARtakLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/active_alerts" />
+
+                <LinearLayout
+                    android:id="@+id/alerts_cards_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
 

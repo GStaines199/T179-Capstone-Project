@@ -10,6 +10,7 @@ public class DittoDeviceSnapshot {
     private final String callsign;
     private final String teamId;
     private final String teamName;
+    private final boolean teamCreated;
     private final String leaderUid;
     private final String leaderCallsign;
     private final String role;
@@ -29,8 +30,9 @@ public class DittoDeviceSnapshot {
     private final long updatedAt;
 
     private DittoDeviceSnapshot(String uid, String operationId,
-            String callsign, String teamId, String teamName, String leaderUid,
-            String leaderCallsign, String role, String teamColorName,
+            String callsign, String teamId, String teamName,
+            boolean teamCreated, String leaderUid, String leaderCallsign,
+            String role, String teamColorName,
             int teamColorArgb, String memberColorName, int memberColorArgb,
             boolean hasLocation, double latitude, double longitude,
             double altitude, double accuracy, double heading, double speed,
@@ -40,6 +42,7 @@ public class DittoDeviceSnapshot {
         this.callsign = callsign;
         this.teamId = teamId;
         this.teamName = teamName;
+        this.teamCreated = teamCreated;
         this.leaderUid = leaderUid;
         this.leaderCallsign = leaderCallsign;
         this.role = role;
@@ -68,6 +71,7 @@ public class DittoDeviceSnapshot {
                 object.optString("callsign", ""),
                 object.optString("teamId", ""),
                 object.optString("teamName", ""),
+                object.optBoolean("teamCreated", false),
                 object.optString("leaderUid", ""),
                 object.optString("leaderCallsign", ""),
                 object.optString("role", ""),
@@ -105,6 +109,10 @@ public class DittoDeviceSnapshot {
 
     public String getTeamName() {
         return teamName;
+    }
+
+    public boolean isTeamCreated() {
+        return teamCreated;
     }
 
     public String getLeaderUid() {

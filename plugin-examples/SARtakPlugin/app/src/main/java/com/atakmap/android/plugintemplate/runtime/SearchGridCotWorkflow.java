@@ -123,6 +123,35 @@ public class SearchGridCotWorkflow {
         return result;
     }
 
+    public List<SearchGridCotMessage> consumeMessagesForOperation() {
+        List<SearchGridCotMessage> result = new ArrayList<>();
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        synchronized (messages) {
+            for (SearchGridCotMessage message : messages.values()) {
+                if (!matchesOperation(message.getOperationId())
+                        || isExpired(message))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                result.add(message);
+            }
+        }
+        if (dittoSyncManager != null) {
+            for (SearchGridCotMessage message
+                    : dittoSyncManager.getSearchGridMessages()) {
+                if (!matchesOperation(message.getOperationId())
+                        || isExpired(message))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                result.add(message);
+            }
+        }
+        return result;
+    }
+
     private CotEvent createCotEvent(SearchGridCotMessage message) {
         CoordinatedTime now = new CoordinatedTime();
         CotDetail root = new CotDetail();

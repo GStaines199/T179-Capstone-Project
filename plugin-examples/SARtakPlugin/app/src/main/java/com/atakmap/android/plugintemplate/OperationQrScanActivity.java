@@ -6,13 +6,14 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.atakmap.android.ipc.AtakBroadcast;
+import com.atakmap.android.plugintemplate.runtime.OperationQrScanResultStore;
 import com.google.zxing.BarcodeFormat;
 import com.journeyapps.barcodescanner.BarcodeCallback;
 import com.journeyapps.barcodescanner.BarcodeResult;
@@ -23,9 +24,11 @@ import java.util.Collections;
 
 public class OperationQrScanActivity extends Activity {
 
+    private static final String TAG = "SARtakQrScanner";
     public static final String ACTION_SCAN_RESULT =
             "com.atakmap.android.plugintemplate.OPERATION_QR_SCAN_RESULT";
     public static final String EXTRA_JOIN_CODE = "join_code";
+    public static final String EXTRA_HOST_PACKAGE = "host_package";
     private static final int REQUEST_CAMERA_PERMISSION = 7104;
 
     private DecoratedBarcodeView barcodeView;
@@ -34,14 +37,18 @@ public class OperationQrScanActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                && checkSelfPermission(Manifest.permission.CAMERA)
-                        != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[] { Manifest.permission.CAMERA },
-                    REQUEST_CAMERA_PERMISSION);
-            return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                    && checkSelfPermission(Manifest.permission.CAMERA)
+                            != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[] { Manifest.permission.CAMERA },
+                        REQUEST_CAMERA_PERMISSION);
+                return;
+            }
+            setupScanner();
+        } catch (Throwable throwable) {
+            failScanner("QR scanner could not be opened", throwable);
         }
-        setupScanner();
     }
 
     private void setupScanner() {
@@ -84,9 +91,13 @@ public class OperationQrScanActivity extends Activity {
             return;
         if (grantResults.length > 0
                 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            setupScanner();
-            if (barcodeView != null)
-                barcodeView.resume();
+            try {
+                setupScanner();
+                if (barcodeView != null)
+                    barcodeView.resume();
+            } catch (Throwable throwable) {
+                failScanner("QR scanner could not be opened", throwable);
+            }
         } else {
             Toast.makeText(this,
                     "Camera permission is needed to scan operation QR codes",
@@ -98,14 +109,22 @@ public class OperationQrScanActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (barcodeView != null)
-            barcodeView.resume();
+        try {
+            if (barcodeView != null)
+                barcodeView.resume();
+        } catch (Throwable throwable) {
+            failScanner("QR scanner could not access the camera", throwable);
+        }
     }
 
     @Override
     protected void onPause() {
-        if (barcodeView != null)
-            barcodeView.pause();
+        try {
+            if (barcodeView != null)
+                barcodeView.pause();
+        } catch (Throwable throwable) {
+            Log.w(TAG, "QR scanner pause failed", throwable);
+        }
         super.onPause();
     }
 
@@ -119,9 +138,50 @@ public class OperationQrScanActivity extends Activity {
             return;
         }
         handled = true;
+        OperationQrScanResultStore.save(this, text);
+        Log.d(TAG, "SARtak operation QR scanned");
         Intent intent = new Intent(ACTION_SCAN_RESULT);
         intent.putExtra(EXTRA_JOIN_CODE, text);
-        AtakBroadcast.getInstance().sendBroadcast(intent);
+        String hostPackage = getIntent() == null ? ""
+                : getIntent().getStringExtra(EXTRA_HOST_PACKAGE);
+        try {
+            sendBroadcast(intent);
+            Log.d(TAG, "Sent global QR result broadcast");
+        } catch (Throwable throwable) {
+            Log.w(TAG, "Android QR result broadcast failed", throwable);
+        }
+        if (hostPackage != null && hostPackage.trim().length() > 0) {
+            try {
+                Intent hostIntent = new Intent(ACTION_SCAN_RESULT);
+                hostIntent.setPackage(hostPackage.trim());
+                hostIntent.putExtra(EXTRA_JOIN_CODE, text);
+                sendBroadcast(hostIntent);
+                Log.d(TAG, "Sent targeted QR result broadcast to "
+                        + hostPackage.trim());
+            } catch (Throwable throwable) {
+                Log.w(TAG, "Targeted QR result broadcast failed", throwable);
+            }
+
+            try {
+                Intent showIntent = new Intent(
+                        PluginTemplateDropDownReceiver.SHOW_PLUGIN);
+                showIntent.setPackage(hostPackage.trim());
+                showIntent.putExtra(EXTRA_JOIN_CODE, text);
+                sendBroadcast(showIntent);
+                Log.d(TAG, "Sent targeted SARtak open broadcast to "
+                        + hostPackage.trim());
+            } catch (Throwable throwable) {
+                Log.w(TAG, "Targeted QR show broadcast failed", throwable);
+            }
+        }
+        finish();
+    }
+
+    private void failScanner(String message, Throwable throwable) {
+        Log.w(TAG, message, throwable);
+        Toast.makeText(this,
+                message + ". Paste the operation code instead.",
+                Toast.LENGTH_LONG).show();
         finish();
     }
 }

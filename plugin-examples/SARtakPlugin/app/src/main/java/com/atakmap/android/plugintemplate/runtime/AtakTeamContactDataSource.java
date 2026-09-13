@@ -55,6 +55,21 @@ public class AtakTeamContactDataSource {
             this.atakGroupName = atakGroupName;
         }
 
+        public static ContactSnapshot fromDitto(
+                DittoDeviceSnapshot snapshot) {
+            GeoPoint point = null;
+            if (snapshot != null && snapshot.hasLocation())
+                point = new GeoPoint(snapshot.getLatitude(),
+                        snapshot.getLongitude(), snapshot.getAltitude());
+            return new ContactSnapshot(snapshot == null ? "" : snapshot
+                    .getUid(), snapshot == null ? "" : snapshot.getCallsign(),
+                    point, snapshot == null ? 0.0 : snapshot.getHeading(),
+                    snapshot != null && snapshot.isHeadingReliable(),
+                    snapshot == null ? 0.0 : snapshot.getSpeed(),
+                    snapshot == null ? 0L : snapshot.getUpdatedAt(),
+                    dittoRole(snapshot), dittoGroupName(snapshot));
+        }
+
         public String getUid() {
             return uid;
         }
@@ -93,13 +108,48 @@ public class AtakTeamContactDataSource {
 
         public boolean isTeamLead() {
             String normalized = role == null ? "" : role.toLowerCase();
-            return normalized.contains("lead")
-                    || normalized.contains("leader");
+            return normalized.equals("team lead")
+                    || normalized.equals("team leader")
+                    || normalized.equals("leader");
         }
 
         public String getDisplayLabel() {
-            return callsign + " - " + role + "\nATAK group: "
+            return callsign + " - " + role + "\nNative ATAK team: "
                     + atakGroupName + "\n" + uid;
+        }
+
+        private static String dittoRole(DittoDeviceSnapshot snapshot) {
+            if (snapshot == null)
+                return "Ditto device";
+            String uid = safeStatic(snapshot.getUid());
+            String leaderUid = safeStatic(snapshot.getLeaderUid());
+            String role = safeStatic(snapshot.getRole()).toLowerCase();
+            if (uid.length() > 0 && uid.equals(leaderUid))
+                return "Team Lead";
+            if (snapshot.isTeamCreated()
+                    && (role.equals("team lead")
+                            || role.equals("team leader")
+                            || role.equals("leader")))
+                return "Team Lead";
+            return "Searcher";
+        }
+
+        private static String dittoGroupName(DittoDeviceSnapshot snapshot) {
+            if (snapshot == null)
+                return "Unassigned";
+            if (!snapshot.isTeamCreated()
+                    || safeStatic(snapshot.getTeamId()).length() == 0)
+                return "Unassigned";
+            String color = safeStatic(snapshot.getTeamColorName());
+            String team = safeStatic(snapshot.getTeamName());
+            if (color.length() > 0 && !"Unassigned".equalsIgnoreCase(color))
+                return color + " SARtak team";
+            return team.length() == 0 ? "SARtak team" : team
+                    + " SARtak team";
+        }
+
+        private static String safeStatic(String value) {
+            return value == null ? "" : value.trim();
         }
     }
 
@@ -223,7 +273,9 @@ public class AtakTeamContactDataSource {
     private boolean isSartakItem(MapItem item) {
         String uid = safe(item.getUID());
         return uid.startsWith("sartak-")
-                || "sartak".equals(safeMetaString(item, "entry", ""));
+                || "sartak".equals(safeMetaString(item, "entry", ""))
+                || "true".equals(safeMetaString(item,
+                        "sartak.ditto.contact", ""));
     }
 
     private boolean looksLikeGeneratedId(String value) {
@@ -254,7 +306,7 @@ public class AtakTeamContactDataSource {
 
     private String getAtakGroupName(Marker marker) {
         if (marker == null)
-            return "Ungrouped ATAK";
+            return "Unassigned";
         String group = firstNonEmpty(
                 safeMetaString(marker, "__groupName", ""),
                 safeMetaString(marker, "team", ""),
@@ -264,7 +316,7 @@ public class AtakTeamContactDataSource {
                 safeMetaString(marker, "locationTeam", ""),
                 safeMetaString(marker, "__group", ""));
         if (group.length() == 0)
-            return "Ungrouped ATAK";
+            return "Unassigned";
         return group.toLowerCase().endsWith("team") ? group : group + " Team";
     }
 

@@ -59,6 +59,7 @@
     <string name="tab_home">Home</string>
     <string name="tab_grid">Grid</string>
     <string name="tab_team">Team</string>
+    <string name="tab_alerts">Alerts</string>
     <string name="tab_devices">Devices</string>
     <string name="tab_track">Track</string>
     <string name="atak_role_label">ATAK Role</string>
@@ -123,6 +124,12 @@
     <string name="devices_heading">Connected Devices</string>
     <string name="devices_waiting">Waiting for ATAK or Ditto devices</string>
     <string name="reset_sync_state">Reset Local Sync State</string>
+    <string name="alerts_heading">Team Alerts</string>
+    <string name="no_active_alerts">No active SARtak alerts</string>
+    <string name="active_alerts">Active Alerts / Acknowledgements</string>
+    <string name="alert_hold_position">Hold Position</string>
+    <string name="alert_request_leader">Request Team Leader</string>
+    <string name="alert_emergency_stop">Emergency Stop</string>
 
 
 

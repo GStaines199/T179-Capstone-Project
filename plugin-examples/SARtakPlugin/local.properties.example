@@ -10,6 +10,11 @@ sdk.dir=C\:\\Users\\YOUR_USERNAME\\AppData\\Local\\Android\\Sdk
 # Change this to wherever you store atak-gradle-takdev.jar
 takdev.plugin=C\:\\path\\to\\atak-gradle-takdev.jar
 
+# ATAK compatibility target.
+# Leave as 5.6.0 for standard/client devices that still run ATAK 5.6.
+# Change to 5.8.0 only when building for ATAK 5.8 test devices/emulators.
+atak.version=5.6.0
+
 # Optional: debug signing config
 # Usually Android Studio creates this automatically at:
 # C:\Users\YOUR_USERNAME\.android\debug.keystore

@@ -35,6 +35,7 @@ public class SearchTeamCotWorkflow {
     private static final long PRESENCE_INTERVAL_MS = 5000L;
     private static final long STYLE_INTERVAL_MS = 30000L;
     private static final long PENDING_REPUBLISH_INTERVAL_MS = 2000L;
+    private static final long MAP_MESSAGE_SCAN_INTERVAL_MS = 15000L;
     private static final long ADVERTISEMENT_MAX_AGE_MS = 60000L;
     private static final long PRESENCE_MAX_AGE_MS = 45000L;
     private static final long PENDING_MESSAGE_MAX_AGE_MS = 60000L;
@@ -58,6 +59,9 @@ public class SearchTeamCotWorkflow {
     private long lastPresenceTime;
     private long lastStyleTime;
     private long lastPendingRepublishTime;
+    private long lastMapMessageScanTime;
+    private List<SearchTeamCotMessage> cachedMapMessages =
+            new ArrayList<>();
     private String operationId = "";
 
     public SearchTeamCotWorkflow(MapView mapView,
@@ -92,6 +96,8 @@ public class SearchTeamCotWorkflow {
         lastPresenceTime = 0L;
         lastStyleTime = 0L;
         lastPendingRepublishTime = 0L;
+        lastMapMessageScanTime = 0L;
+        cachedMapMessages = new ArrayList<>();
     }
 
     public void advertiseTeam(String teamId, String teamName) {
@@ -467,19 +473,35 @@ public class SearchTeamCotWorkflow {
     private List<SearchTeamCotMessage> scanMapMessages(String action,
             String targetUid) {
         List<SearchTeamCotMessage> messages = new ArrayList<>();
+        for (SearchTeamCotMessage message : getCachedMapMessages()) {
+            if (!action.equals(message.getAction()))
+                continue;
+            if (targetUid != null && targetUid.length() > 0
+                    && !targetUid.equals(message.getTargetUid()))
+                continue;
+            if (!isExpired(message))
+                messages.add(message);
+        }
+        return messages;
+    }
+
+    private List<SearchTeamCotMessage> getCachedMapMessages() {
+        long now = System.currentTimeMillis();
+        if (now - lastMapMessageScanTime < MAP_MESSAGE_SCAN_INTERVAL_MS)
+            return cachedMapMessages;
+        lastMapMessageScanTime = now;
+
+        List<SearchTeamCotMessage> messages = new ArrayList<>();
         Collection<MapItem> items = mapView.getRootGroup().getItemsRecursive();
-        if (items == null)
+        if (items == null) {
+            cachedMapMessages = messages;
             return messages;
+        }
         for (MapItem item : items) {
             if (!(item instanceof Marker))
                 continue;
             String itemAction = item.getMetaString(meta("action"), "");
-            if (!action.equals(itemAction))
-                continue;
             String itemTarget = item.getMetaString(meta("targetUid"), "");
-            if (targetUid != null && targetUid.length() > 0
-                    && !targetUid.equals(itemTarget))
-                continue;
             String created = item.getMetaString(meta("created"), "");
             if (isExpired(itemAction, created, item.getUID()))
                 continue;
@@ -500,6 +522,7 @@ public class SearchTeamCotWorkflow {
                     item.getMetaString(meta("memberRole"), ""),
                     item.getMetaString(meta("operationId"), "")));
         }
+        cachedMapMessages = messages;
         return messages;
     }
 

@@ -60,7 +60,7 @@
 
        <activity
            android:name="com.atakmap.android.plugintemplate.OperationQrScanActivity"
-           android:exported="false"
+           android:exported="true"
            android:screenOrientation="portrait"
            android:theme="@style/AppTheme" />
 

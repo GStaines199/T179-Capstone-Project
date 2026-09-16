@@ -15,6 +15,7 @@ public class AtakRoleResolver {
     private static final String ATAK_CIV_PACKAGE = "com.atakmap.app.civ";
 
     public enum Role {
+        HQ,
         TEAM_LEADER,
         TEAM_MEMBER
     }
@@ -49,12 +50,16 @@ public class AtakRoleResolver {
                 role = self.getType();
         }
 
+        if (isHqRoleValue(role))
+            return Role.HQ;
         if (isLeaderRoleValue(role))
             return Role.TEAM_LEADER;
         return Role.TEAM_MEMBER;
     }
 
     public static String label(Role role) {
+        if (role == Role.HQ)
+            return "HQ";
         return role == Role.TEAM_LEADER ? "Team Leader" : "Team Member";
     }
 
@@ -110,6 +115,16 @@ public class AtakRoleResolver {
                 || normalized.contains("lead")
                 || normalized.contains("teamlead")
                 || normalized.contains("team_lead");
+    }
+
+    private static boolean isHqRoleValue(String role) {
+        String normalized = role == null ? ""
+                : role.toLowerCase(Locale.US).trim();
+        return normalized.equals("hq")
+                || normalized.contains("headquarters")
+                || normalized.contains("command")
+                || normalized.contains("incident command")
+                || normalized.contains("operations");
     }
 }
 

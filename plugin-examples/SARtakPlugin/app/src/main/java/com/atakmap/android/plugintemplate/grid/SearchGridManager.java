@@ -44,6 +44,7 @@ public class SearchGridManager {
             SearchGridStateStore stateStore) {
         this.converter = converter;
         this.stateStore = stateStore;
+        loadOperationState();
     }
 
     public SearchGridCell selectCellAt(GeoPoint point) {
@@ -142,6 +143,7 @@ public class SearchGridManager {
                 GridCoordinateConverter.BASE_CELL_SIZE_METERS);
         selectedCell = centerCell;
         selectedAggregateId = centerCell.getAggregateId();
+        persistPlannedArea();
     }
 
     public boolean hasPlannedArea() {
@@ -156,6 +158,80 @@ public class SearchGridManager {
         plannedShape = PlannedAreaShape.NONE;
         plannedZone = "";
         pendingReviewCell = null;
+        stateStore.clearPlannedArea();
+    }
+
+    public void loadOperationState() {
+        loadReviewedCellsFromStore();
+        SearchGridStateStore.PlannedAreaRecord record =
+                stateStore.loadPlannedArea();
+        if (record == null) {
+            resetPlannedAreaFields();
+            return;
+        }
+        try {
+            plannedShape = PlannedAreaShape.valueOf(record.shape);
+        } catch (IllegalArgumentException ignored) {
+            resetPlannedAreaFields();
+            return;
+        }
+        if (plannedShape == PlannedAreaShape.NONE) {
+            resetPlannedAreaFields();
+            return;
+        }
+        plannedZone = record.zone == null ? "" : record.zone;
+        plannedCenterEasting = record.centerEasting;
+        plannedCenterNorthing = record.centerNorthing;
+        plannedWest = record.west;
+        plannedSouth = record.south;
+        plannedEast = record.east;
+        plannedNorth = record.north;
+        plannedRadiusMeters = record.radiusMeters;
+        plannedWidthMeters = record.widthMeters;
+        plannedHeightMeters = record.heightMeters;
+        selectedCell = converter.cellForUtmPoint(plannedZone,
+                plannedCenterEasting, plannedCenterNorthing, stateStore);
+        selectedAggregateId = selectedCell == null ? null
+                : selectedCell.getAggregateId();
+    }
+
+    public SearchGridStateStore.PlannedAreaRecord getPlannedAreaRecord() {
+        if (!hasPlannedArea())
+            return null;
+        return new SearchGridStateStore.PlannedAreaRecord(plannedShape.name(),
+                plannedZone, plannedCenterEasting, plannedCenterNorthing,
+                plannedWest, plannedSouth, plannedEast, plannedNorth,
+                plannedRadiusMeters, plannedWidthMeters, plannedHeightMeters);
+    }
+
+    public boolean restorePlannedArea(
+            SearchGridStateStore.PlannedAreaRecord record) {
+        if (record == null || record.shape == null
+                || record.shape.length() == 0)
+            return false;
+        try {
+            plannedShape = PlannedAreaShape.valueOf(record.shape);
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+        if (plannedShape == PlannedAreaShape.NONE)
+            return false;
+        plannedZone = record.zone == null ? "" : record.zone;
+        plannedCenterEasting = record.centerEasting;
+        plannedCenterNorthing = record.centerNorthing;
+        plannedWest = record.west;
+        plannedSouth = record.south;
+        plannedEast = record.east;
+        plannedNorth = record.north;
+        plannedRadiusMeters = record.radiusMeters;
+        plannedWidthMeters = record.widthMeters;
+        plannedHeightMeters = record.heightMeters;
+        selectedCell = converter.cellForUtmPoint(plannedZone,
+                plannedCenterEasting, plannedCenterNorthing, stateStore);
+        selectedAggregateId = selectedCell == null ? null
+                : selectedCell.getAggregateId();
+        persistPlannedArea();
+        return true;
     }
 
     public List<SearchGridCell> getRenderCells(GeoBounds visibleBounds) {
@@ -181,6 +257,24 @@ public class SearchGridManager {
                     / (GridCoordinateConverter.BASE_CELL_SIZE_METERS
                             * GridCoordinateConverter.BASE_CELL_SIZE_METERS));
         return columns * rows;
+    }
+
+    public Map<SearchGridStatus, Integer> getKnownStatusCounts() {
+        Map<SearchGridStatus, Integer> counts =
+                new LinkedHashMap<SearchGridStatus, Integer>();
+        for (SearchGridStatus status : SearchGridStatus.values())
+            counts.put(status, 0);
+        for (SearchGridStatus status : stateStore.getKnownStatuses()
+                .values()) {
+            Integer count = counts.get(status);
+            counts.put(status, count == null ? 1 : count + 1);
+        }
+        return counts;
+    }
+
+    public int getKnownStatusCount(SearchGridStatus status) {
+        Integer count = getKnownStatusCounts().get(status);
+        return count == null ? 0 : count;
     }
 
     public String getPlannedAreaDescription() {
@@ -374,6 +468,55 @@ public class SearchGridManager {
                 / 2.0, GridCoordinateConverter.BASE_CELL_SIZE_METERS);
         selectedCell = centerCell;
         selectedAggregateId = centerCell.getAggregateId();
+        persistPlannedArea();
+    }
+
+    private void persistPlannedArea() {
+        if (!hasPlannedArea()) {
+            stateStore.clearPlannedArea();
+            return;
+        }
+        stateStore.savePlannedArea(new SearchGridStateStore.PlannedAreaRecord(
+                plannedShape.name(), plannedZone, plannedCenterEasting,
+                plannedCenterNorthing, plannedWest, plannedSouth, plannedEast,
+                plannedNorth, plannedRadiusMeters, plannedWidthMeters,
+                plannedHeightMeters));
+    }
+
+    private void resetPlannedAreaFields() {
+        plannedShape = PlannedAreaShape.NONE;
+        plannedZone = "";
+        plannedCenterEasting = 0.0;
+        plannedCenterNorthing = 0.0;
+        plannedWest = 0.0;
+        plannedSouth = 0.0;
+        plannedEast = 0.0;
+        plannedNorth = 0.0;
+        plannedRadiusMeters = 0.0;
+        plannedWidthMeters = 0.0;
+        plannedHeightMeters = 0.0;
+        selectedCell = null;
+        selectedAggregateId = null;
+        pendingReviewCell = null;
+    }
+
+    private void loadReviewedCellsFromStore() {
+        reviewedCells.clear();
+        for (Map.Entry<String, SearchGridStatus> entry : stateStore
+                .getKnownStatuses().entrySet()) {
+            SearchGridStatus status = entry.getValue();
+            if (status != SearchGridStatus.PARTIAL
+                    && status != SearchGridStatus.COMPLETE)
+                continue;
+            SearchGridCell cell = converter.cellForId(entry.getKey(),
+                    stateStore);
+            if (cell == null)
+                continue;
+            cell.setStatus(status);
+            reviewedCells.put(entry.getKey(), cell);
+            if (reviewedCells.size() >= MAX_REVIEW_CELLS)
+                break;
+        }
     }
 
     private List<SearchGridCell> cellsForPlannedArea(GeoBounds visibleBounds,

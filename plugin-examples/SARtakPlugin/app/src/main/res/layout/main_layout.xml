@@ -213,6 +213,15 @@
                     android:visibility="gone" />
 
                 <Button
+                    android:id="@+id/archive_operation_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Archive Operation"
+                    android:visibility="gone" />
+
+                <Button
                     android:id="@+id/join_operation_button"
                     style="@style/SARtakActionButton"
                     android:layout_width="match_parent"
@@ -536,6 +545,14 @@
                     android:layout_marginTop="6dp"
                     android:text="@string/grid_clear_planned_area" />
 
+                <Button
+                    android:id="@+id/assign_search_area_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Assign Search Area" />
+
                 <TextView
                     android:id="@+id/planned_area_value"
                     style="@style/SARtakValue"
@@ -775,6 +792,7 @@
             android:visibility="gone">
 
             <LinearLayout
+                android:id="@+id/team_roster_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -1058,23 +1076,45 @@
                     style="@style/SARtakSectionTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/other_teams" />
+                    android:text="Operation Control" />
 
                 <TextView
+                    android:id="@+id/hq_operation_summary_value"
                     style="@style/SARtakValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:background="@drawable/sartak_status_yellow"
                     android:padding="6dp"
-                    android:text="@string/other_team_dropdown" />
+                    android:text="@string/operation_no_active" />
 
                 <TextView
                     style="@style/SARtakValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="@string/other_team_summary" />
+                    android:text="Visible teams" />
+
+                <LinearLayout
+                    android:id="@+id/hq_teams_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
+
+                <TextView
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Search area assignments" />
+
+                <LinearLayout
+                    android:id="@+id/hq_assignments_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
 

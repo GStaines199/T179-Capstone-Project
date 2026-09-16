@@ -2,6 +2,7 @@ package com.atakmap.android.plugintemplate.runtime;
 
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
+import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
@@ -33,6 +34,10 @@ public class DittoSyncManager {
     private static final String DEVICE_COLLECTION = "sartak_devices";
     private static final String DEVICE_QUERY = "SELECT * FROM "
             + DEVICE_COLLECTION;
+    private static final String OPERATION_STATUS_COLLECTION =
+            "sartak_operation_status";
+    private static final String OPERATION_STATUS_QUERY = "SELECT * FROM "
+            + OPERATION_STATUS_COLLECTION;
     private static final String TEAM_EVENT_COLLECTION = "sartak_team_events";
     private static final String TEAM_EVENT_QUERY = "SELECT * FROM "
             + TEAM_EVENT_COLLECTION;
@@ -55,6 +60,10 @@ public class DittoSyncManager {
     private static final String ALERT_COLLECTION = "sartak_alerts";
     private static final String ALERT_QUERY = "SELECT * FROM "
             + ALERT_COLLECTION;
+    private static final String AREA_ASSIGNMENT_COLLECTION =
+            "sartak_area_assignments";
+    private static final String AREA_ASSIGNMENT_QUERY = "SELECT * FROM "
+            + AREA_ASSIGNMENT_COLLECTION;
 
     private final MapView mapView;
     private final IdentityManager identityManager;
@@ -79,8 +88,14 @@ public class DittoSyncManager {
     private final Map<String, SearchAlertMessage> alerts =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SearchAlertMessage>());
+    private final Map<String, SearchAreaAssignment> areaAssignments =
+            Collections.synchronizedMap(new LinkedHashMap<String,
+                    SearchAreaAssignment>());
+    private final Map<String, String> operationStatuses =
+            Collections.synchronizedMap(new LinkedHashMap<String, String>());
 
     private Ditto ditto;
+    private DittoSyncSubscription operationStatusSubscription;
     private DittoSyncSubscription deviceSubscription;
     private DittoSyncSubscription teamEventSubscription;
     private DittoSyncSubscription teamMembershipSubscription;
@@ -88,13 +103,16 @@ public class DittoSyncManager {
     private DittoSyncSubscription searchLineSubscription;
     private DittoSyncSubscription sharedMarkerSubscription;
     private DittoSyncSubscription alertSubscription;
+    private DittoSyncSubscription areaAssignmentSubscription;
     private DittoStoreObserver deviceObserver;
+    private DittoStoreObserver operationStatusObserver;
     private DittoStoreObserver teamEventObserver;
     private DittoStoreObserver teamMembershipObserver;
     private DittoStoreObserver gridStatusObserver;
     private DittoStoreObserver searchLineObserver;
     private DittoStoreObserver sharedMarkerObserver;
     private DittoStoreObserver alertObserver;
+    private DittoStoreObserver areaAssignmentObserver;
     private volatile boolean started;
     private volatile boolean configured;
     private volatile boolean authAttemptInFlight;
@@ -134,6 +152,16 @@ public class DittoSyncManager {
             if (strictModeFailure.length() > 0)
                 Log.w(TAG, "Ditto strict mode setup failed: "
                         + strictModeFailure);
+            operationStatusSubscription = DittoSdkBridge
+                    .registerSubscription(ditto, OPERATION_STATUS_QUERY);
+            operationStatusObserver = DittoSdkBridge.registerJsonObserver(
+                    ditto, OPERATION_STATUS_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateOperationStatuses(jsonDocuments);
+                        }
+                    });
             deviceSubscription = DittoSdkBridge.registerSubscription(ditto,
                     DEVICE_QUERY);
             deviceObserver = DittoSdkBridge.registerJsonObserver(ditto,
@@ -203,6 +231,16 @@ public class DittoSyncManager {
                             updateAlerts(jsonDocuments);
                         }
                     });
+            areaAssignmentSubscription = DittoSdkBridge.registerSubscription(
+                    ditto, AREA_ASSIGNMENT_QUERY);
+            areaAssignmentObserver = DittoSdkBridge.registerJsonObserver(ditto,
+                    AREA_ASSIGNMENT_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateAreaAssignments(jsonDocuments);
+                        }
+                    });
             started = true;
             status = "Ditto: starting for " + operationProfile
                     .getOperationName();
@@ -238,6 +276,7 @@ public class DittoSyncManager {
     }
 
     private void cleanupDittoResources() {
+        DittoSdkBridge.closeObserver(operationStatusObserver);
         DittoSdkBridge.closeObserver(deviceObserver);
         DittoSdkBridge.closeObserver(teamEventObserver);
         DittoSdkBridge.closeObserver(teamMembershipObserver);
@@ -245,6 +284,8 @@ public class DittoSyncManager {
         DittoSdkBridge.closeObserver(searchLineObserver);
         DittoSdkBridge.closeObserver(sharedMarkerObserver);
         DittoSdkBridge.closeObserver(alertObserver);
+        DittoSdkBridge.closeObserver(areaAssignmentObserver);
+        DittoSdkBridge.closeSubscription(operationStatusSubscription);
         DittoSdkBridge.closeSubscription(deviceSubscription);
         DittoSdkBridge.closeSubscription(teamEventSubscription);
         DittoSdkBridge.closeSubscription(teamMembershipSubscription);
@@ -252,8 +293,11 @@ public class DittoSyncManager {
         DittoSdkBridge.closeSubscription(searchLineSubscription);
         DittoSdkBridge.closeSubscription(sharedMarkerSubscription);
         DittoSdkBridge.closeSubscription(alertSubscription);
+        DittoSdkBridge.closeSubscription(areaAssignmentSubscription);
         if (ditto != null)
             DittoSdkBridge.releaseDitto(ditto);
+        operationStatusObserver = null;
+        operationStatusSubscription = null;
         deviceObserver = null;
         deviceSubscription = null;
         teamEventObserver = null;
@@ -268,6 +312,8 @@ public class DittoSyncManager {
         sharedMarkerSubscription = null;
         alertObserver = null;
         alertSubscription = null;
+        areaAssignmentObserver = null;
+        areaAssignmentSubscription = null;
         ditto = null;
     }
 
@@ -283,6 +329,13 @@ public class DittoSyncManager {
 
     public OperationProfile getOperationProfile() {
         return operationProfile;
+    }
+
+    public String getRemoteOperationStatus(String operationId) {
+        synchronized (operationStatuses) {
+            String value = operationStatuses.get(safe(operationId));
+            return value == null ? "" : value;
+        }
     }
 
     public boolean isStarted() {
@@ -353,6 +406,34 @@ public class DittoSyncManager {
     public List<SearchAlertMessage> getAlertMessages() {
         synchronized (alerts) {
             return new ArrayList<>(alerts.values());
+        }
+    }
+
+    public List<SearchAreaAssignment> getAreaAssignments() {
+        synchronized (areaAssignments) {
+            return new ArrayList<>(areaAssignments.values());
+        }
+    }
+
+    public void publishOperationStatus(String operationStatus) {
+        if (!started || ditto == null || operationProfile == null)
+            return;
+        String operationId = getOperationId();
+        if (operationId.length() == 0)
+            return;
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", "operation-status-" + operationId);
+        document.put("operationId", operationId);
+        document.put("status", safe(operationStatus));
+        document.put("updatedAt", System.currentTimeMillis());
+        try {
+            insertDocument(OPERATION_STATUS_COLLECTION, "operationStatus",
+                    document);
+            updateReadyStatus();
+        } catch (Throwable throwable) {
+            status = "Ditto: operation status publish failed - "
+                    + describeFailure(throwable);
+            Log.w(TAG, "Ditto operation status publish failed", throwable);
         }
     }
 
@@ -503,9 +584,53 @@ public class DittoSyncManager {
         }
     }
 
+    public void publishAreaAssignment(SearchAreaAssignment assignment) {
+        if (!started || ditto == null || assignment == null
+                || assignment.getArea() == null)
+            return;
+        SearchGridStateStore.PlannedAreaRecord area = assignment.getArea();
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", assignment.getAssignmentId());
+        document.put("assignmentId", assignment.getAssignmentId());
+        document.put("operationId", getOperationId());
+        document.put("teamId", safe(assignment.getTeamId()));
+        document.put("teamName", safe(assignment.getTeamName()));
+        document.put("leaderUid", safe(assignment.getLeaderUid()));
+        document.put("leaderCallsign", safe(assignment.getLeaderCallsign()));
+        document.put("assignedByUid", safe(assignment.getAssignedByUid()));
+        document.put("assignedByCallsign", safe(assignment
+                .getAssignedByCallsign()));
+        document.put("status", safe(assignment.getStatus()));
+        document.put("updatedAt", assignment.getUpdatedAt());
+        document.put("shape", safe(area.shape));
+        document.put("zone", safe(area.zone));
+        document.put("centerEasting", area.centerEasting);
+        document.put("centerNorthing", area.centerNorthing);
+        document.put("west", area.west);
+        document.put("south", area.south);
+        document.put("east", area.east);
+        document.put("north", area.north);
+        document.put("radiusMeters", area.radiusMeters);
+        document.put("widthMeters", area.widthMeters);
+        document.put("heightMeters", area.heightMeters);
+
+        try {
+            insertDocument(AREA_ASSIGNMENT_COLLECTION, "assignment",
+                    document);
+            updateReadyStatus();
+        } catch (Throwable throwable) {
+            status = "Ditto: area assignment publish failed - "
+                    + describeFailure(throwable);
+            Log.w(TAG, "Ditto area assignment publish failed", throwable);
+        }
+    }
+
     public void clearLocalCaches() {
         synchronized (devices) {
             devices.clear();
+        }
+        synchronized (operationStatuses) {
+            operationStatuses.clear();
         }
         synchronized (teamEvents) {
             teamEvents.clear();
@@ -518,6 +643,9 @@ public class DittoSyncManager {
         }
         synchronized (searchLines) {
             searchLines.clear();
+        }
+        synchronized (areaAssignments) {
+            areaAssignments.clear();
         }
         synchronized (sharedMapMarkers) {
             sharedMapMarkers.clear();
@@ -689,7 +817,8 @@ public class DittoSyncManager {
                 + " team events, " + getTeamMemberships().size()
                 + " memberships, " + getSearchGridMessages().size()
                 + " grid states, " + getSearchLineMessages().size()
-                + " search lines, " + getAlertMessages().size()
+                + " search lines, " + getAreaAssignments().size()
+                + " area assignments, " + getAlertMessages().size()
                 + " alerts";
     }
 
@@ -852,6 +981,33 @@ public class DittoSyncManager {
         }
     }
 
+    private void updateOperationStatuses(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        LinkedHashMap<String, String> next = new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                if (!isCurrentOperation(json))
+                    continue;
+                JSONObject object = new JSONObject(json);
+                String operationId = object.optString("operationId", "");
+                String operationStatus = object.optString("status", "");
+                if (operationId.length() == 0 || operationStatus.length() == 0)
+                    continue;
+                next.put(operationId, operationStatus);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto operation status document",
+                        exception);
+            }
+        }
+        synchronized (operationStatuses) {
+            operationStatuses.clear();
+            operationStatuses.putAll(next);
+        }
+        if (!next.isEmpty())
+            lastReceiveTime = System.currentTimeMillis();
+    }
+
     private SearchTeamCotMessage teamEventFromJson(String json)
             throws JSONException {
         JSONObject object = new JSONObject(json);
@@ -984,6 +1140,40 @@ public class DittoSyncManager {
         }
         for (SearchLineCotMessage message : next.values()) {
             if (!message.getSenderUid().equals(selfUid)) {
+                lastReceiveTime = System.currentTimeMillis();
+                break;
+            }
+        }
+    }
+
+    private void updateAreaAssignments(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        LinkedHashMap<String, SearchAreaAssignment> next =
+                new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                if (!isCurrentOperation(json))
+                    continue;
+                SearchAreaAssignment assignment =
+                        SearchAreaAssignment.fromJson(json);
+                if (assignment.getAssignmentId().length() == 0
+                        || assignment.getTeamId().length() == 0)
+                    continue;
+                next.put(assignment.getAssignmentId(), assignment);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto area assignment document",
+                        exception);
+            }
+        }
+        synchronized (areaAssignments) {
+            areaAssignments.clear();
+            areaAssignments.putAll(next);
+        }
+        for (SearchAreaAssignment assignment : next.values()) {
+            if (!assignment.getAssignedByUid().equals(selfUid)) {
                 lastReceiveTime = System.currentTimeMillis();
                 break;
             }

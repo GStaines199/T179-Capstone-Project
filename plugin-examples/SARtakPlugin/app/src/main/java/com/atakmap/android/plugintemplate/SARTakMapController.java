@@ -241,6 +241,44 @@ public class SARTakMapController {
         return cell;
     }
 
+    public void planSearchAreaFromCurrentCell() {
+        SearchGridCell cell = ensureSelectedCell();
+        if (cell == null)
+            return;
+        gridManager.planSelectedAggregateArea();
+        gridOverlay.setVisible(true);
+        refreshOverlay();
+    }
+
+    public void planBoxSearchArea(double widthKm, double heightKm) {
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint == null)
+            return;
+        gridManager.planBoxAt(currentPoint, widthKm, heightKm);
+        searchLineManager.updateLeaderPosition(gridManager.getSelectedCell(),
+                currentPoint);
+        gridOverlay.setVisible(true);
+        arrangeTeamMembers();
+        refreshOverlay();
+    }
+
+    public void planCircleSearchArea(double radiusKm) {
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint == null)
+            return;
+        gridManager.planCircleAt(currentPoint, radiusKm);
+        searchLineManager.updateLeaderPosition(gridManager.getSelectedCell(),
+                currentPoint);
+        gridOverlay.setVisible(true);
+        arrangeTeamMembers();
+        refreshOverlay();
+    }
+
+    public void clearPlannedSearchArea() {
+        gridManager.clearPlannedArea();
+        refreshOverlay();
+    }
+
     public void startSearchLine() {
         SearchGridCell cell = ensureSelectedCell();
         GeoPoint currentPoint = getCurrentUserPoint();
@@ -512,6 +550,79 @@ public class SARTakMapController {
     public String getSelectedCellDisplaySummary() {
         SearchGridCell cell = gridManager.getSelectedCell();
         return SearchGridDisplayFormatter.formatCellSummaryWithStatus(cell);
+    }
+
+    public String getNextCellDisplaySummary() {
+        SearchGridCell cell = gridManager.getNextPlannedCell();
+        if (cell == null)
+            return "Next cell: not planned";
+        return "Next: " + SearchGridDisplayFormatter.formatCellCompact(cell);
+    }
+
+    public String getPlannedSearchAreaSummary() {
+        if (!gridManager.hasPlannedArea())
+            return "No planned search area. Select your current GPS cell, then plan the search area.";
+        SearchGridCell cell = gridManager.getSelectedCell();
+        String utm = cell == null ? "" : " from "
+                + SearchGridDisplayFormatter.formatParentUtm(cell);
+        return gridManager.getPlannedAreaDescription() + utm + "\nApprox "
+                + gridManager.getPlannedCellEstimate()
+                + " x 100 m cells. Visible cells are generated on demand.";
+    }
+
+    public List<SearchGridCell> getGridReviewCells() {
+        return gridManager.getReviewCells();
+    }
+
+    public void selectGridCell(String cellId) {
+        SearchGridCell cell = gridManager.selectCellById(cellId);
+        if (cell == null)
+            return;
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint != null)
+            searchLineManager.updateLeaderPosition(cell, currentPoint);
+        arrangeTeamMembers();
+        refreshOverlay();
+    }
+
+    public void focusGridCell(String cellId) {
+        SearchGridCell cell = gridManager.selectCellById(cellId);
+        if (cell == null)
+            return;
+        GeoPoint center = converter.toGeoPoint(cell.getZoneDescriptor(),
+                (cell.getWest() + cell.getEast()) / 2.0,
+                (cell.getSouth() + cell.getNorth()) / 2.0);
+        mapView.getMapController().panTo(center, true);
+        refreshOverlay();
+    }
+
+    public String getPendingGridReviewCellId() {
+        SearchGridCell cell = gridManager.getPendingReviewCell();
+        return cell == null ? "" : cell.getId();
+    }
+
+    public String getPendingGridReviewCellSummary() {
+        SearchGridCell cell = gridManager.getPendingReviewCell();
+        return cell == null ? ""
+                : SearchGridDisplayFormatter.formatCellCompact(cell);
+    }
+
+    public void markGridCellPartial(String cellId) {
+        gridManager.setCellStatus(cellId, SearchGridStatus.PARTIAL);
+        publishGridStatusForCell(cellId, SearchGridStatus.PARTIAL);
+        gridManager.clearPendingReviewCell(cellId);
+        refreshOverlay();
+    }
+
+    public void markGridCellComplete(String cellId) {
+        gridManager.setCellStatus(cellId, SearchGridStatus.COMPLETE);
+        publishGridStatusForCell(cellId, SearchGridStatus.COMPLETE);
+        gridManager.clearPendingReviewCell(cellId);
+        refreshOverlay();
+    }
+
+    public void deferGridCellReview(String cellId) {
+        gridManager.clearPendingReviewCell(cellId);
     }
 
     public String getSelectedCellStatus() {
@@ -1393,7 +1504,7 @@ public class SARTakMapController {
     }
 
     public String getGridProgressSummary() {
-        List<SearchGridCell> cells = gridManager.getSelectedAggregateCells();
+        List<SearchGridCell> cells = gridManager.getRenderCells();
         if (cells.isEmpty())
             return "Select the current GPS cell to show grid progress.";
         int partial = 0;
@@ -1408,9 +1519,10 @@ public class SARTakMapController {
                 inProgress++;
         }
         return "UTM: " + SearchGridDisplayFormatter.formatParentUtm(
-                cells.get(0)) + "\n1 km area: " + complete + " complete, " + partial
-                + " partial, " + inProgress + " in progress, "
-                + cells.size() + " cells total";
+                cells.get(0)) + "\nPlanned area: " + complete + " complete, "
+                + partial + " partial, " + inProgress + " in progress, "
+                + cells.size() + " cells total\n"
+                + getNextCellDisplaySummary();
     }
 
     public SearchTeamMember selectTeamMember(String uniqueId) {
@@ -1554,9 +1666,29 @@ public class SARTakMapController {
         applyAlertSearchLineSideEffects();
         refreshLocationAvailability();
         syncSelfTeamMemberFromAtak();
+        updateCurrentGridCellFromLocation();
         publishDittoDeviceStateIfDue();
         applyDittoDeviceSnapshots();
         refreshOverlay();
+    }
+
+    private void updateCurrentGridCellFromLocation() {
+        GeoPoint point = getCurrentUserPoint();
+        if (point == null)
+            return;
+        SearchGridCell before = gridManager.getSelectedCell();
+        String previousId = before == null ? "" : before.getId();
+        SearchGridCell current = gridManager.updateCurrentCellAt(point,
+                isLeaderRole() && assignmentManager.isTeamCreated());
+        if (current == null || previousId.equals(current.getId()))
+            return;
+
+        if (isLeaderRole() && assignmentManager.isTeamCreated()) {
+            SearchGridCell pending = gridManager.getPendingReviewCell();
+            if (pending != null)
+                publishGridStatusForCell(pending.getId(), pending.getStatus());
+            publishGridStatusForCell(current.getId(), current.getStatus());
+        }
     }
 
     private void applyAlertSearchLineSideEffects() {
@@ -1632,13 +1764,19 @@ public class SARTakMapController {
     }
 
     private void publishSelectedGridStatus(SearchGridStatus status) {
-        if (!isLeaderRole() || !assignmentManager.isTeamCreated())
-            return;
         SearchGridCell cell = gridManager.getSelectedCell();
         if (cell == null)
             return;
+        publishGridStatusForCell(cell.getId(), status);
+    }
+
+    private void publishGridStatusForCell(String cellId,
+            SearchGridStatus status) {
+        if (!isLeaderRole() || !assignmentManager.isTeamCreated()
+                || cellId == null || cellId.length() == 0 || status == null)
+            return;
         gridCotWorkflow.publishStatus(assignmentManager.getTeamId(),
-                cell.getId(), status);
+                cellId, status);
     }
 
     private void applyRemoteGridStatusMessages() {

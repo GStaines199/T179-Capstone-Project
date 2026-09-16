@@ -14,6 +14,7 @@ public class SearchGridOverlay {
 
     private static final String GROUP_NAME = "SARtak Search Grid Overlay";
     private static final double REFERENCE_GRID_MAX_RESOLUTION_METERS = 250.0;
+    private static final int MAX_REFERENCE_LINES = 120;
 
     private final MapView mapView;
     private final GridCoordinateConverter converter;
@@ -61,7 +62,8 @@ public class SearchGridOverlay {
             return;
 
         ensureOverlayGroup();
-        List<SearchGridCell> cells = gridManager.getSelectedAggregateCells();
+        List<SearchGridCell> cells = gridManager.getRenderCells(mapView
+                .getBounds());
         if (cells.isEmpty()) {
             if (lastRenderKey.length() > 0) {
                 overlayGroup.clearItems();
@@ -73,12 +75,14 @@ public class SearchGridOverlay {
         SearchGridCell selectedCell = gridManager.getSelectedCell();
         boolean show100mReference = shouldRender100mReference();
         String renderKey = buildRenderKey(cells, selectedCell,
-                show100mReference);
+                show100mReference) + "|area="
+                + gridManager.getPlannedAreaDescription();
         if (renderKey.equals(lastRenderKey))
             return;
 
         overlayGroup.clearItems();
         lastRenderKey = renderKey;
+        renderPlannedAreaOutline(gridManager);
         if (show100mReference) {
             renderReferenceGridLines(cells);
             renderDetailedCells(cells, selectedCell);
@@ -133,8 +137,16 @@ public class SearchGridOverlay {
         SearchGridCell first = cells.get(0);
         SearchGridCell last = cells.get(cells.size() - 1);
         int color = Color.argb(75, 255, 255, 255);
+        int columns = Math.max(1, (int) Math.ceil((last.getEast()
+                - first.getWest())
+                / GridCoordinateConverter.BASE_CELL_SIZE_METERS));
+        int rows = Math.max(1, (int) Math.ceil((last.getNorth()
+                - first.getSouth())
+                / GridCoordinateConverter.BASE_CELL_SIZE_METERS));
+        if (columns + rows > MAX_REFERENCE_LINES)
+            return;
 
-        for (int i = 0; i <= GridCoordinateConverter.AGGREGATE_CELLS_PER_SIDE; i++) {
+        for (int i = 0; i <= columns; i++) {
             double x = first.getWest() + i
                     * GridCoordinateConverter.BASE_CELL_SIZE_METERS;
             DrawingShape line = createLine("100m Grid E " + i,
@@ -147,10 +159,12 @@ public class SearchGridOverlay {
                     color, 1.0);
             line.setMetaString("sartak.kind", "search-grid-reference");
             overlayGroup.addItem(line);
+        }
 
+        for (int i = 0; i <= rows; i++) {
             double y = first.getSouth() + i
                     * GridCoordinateConverter.BASE_CELL_SIZE_METERS;
-            line = createLine("100m Grid N " + i,
+            DrawingShape line = createLine("100m Grid N " + i,
                     new GeoPoint[] {
                             converter.toGeoPoint(first.getZoneDescriptor(),
                                     first.getWest(), y),
@@ -161,6 +175,17 @@ public class SearchGridOverlay {
             line.setMetaString("sartak.kind", "search-grid-reference");
             overlayGroup.addItem(line);
         }
+    }
+
+    private void renderPlannedAreaOutline(SearchGridManager gridManager) {
+        GeoPoint[] points = gridManager.getPlannedAreaOutlinePoints();
+        if (points.length == 0)
+            return;
+        DrawingShape outline = createShape("SARtak Planned Search Area", points,
+                Color.argb(20, 74, 163, 255),
+                Color.argb(220, 74, 163, 255), 3.0);
+        outline.setMetaString("sartak.kind", "search-area-outline");
+        overlayGroup.addItem(outline);
     }
 
     private void renderAggregate(List<SearchGridCell> cells,

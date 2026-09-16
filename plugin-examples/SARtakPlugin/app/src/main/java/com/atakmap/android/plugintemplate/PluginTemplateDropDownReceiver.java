@@ -33,6 +33,7 @@ import android.widget.Toast;
 
 import com.atak.plugins.impl.PluginLayoutInflater;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
@@ -78,6 +79,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button trackTabButton;
     private final Switch toggleSearchAreaSwitch;
     private final Switch toggleGridLabelsSwitch;
+    private final Button planSearchAreaButton;
+    private final Button clearPlannedAreaButton;
     private final Button markerModeMeButton;
     private final Button markerModeTeamButton;
     private final Button markerModeLeadersButton;
@@ -130,10 +133,13 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView readinessChecklistValue;
     private final TextView identityValue;
     private final TextView homeGpsValue;
+    private final TextView plannedAreaValue;
     private final TextView gridProgressValue;
+    private final TextView nextCellValue;
     private final TextView teamSizeValue;
     private final TextView teamNameValue;
     private final LinearLayout teamMemberCardsContainer;
+    private final LinearLayout gridReviewContainer;
     private final LinearLayout invitesRequestsContainer;
     private final LinearLayout alertsCardsContainer;
     private final LinearLayout devicesCardsContainer;
@@ -162,6 +168,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private boolean suppressToleranceUpdate;
     private boolean suppressSwitchUpdate;
     private boolean consumingPendingQrScan;
+    private String activeGridReviewPromptCellId = "";
 
     /**************************** CONSTRUCTOR *****************************/
 
@@ -187,6 +194,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.toggle_search_area_button);
         toggleGridLabelsSwitch = templateView
                 .findViewById(R.id.toggle_grid_labels_button);
+        planSearchAreaButton = templateView.findViewById(
+                R.id.plan_search_area_button);
+        clearPlannedAreaButton = templateView.findViewById(
+                R.id.clear_planned_area_button);
         markerModeMeButton = templateView
                 .findViewById(R.id.marker_mode_me_button);
         markerModeTeamButton = templateView
@@ -272,11 +283,15 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 R.id.readiness_checklist_value);
         identityValue = templateView.findViewById(R.id.identity_value);
         homeGpsValue = templateView.findViewById(R.id.home_gps_value);
+        plannedAreaValue = templateView.findViewById(R.id.planned_area_value);
         gridProgressValue = templateView.findViewById(R.id.grid_progress_value);
+        nextCellValue = templateView.findViewById(R.id.next_cell_value);
         teamSizeValue = templateView.findViewById(R.id.team_size_value);
         teamNameValue = templateView.findViewById(R.id.team_name_value);
         teamMemberCardsContainer = templateView
                 .findViewById(R.id.team_member_cards_container);
+        gridReviewContainer = templateView.findViewById(
+                R.id.grid_review_container);
         invitesRequestsContainer = templateView
                 .findViewById(R.id.invites_requests_container);
         alertsCardsContainer = templateView
@@ -308,6 +323,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         markerModeLeadersButton.setOnClickListener(this);
         markerModeAllButton.setOnClickListener(this);
         trackClearButton.setOnClickListener(this);
+        planSearchAreaButton.setOnClickListener(this);
+        clearPlannedAreaButton.setOnClickListener(this);
         startSearchLineButton.setOnClickListener(this);
         pauseSearchLineButton.setOnClickListener(this);
         searchLineColourButton.setOnClickListener(this);
@@ -377,6 +394,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             mapController.clearTrackHistory();
             Toast.makeText(getMapView().getContext(),
                     "Track history cleared", Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.plan_search_area_button) {
+            showPlanSearchAreaDialog();
+        } else if (id == R.id.clear_planned_area_button) {
+            mapController.clearPlannedSearchArea();
+            Toast.makeText(getMapView().getContext(),
+                    "Planned search area cleared", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.start_search_line_button) {
             if (mapController.isSearchLineStarted()) {
                 mapController.endSearchLine();
@@ -511,6 +534,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
         currentCellValue.setText(cellStatus);
         homeCellValue.setText(cellStatus);
+        plannedAreaValue.setText(mapController.getPlannedSearchAreaSummary());
+        nextCellValue.setText(mapController.getNextCellDisplaySummary());
         assignmentValue.setText(assignmentSummary);
         homeAssignmentValue.setText(assignmentSummary);
         homeSearchLineValue.setText(searchLineSummary);
@@ -595,6 +620,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         trackStatusValue.setText(mapController.getTrackStatusSummary());
         trackDetailsValue.setText(mapController.getTrackDetailsSummary());
         pollTeamCotMessages();
+        pollGridProgressPrompt();
+        if (currentTab == TAB_GRID || currentTab == TAB_HOME)
+            renderGridReviewCards();
         updateSwitch(trackRecordSwitch, mapController.isTrackRecording());
         updateSwitch(trackVisibilitySwitch, mapController.isTrackVisible());
         trackClearButton.setVisibility(mapController.hasVisibleTrackData()
@@ -650,6 +678,74 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             labels[i] = values[i].getLabel();
         }
         return labels;
+    }
+
+    private void showPlanSearchAreaDialog() {
+        LinearLayout content = new LinearLayout(getMapView().getContext());
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(16), dp(8), dp(16), 0);
+
+        final Spinner shapeInput = new Spinner(getMapView().getContext());
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(getMapView()
+                .getContext(), android.R.layout.simple_spinner_item,
+                new String[] { "Circle radius", "Box width / height" });
+        adapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item);
+        shapeInput.setAdapter(adapter);
+        content.addView(shapeInput);
+
+        final EditText radiusInput = addDialogInput(content,
+                "Radius in km", "1", true);
+        final EditText widthInput = addDialogInput(content,
+                "Box width in km", "1", true);
+        final EditText heightInput = addDialogInput(content,
+                "Box height in km", "1", true);
+        widthInput.setVisibility(View.GONE);
+        heightInput.setVisibility(View.GONE);
+
+        shapeInput.setOnItemSelectedListener(new AdapterView
+                .OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view,
+                    int position, long id) {
+                boolean circle = position == 0;
+                radiusInput.setVisibility(circle ? View.VISIBLE : View.GONE);
+                widthInput.setVisibility(circle ? View.GONE : View.VISIBLE);
+                heightInput.setVisibility(circle ? View.GONE : View.VISIBLE);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Plan search area")
+                .setView(content)
+                .setPositiveButton("Create",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                if (shapeInput.getSelectedItemPosition() == 0) {
+                                    mapController.planCircleSearchArea(parseKm(
+                                            radiusInput, 1.0));
+                                    Toast.makeText(getMapView().getContext(),
+                                            "Planned circle search area",
+                                            Toast.LENGTH_SHORT).show();
+                                } else {
+                                    double width = parseKm(widthInput, 1.0);
+                                    mapController.planBoxSearchArea(width,
+                                            parseKm(heightInput, width));
+                                    Toast.makeText(getMapView().getContext(),
+                                            "Planned box search area",
+                                            Toast.LENGTH_SHORT).show();
+                                }
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void setupToggleSwitches() {
@@ -1380,6 +1476,50 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             if (handledAlertMessages.add(alert.getAlertId()))
                 showTeamAlertDialog(alert);
         }
+    }
+
+    private void pollGridProgressPrompt() {
+        if (!leaderView || !mapController.isTeamCreated())
+            return;
+        final String cellId = mapController.getPendingGridReviewCellId();
+        if (cellId.length() == 0 || cellId.equals(activeGridReviewPromptCellId))
+            return;
+        activeGridReviewPromptCellId = cellId;
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Review previous cell")
+                .setMessage("You have moved into a new search cell.\n\n"
+                        + mapController.getPendingGridReviewCellSummary()
+                        + "\n\nMark the previous cell complete, or leave it as partial?")
+                .setPositiveButton("Complete",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.markGridCellComplete(cellId);
+                                activeGridReviewPromptCellId = "";
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Partial",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.markGridCellPartial(cellId);
+                                activeGridReviewPromptCellId = "";
+                                refreshGridUi();
+                            }
+                        })
+                .setNeutralButton("Later",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.deferGridCellReview(cellId);
+                                activeGridReviewPromptCellId = "";
+                            }
+                        })
+                .show();
     }
 
     private void updateMarkerVisibilityButtons() {
@@ -2240,6 +2380,18 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         return input;
     }
 
+    private double parseKm(EditText input, double fallback) {
+        if (input == null)
+            return fallback;
+        try {
+            double value = Double.parseDouble(input.getText().toString()
+                    .trim());
+            return Math.max(0.1, value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
     private void addDialogLabel(LinearLayout content, String label) {
         TextView labelView = new TextView(getMapView().getContext());
         labelView.setText(label);
@@ -2265,6 +2417,68 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             authUrlInput.setHint("Ditto auth URL");
             tokenInput.setHint("Development / playground token");
         }
+    }
+
+    private void renderGridReviewCards() {
+        gridReviewContainer.removeAllViews();
+        List<SearchGridCell> cells = mapController.getGridReviewCells();
+        if (cells.isEmpty()) {
+            gridReviewContainer.addView(createCardText(
+                    "Partial and completed cells will appear here.", 13,
+                    false));
+            return;
+        }
+        for (final SearchGridCell cell : cells)
+            gridReviewContainer.addView(createGridReviewCard(cell));
+    }
+
+    private View createGridReviewCard(final SearchGridCell cell) {
+        LinearLayout card = createActionCard();
+        card.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mapController.focusGridCell(cell.getId());
+                Toast.makeText(getMapView().getContext(),
+                        "Focused " + cell.getId(), Toast.LENGTH_SHORT).show();
+                refreshGridUi();
+            }
+        });
+        card.addView(createCardText(
+                com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter
+                        .formatCellCompact(cell), 14, true));
+        card.addView(createCardText("Status: "
+                + com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter
+                        .formatStatus(cell.getStatus()), 13, false));
+        LinearLayout row = new LinearLayout(pluginContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(6), 0, 0);
+        Button partialButton = new Button(pluginContext);
+        partialButton.setText("Partial");
+        partialButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mapController.markGridCellPartial(cell.getId());
+                refreshGridUi();
+            }
+        });
+        row.addView(partialButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        Button completeButton = new Button(pluginContext);
+        completeButton.setText("Complete");
+        completeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mapController.markGridCellComplete(cell.getId());
+                refreshGridUi();
+            }
+        });
+        LinearLayout.LayoutParams completeParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        completeParams.setMargins(dp(6), 0, 0, 0);
+        row.addView(completeButton, completeParams);
+        card.addView(row);
+        return card;
     }
 
     private int readinessColor(int readinessLevel) {

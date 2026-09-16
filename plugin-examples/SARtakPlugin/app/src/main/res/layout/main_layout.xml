@@ -519,6 +519,30 @@
                         android:layout_weight="1"
                         android:text="@string/grid_labels_switch_label" />
                 </LinearLayout>
+
+                <Button
+                    android:id="@+id/plan_search_area_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/grid_plan_area" />
+
+                <Button
+                    android:id="@+id/clear_planned_area_button"
+                    style="@style/SARtakActionButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/grid_clear_planned_area" />
+
+                <TextView
+                    android:id="@+id/planned_area_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/grid_planned_area_empty" />
             </LinearLayout>
 
             <LinearLayout
@@ -547,6 +571,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/grid_no_cell" />
+
+                <TextView
+                    android:id="@+id/next_cell_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/grid_next_cell_empty" />
 
                 <TextView
                     style="@style/SARtakLabel"
@@ -718,6 +750,20 @@
                         android:layout_marginTop="6dp"
                         android:text="@string/grid_clear_status" />
                 </LinearLayout>
+
+                <TextView
+                    style="@style/SARtakLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/grid_review_heading" />
+
+                <LinearLayout
+                    android:id="@+id/grid_review_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
 

@@ -3,6 +3,9 @@ package com.atakmap.android.plugintemplate.grid;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Converts between geographic points and ATAK's UTM metre coordinates.
  *
@@ -17,6 +20,8 @@ public class GridCoordinateConverter {
     public static final double BASE_CELL_SIZE_METERS = 100.0;
     public static final double AGGREGATE_GRID_SIZE_METERS = 1000.0;
     public static final int AGGREGATE_CELLS_PER_SIDE = 10;
+    private static final Pattern CELL_ID_PATTERN = Pattern.compile(
+            "^utm-([^-]+)-c100-e(\\d+)-n(\\d+)$");
 
     public SearchGridCell cellForPoint(GeoPoint point,
             SearchGridStateStore stateStore) {
@@ -56,6 +61,24 @@ public class GridCoordinateConverter {
         String id = cellId(zone, west, south);
         return new SearchGridCell(aggregateId, id, row, column, zone, west,
                 south, east, north, stateStore.getStatus(id));
+    }
+
+    public SearchGridCell cellForId(String cellId,
+            SearchGridStateStore stateStore) {
+        ParsedCellId parsed = parseCellId(cellId);
+        if (parsed == null)
+            return null;
+        double aggregateWest = floorToGrid(parsed.west,
+                AGGREGATE_GRID_SIZE_METERS);
+        double aggregateSouth = floorToGrid(parsed.south,
+                AGGREGATE_GRID_SIZE_METERS);
+        int column = clamp((int) Math.floor((parsed.west - aggregateWest)
+                / BASE_CELL_SIZE_METERS), 0, AGGREGATE_CELLS_PER_SIDE - 1);
+        int row = clamp((int) Math.floor((parsed.south - aggregateSouth)
+                / BASE_CELL_SIZE_METERS), 0, AGGREGATE_CELLS_PER_SIDE - 1);
+        return createCell(aggregateId(parsed.zone, aggregateWest,
+                aggregateSouth), parsed.zone, parsed.west, parsed.south, row,
+                column, stateStore);
     }
 
     public GeoPoint toGeoPoint(String zone, double easting, double northing) {
@@ -109,5 +132,32 @@ public class GridCoordinateConverter {
 
     private int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private ParsedCellId parseCellId(String cellId) {
+        if (cellId == null)
+            return null;
+        Matcher matcher = CELL_ID_PATTERN.matcher(cellId);
+        if (!matcher.matches())
+            return null;
+        try {
+            return new ParsedCellId(matcher.group(1),
+                    Double.parseDouble(matcher.group(2)),
+                    Double.parseDouble(matcher.group(3)));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static final class ParsedCellId {
+        final String zone;
+        final double west;
+        final double south;
+
+        ParsedCellId(String zone, double west, double south) {
+            this.zone = zone;
+            this.west = west;
+            this.south = south;
+        }
     }
 }

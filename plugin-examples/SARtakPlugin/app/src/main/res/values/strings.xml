@@ -42,6 +42,11 @@
     <string name="grid_no_cell">No cell selected</string>
     <string name="grid_assignment">Assignments</string>
     <string name="grid_select_cell">Select Current GPS Cell</string>
+    <string name="grid_plan_area">Plan Search Area</string>
+    <string name="grid_clear_planned_area">Clear Planned Search Area</string>
+    <string name="grid_planned_area_empty">No planned search area</string>
+    <string name="grid_next_cell_empty">Next cell: not planned</string>
+    <string name="grid_review_heading">Partial / Completed Cells</string>
     <string name="grid_mark_partial">Mark Partial</string>
     <string name="grid_mark_complete">Mark Complete</string>
     <string name="grid_clear_status">Clear Status</string>

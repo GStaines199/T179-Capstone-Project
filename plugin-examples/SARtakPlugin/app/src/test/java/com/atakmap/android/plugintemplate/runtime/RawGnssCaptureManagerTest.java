@@ -196,6 +196,39 @@ public class RawGnssCaptureManagerTest {
         assertNull(row.speedAccuracy);
     }
 
+    /**
+     * The successor to the fused path's gap test: the raw writer stores one
+     * row per fix Android delivers and never invents one in between, so two
+     * fixes either side of an outage leave exactly two rows.
+     */
+    @Test
+    public void handleLocation_storesOneRowPerFixAndNothingInBetween() {
+        RawGnssCaptureManager realManager = managerWithRealRepository();
+        when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
+        when(trackManager.getActiveSessionId()).thenReturn("sessionRaw3");
+
+        Location first = gpsFix();
+        first.setTime(1000L);
+        Location second = gpsFix();
+        second.setLatitude(-27.4800);
+        second.setLongitude(153.0400);
+        second.setTime(40000L);
+
+        realManager.handleLocation(first);
+        realManager.handleLocation(second);
+
+        Cursor cursor = dbHelper.getReadableDatabase().query(
+                "location_points", new String[]{"latitude", "timestamp"},
+                "session_id = ?", new String[]{"sessionRaw3"}, null, null,
+                "timestamp ASC");
+        assertEquals(2, cursor.getCount());
+        assertTrue(cursor.moveToFirst());
+        assertEquals(-27.4705, cursor.getDouble(0), 0.000001);
+        assertTrue(cursor.moveToNext());
+        assertEquals(-27.4800, cursor.getDouble(0), 0.000001);
+        cursor.close();
+    }
+
     private RawGnssCaptureManager managerWithRealRepository() {
         dbHelper = new DatabaseHelper(RuntimeEnvironment.getApplication());
         LocationRepository realLocationRepository = new LocationRepository(dbHelper);

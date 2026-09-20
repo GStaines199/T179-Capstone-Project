@@ -24,7 +24,8 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Unit tests for the track-session UID generated when a searcher's GNSS
- * capture starts: {@code track-<uid>-<random UUID>}, one active session per
+ * capture starts: {@code track-<operation>-<uid>-<random UUID>}, one active
+ * session per
  * searcher UID, reused across restarts and regenerated after the track is
  * cleared.
  * <p>
@@ -52,6 +53,9 @@ public class SearchTrackSessionUidTest {
         sessions = new TrackSessionRepository(dbHelper);
         manager = new SearchTrackManager(sessions,
                 new LocationRepository(dbHelper));
+        // Track logging is operation-scoped: startOrResume() and
+        // recordFix() do nothing until an operation id is set.
+        manager.setOperationId("op-1");
     }
 
     @After
@@ -136,9 +140,13 @@ public class SearchTrackSessionUidTest {
         assertNull(manager.getActiveSessionId());
     }
 
-    /** Asserts a session id is "track-&lt;uid&gt;-&lt;random UUID&gt;". */
+    /**
+     * Asserts a session id is
+     * "track-&lt;operation&gt;-&lt;uid&gt;-&lt;random UUID&gt;". The operation
+     * scope became part of the prefix with operation-scoped tracking.
+     */
     private static void assertSessionUid(String expectedUid, String sessionId) {
-        String prefix = "track-" + expectedUid + "-";
+        String prefix = "track-op-1-" + expectedUid + "-";
         assertTrue("unexpected session id: " + sessionId,
                 sessionId.startsWith(prefix));
 

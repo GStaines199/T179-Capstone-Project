@@ -51,6 +51,7 @@ import com.atakmap.android.plugintemplate.runtime.OperationStateStore;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
 import com.atakmap.android.plugintemplate.runtime.RawGnssCapture;
 import com.atakmap.android.plugintemplate.runtime.RawGnssCaptureManager;
+import com.atakmap.android.plugintemplate.runtime.RawGnssTrackTrail;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchAlertMessage;
@@ -89,6 +90,7 @@ public class SARTakMapController {
     private final SearchTeamMarkerOverlay teamMarkerOverlay;
     private final SearchTrackManager trackManager;
     private final SearchTrackOverlay trackOverlay;
+    private final RawGnssTrackTrail rawGnssTrackTrail;
     private final AtakTrackBridge atakTrackBridge;
     private final SearchLineManager searchLineManager;
     private final SearchLineOverlay searchLineOverlay;
@@ -154,7 +156,8 @@ public class SARTakMapController {
                 locationRepository);
         this.trackManager.setOperationId(getActiveOperationId());
         this.trackOverlay = new SearchTrackOverlay(mapView);
-        this.atakTrackBridge = new AtakTrackBridge(mapView);
+        this.rawGnssTrackTrail = new RawGnssTrackTrail(mapView);
+        this.atakTrackBridge = new AtakTrackBridge(rawGnssTrackTrail);
         this.searchLineOverlay = new SearchLineOverlay(mapView);
         this.healthManager = new PluginHealthManager();
         this.identityManager = new IdentityManager(runtimeContext, mapView,
@@ -180,6 +183,11 @@ public class SARTakMapController {
                 new RawGnssCaptureManager.Listener() {
                     @Override
                     public void onRawGnssCaptured(RawGnssCapture capture) {
+                        IdentityManager.Identity identity =
+                                identityManager.getCurrentIdentity();
+                        if (identity != null && identity.isResolved())
+                            rawGnssTrackTrail.onRawFix(identity.getUid(),
+                                    identity.getCallsign(), capture);
                         refreshOverlay();
                     }
                 });
@@ -208,7 +216,10 @@ public class SARTakMapController {
         initialiseRuntime();
         startBackgroundRefresh();
         teamMarkerOverlay.render();
-        trackOverlay.render(trackManager.getTrackPoints());
+        // The track is drawn as ATAK crumbs from raw GNSS now. This
+        // polyline is left in place so the previous rendering can be
+        // restored in one line if the crumb trail does not suit.
+        trackOverlay.setVisible(false);
     }
 
     public boolean toggleGridOverlay() {
@@ -1441,16 +1452,12 @@ public class SARTakMapController {
     public boolean toggleTrackVisibility() {
         boolean visible = trackManager.toggleVisible();
         atakTrackBridge.setVisible(visible);
-        trackOverlay.setVisible(visible
-                && !atakTrackBridge.hasAtakTrackTrail());
-        trackOverlay.render(trackManager.getTrackPoints());
         return visible;
     }
 
     public void clearTrackHistory() {
         trackManager.clearCurrentTrack();
         atakTrackBridge.clearVisibleTrack();
-        trackOverlay.render(trackManager.getTrackPoints());
     }
 
     public String getTrackStatusSummary() {
@@ -1511,6 +1518,7 @@ public class SARTakMapController {
         searchLineCotWorkflow.dispose();
         backgroundHandler.removeCallbacks(backgroundRunnable);
         unregisterMapListeners();
+        rawGnssTrackTrail.dispose();
         gridOverlay.setVisible(false);
         teamMarkerOverlay.setVisible(false);
         trackOverlay.setVisible(false);
@@ -1529,9 +1537,6 @@ public class SARTakMapController {
         gridOverlay.render(gridManager);
         searchLineOverlay.render(searchLineManager);
         teamMarkerOverlay.render();
-        trackOverlay.setVisible(trackManager.isVisible()
-                && !atakTrackBridge.hasAtakTrackTrail());
-        trackOverlay.render(trackManager.getTrackPoints());
         publishSearchLineUpdateIfDue();
     }
 
@@ -1748,6 +1753,8 @@ public class SARTakMapController {
                         .getTeamName(), getFixedLeaderTeamId());
             trackManager.startOrResume(identity.getUid(),
                     identity.getCallsign());
+            rawGnssTrackTrail.setRecording(trackManager.isRecording());
+            rawGnssTrackTrail.setVisible(trackManager.isVisible());
             healthManager.setTrackingActive(trackManager.isRecording());
         } else {
             healthManager.setTrackingActive(false);

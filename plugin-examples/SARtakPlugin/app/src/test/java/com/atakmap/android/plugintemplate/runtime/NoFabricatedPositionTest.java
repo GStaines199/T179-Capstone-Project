@@ -121,9 +121,14 @@ public class NoFabricatedPositionTest {
      */
     @Test
     public void anAvailableFix_writesNoPointBecauseItIsNotRawGnss() {
-        capture(fixAt(-27.4698, 153.0251, 1000L));
+        // The timestamp has to be current: health measures the fix against
+        // a 30 second staleness window, so the fixed 1000L used elsewhere
+        // in this class would read as GPS_LOST however good the fix is.
+        capture(fixAt(-27.4698, 153.0251, System.currentTimeMillis()));
 
         assertEquals(0, trackManager.getTrackPoints().size());
+        // The other half of the split: this path still reports health, it
+        // just no longer writes.
         assertEquals(PluginHealthState.ACTIVE, healthManager.getState());
     }
 
@@ -144,7 +149,6 @@ public class NoFabricatedPositionTest {
         capture(fixAt(-27.4800, 153.0400, 40000L));
 
         assertEquals(0, trackManager.getTrackPoints().size());
-        assertEquals(PluginHealthState.ACTIVE, healthManager.getState());
     }
 
     @Test

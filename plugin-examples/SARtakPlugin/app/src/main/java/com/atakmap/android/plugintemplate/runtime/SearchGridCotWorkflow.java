@@ -68,19 +68,19 @@ public class SearchGridCotWorkflow {
 
     public void publishStatus(String teamId, String cellId,
             SearchGridStatus status) {
-        if (teamId == null || teamId.length() == 0 || cellId == null
-                || cellId.length() == 0 || status == null)
+        if (cellId == null || cellId.length() == 0 || status == null)
             return;
         if (operationId.length() == 0)
             return;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (identity == null || !identity.isResolved())
             return;
+        String scopedTeamId = safe(teamId);
         long created = System.currentTimeMillis();
         SearchGridCotMessage message = new SearchGridCotMessage(
-                "sartak-grid-" + teamId + "-" + cellId + "-"
+                "sartak-grid-" + scopedTeamId + "-" + cellId + "-"
                         + identity.getUid() + "-" + created,
-                teamId, identity.getUid(), identity.getCallsign(), cellId,
+                scopedTeamId, identity.getUid(), identity.getCallsign(), cellId,
                 status, created, operationId);
         messages.put(message.getUid(), message);
         if (dittoSyncManager != null)
@@ -99,7 +99,8 @@ public class SearchGridCotWorkflow {
             for (SearchGridCotMessage message : messages.values()) {
                 if (!matchesOperation(message.getOperationId()))
                     continue;
-                if (!teamId.equals(message.getTeamId()) || isExpired(message))
+                if (!isTeamOrOperationWide(message, teamId)
+                        || isExpired(message))
                     continue;
                 if (identity != null && identity.getUid().equals(
                         message.getSenderUid()))
@@ -112,7 +113,8 @@ public class SearchGridCotWorkflow {
                     : dittoSyncManager.getSearchGridMessages()) {
                 if (!matchesOperation(message.getOperationId()))
                     continue;
-                if (!teamId.equals(message.getTeamId()) || isExpired(message))
+                if (!isTeamOrOperationWide(message, teamId)
+                        || isExpired(message))
                     continue;
                 if (identity != null && identity.getUid().equals(
                         message.getSenderUid()))
@@ -245,6 +247,12 @@ public class SearchGridCotWorkflow {
     private boolean matchesOperation(String messageOperationId) {
         return operationId.length() > 0
                 && operationId.equals(safe(messageOperationId));
+    }
+
+    private boolean isTeamOrOperationWide(SearchGridCotMessage message,
+            String teamId) {
+        String messageTeamId = safe(message.getTeamId());
+        return messageTeamId.length() == 0 || messageTeamId.equals(teamId);
     }
 
     private String safe(String value) {

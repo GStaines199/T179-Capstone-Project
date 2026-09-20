@@ -18,8 +18,7 @@ public class SearchTrackOverlay {
     private final MapView mapView;
     private MapGroup trackGroup;
     private boolean visible = true;
-
-    public SearchTrackOverlay(MapView mapView) {
+    private String lastRenderKey = "";public SearchTrackOverlay(MapView mapView) {
         this.mapView = mapView;
     }
 
@@ -29,6 +28,7 @@ public class SearchTrackOverlay {
         if (!visible) {
             trackGroup.clearItems();
             trackGroup.setVisible(false);
+            lastRenderKey = "";
         } else {
             trackGroup.setVisible(true);
         }
@@ -39,9 +39,18 @@ public class SearchTrackOverlay {
             return;
 
         ensureTrackGroup();
-        trackGroup.clearItems();
-        if (points == null || points.size() < 2)
+        if (points == null || points.size() < 2) {
+            if (lastRenderKey.length() > 0) {
+                trackGroup.clearItems();
+                lastRenderKey = "";
+            }
             return;
+        }
+        String renderKey = buildRenderKey(points);
+        if (renderKey.equals(lastRenderKey))
+            return;
+        trackGroup.clearItems();
+        lastRenderKey = renderKey;
 
         GeoPoint[] trackPoints = new GeoPoint[points.size()];
         for (int i = 0; i < points.size(); i++) {
@@ -60,6 +69,18 @@ public class SearchTrackOverlay {
         trackGroup.addItem(track);
     }
 
+    private String buildRenderKey(List<double[]> points) {
+        if (points == null || points.isEmpty())
+            return "";
+        double[] first = points.get(0);
+        double[] last = points.get(points.size() - 1);
+        return points.size() + "|" + rounded(first[0]) + "," + rounded(first[1])
+                + "|" + rounded(last[0]) + "," + rounded(last[1]);
+    }
+
+    private long rounded(double value) {
+        return Math.round(value * 1000000.0);
+    }
     private void ensureTrackGroup() {
         if (trackGroup != null)
             return;
@@ -79,3 +100,5 @@ public class SearchTrackOverlay {
         item.setMetaString("sartak.kind", "track-log");
     }
 }
+
+

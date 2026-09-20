@@ -25,8 +25,7 @@ public class SearchLineOverlay {
     private final MapView mapView;
     private MapGroup lineGroup;
     private boolean visible = true;
-
-    public SearchLineOverlay(MapView mapView) {
+    private String lastRenderKey = "";public SearchLineOverlay(MapView mapView) {
         this.mapView = mapView;
     }
 
@@ -36,6 +35,7 @@ public class SearchLineOverlay {
         if (!visible) {
             lineGroup.clearItems();
             lineGroup.setVisible(false);
+            lastRenderKey = "";
         } else {
             lineGroup.setVisible(true);
         }
@@ -45,11 +45,21 @@ public class SearchLineOverlay {
         if (!visible)
             return;
         ensureLineGroup();
-        lineGroup.clearItems();
         if (manager.getState() == SearchLineState.NOT_STARTED
                 || manager.getLineStart() == null
-                || manager.getLineEnd() == null)
+                || manager.getLineEnd() == null) {
+            if (lastRenderKey.length() > 0) {
+                lineGroup.clearItems();
+                lastRenderKey = "";
+            }
             return;
+        }
+
+        String renderKey = buildRenderKey(manager);
+        if (renderKey.equals(lastRenderKey))
+            return;
+        lineGroup.clearItems();
+        lastRenderKey = renderKey;
 
         int lineColor = manager.getColorOption().getArgb();
         DrawingShape line = createLine("SARtak Search Line",
@@ -66,6 +76,36 @@ public class SearchLineOverlay {
         renderSlowDownMarkers(manager.getMemberStatuses());
     }
 
+    private String buildRenderKey(SearchLineManager manager) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(manager.getState().name()).append('|')
+                .append(manager.getColorOption().name()).append('|')
+                .append(pointKey(manager.getLineStart())).append('|')
+                .append(pointKey(manager.getLineEnd())).append('|')
+                .append(pointKey(manager.getDirectionStart())).append('|')
+                .append(pointKey(manager.getDirectionEnd())).append('|');
+        for (SearchLineMemberStatus status : manager.getMemberStatuses()) {
+            SearchTeamMember member = status.getMember();
+            builder.append(member.getUniqueId()).append('@')
+                    .append(pointKey(status.getReturnMark())).append('@')
+                    .append(Math.round(status.getDistanceFromLineMeters()))
+                    .append('@')
+                    .append(member.hasLiveAtakContact()).append('@')
+                    .append(member.getConnectionStatus().name()).append('@')
+                    .append(Math.round(member.getLatitude() * 1000000.0))
+                    .append(',')
+                    .append(Math.round(member.getLongitude() * 1000000.0))
+                    .append(';');
+        }
+        return builder.toString();
+    }
+
+    private String pointKey(GeoPoint point) {
+        if (point == null)
+            return "";
+        return Math.round(point.getLatitude() * 1000000.0) + ","
+                + Math.round(point.getLongitude() * 1000000.0);
+    }
     private void renderDirectionIndicator(SearchLineManager manager) {
         GeoPoint start = manager.getDirectionStart();
         GeoPoint end = manager.getDirectionEnd();
@@ -202,3 +242,5 @@ public class SearchLineOverlay {
                 + UUID.randomUUID();
     }
 }
+
+

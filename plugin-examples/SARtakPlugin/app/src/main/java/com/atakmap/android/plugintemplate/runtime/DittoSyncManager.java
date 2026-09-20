@@ -13,6 +13,7 @@ import com.ditto.kotlin.Ditto;
 import com.ditto.kotlin.DittoStoreObserver;
 import com.ditto.kotlin.DittoSyncSubscription;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -53,6 +54,10 @@ public class DittoSyncManager {
             "sartak_search_lines";
     private static final String SEARCH_LINE_QUERY = "SELECT * FROM "
             + SEARCH_LINE_COLLECTION;
+    private static final String ROUTE_PLAN_COLLECTION =
+            "sartak_route_plans";
+    private static final String ROUTE_PLAN_QUERY = "SELECT * FROM "
+            + ROUTE_PLAN_COLLECTION;
     private static final String SHARED_MARKER_COLLECTION =
             "sartak_shared_markers";
     private static final String SHARED_MARKER_QUERY = "SELECT * FROM "
@@ -82,6 +87,9 @@ public class DittoSyncManager {
     private final Map<String, SearchLineCotMessage> searchLines =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SearchLineCotMessage>());
+    private final Map<String, SearchRoutePlan> routePlans =
+            Collections.synchronizedMap(new LinkedHashMap<String,
+                    SearchRoutePlan>());
     private final Map<String, SharedMapMarkerMessage> sharedMapMarkers =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SharedMapMarkerMessage>());
@@ -101,6 +109,7 @@ public class DittoSyncManager {
     private DittoSyncSubscription teamMembershipSubscription;
     private DittoSyncSubscription gridStatusSubscription;
     private DittoSyncSubscription searchLineSubscription;
+    private DittoSyncSubscription routePlanSubscription;
     private DittoSyncSubscription sharedMarkerSubscription;
     private DittoSyncSubscription alertSubscription;
     private DittoSyncSubscription areaAssignmentSubscription;
@@ -110,6 +119,7 @@ public class DittoSyncManager {
     private DittoStoreObserver teamMembershipObserver;
     private DittoStoreObserver gridStatusObserver;
     private DittoStoreObserver searchLineObserver;
+    private DittoStoreObserver routePlanObserver;
     private DittoStoreObserver sharedMarkerObserver;
     private DittoStoreObserver alertObserver;
     private DittoStoreObserver areaAssignmentObserver;
@@ -211,6 +221,16 @@ public class DittoSyncManager {
                             updateSearchLines(jsonDocuments);
                         }
                     });
+            routePlanSubscription = DittoSdkBridge.registerSubscription(ditto,
+                    ROUTE_PLAN_QUERY);
+            routePlanObserver = DittoSdkBridge.registerJsonObserver(ditto,
+                    ROUTE_PLAN_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateRoutePlans(jsonDocuments);
+                        }
+                    });
             sharedMarkerSubscription = DittoSdkBridge.registerSubscription(
                     ditto, SHARED_MARKER_QUERY);
             sharedMarkerObserver = DittoSdkBridge.registerJsonObserver(ditto,
@@ -282,6 +302,7 @@ public class DittoSyncManager {
         DittoSdkBridge.closeObserver(teamMembershipObserver);
         DittoSdkBridge.closeObserver(gridStatusObserver);
         DittoSdkBridge.closeObserver(searchLineObserver);
+        DittoSdkBridge.closeObserver(routePlanObserver);
         DittoSdkBridge.closeObserver(sharedMarkerObserver);
         DittoSdkBridge.closeObserver(alertObserver);
         DittoSdkBridge.closeObserver(areaAssignmentObserver);
@@ -291,6 +312,7 @@ public class DittoSyncManager {
         DittoSdkBridge.closeSubscription(teamMembershipSubscription);
         DittoSdkBridge.closeSubscription(gridStatusSubscription);
         DittoSdkBridge.closeSubscription(searchLineSubscription);
+        DittoSdkBridge.closeSubscription(routePlanSubscription);
         DittoSdkBridge.closeSubscription(sharedMarkerSubscription);
         DittoSdkBridge.closeSubscription(alertSubscription);
         DittoSdkBridge.closeSubscription(areaAssignmentSubscription);
@@ -308,6 +330,8 @@ public class DittoSyncManager {
         gridStatusSubscription = null;
         searchLineObserver = null;
         searchLineSubscription = null;
+        routePlanObserver = null;
+        routePlanSubscription = null;
         sharedMarkerObserver = null;
         sharedMarkerSubscription = null;
         alertObserver = null;
@@ -394,6 +418,19 @@ public class DittoSyncManager {
     public List<SearchLineCotMessage> getSearchLineMessages() {
         synchronized (searchLines) {
             return new ArrayList<>(searchLines.values());
+        }
+    }
+
+    public List<SearchRoutePlan> getRoutePlans() {
+        synchronized (routePlans) {
+            return new ArrayList<>(routePlans.values());
+        }
+    }
+
+    public SearchRoutePlan getRoutePlan(String teamId) {
+        synchronized (routePlans) {
+            return routePlans.get(SearchRoutePlan.routePlanId(
+                    getOperationId(), teamId));
         }
     }
 
@@ -584,6 +621,36 @@ public class DittoSyncManager {
         }
     }
 
+    public void publishSearchRoutePlan(SearchRoutePlan routePlan) {
+        if (!started || ditto == null || routePlan == null)
+            return;
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", safe(routePlan.getPlanId()));
+        document.put("planId", safe(routePlan.getPlanId()));
+        document.put("operationId", getOperationId());
+        document.put("teamId", safe(routePlan.getTeamId()));
+        document.put("teamName", safe(routePlan.getTeamName()));
+        document.put("teamColorName", safe(routePlan.getTeamColorName()));
+        document.put("teamColorArgb", routePlan.getTeamColorArgb());
+        document.put("createdByUid", safe(routePlan.getCreatedByUid()));
+        document.put("createdByCallsign", safe(routePlan
+                .getCreatedByCallsign()));
+        document.put("updatedAt", routePlan.getUpdatedAt());
+        JSONArray cells = new JSONArray();
+        for (String cellId : routePlan.getCellIds())
+            cells.put(cellId);
+        document.put("cellIds", cells);
+
+        try {
+            insertDocument(ROUTE_PLAN_COLLECTION, "routePlan", document);
+            updateReadyStatus();
+        } catch (Throwable throwable) {
+            status = "Ditto: route publish failed - "
+                    + describeFailure(throwable);
+            Log.w(TAG, "Ditto route plan publish failed", throwable);
+        }
+    }
+
     public void publishAreaAssignment(SearchAreaAssignment assignment) {
         if (!started || ditto == null || assignment == null
                 || assignment.getArea() == null)
@@ -643,6 +710,9 @@ public class DittoSyncManager {
         }
         synchronized (searchLines) {
             searchLines.clear();
+        }
+        synchronized (routePlans) {
+            routePlans.clear();
         }
         synchronized (areaAssignments) {
             areaAssignments.clear();
@@ -817,7 +887,8 @@ public class DittoSyncManager {
                 + " team events, " + getTeamMemberships().size()
                 + " memberships, " + getSearchGridMessages().size()
                 + " grid states, " + getSearchLineMessages().size()
-                + " search lines, " + getAreaAssignments().size()
+                + " search lines, " + getRoutePlans().size()
+                + " route plans, " + getAreaAssignments().size()
                 + " area assignments, " + getAlertMessages().size()
                 + " alerts";
     }
@@ -1140,6 +1211,38 @@ public class DittoSyncManager {
         }
         for (SearchLineCotMessage message : next.values()) {
             if (!message.getSenderUid().equals(selfUid)) {
+                lastReceiveTime = System.currentTimeMillis();
+                break;
+            }
+        }
+    }
+
+    private void updateRoutePlans(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        LinkedHashMap<String, SearchRoutePlan> next = new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                if (!isCurrentOperation(json))
+                    continue;
+                SearchRoutePlan plan = SearchRoutePlan.fromJson(json);
+                if (plan.getPlanId().length() == 0
+                        || plan.getTeamId().length() == 0)
+                    continue;
+                next.put(plan.getPlanId(), plan);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto route plan document",
+                        exception);
+            }
+        }
+        synchronized (routePlans) {
+            routePlans.clear();
+            routePlans.putAll(next);
+        }
+        for (SearchRoutePlan plan : next.values()) {
+            if (!plan.getCreatedByUid().equals(selfUid)) {
                 lastReceiveTime = System.currentTimeMillis();
                 break;
             }

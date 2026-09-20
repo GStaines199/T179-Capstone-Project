@@ -84,6 +84,13 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button planSearchAreaButton;
     private final Button clearPlannedAreaButton;
     private final Button assignSearchAreaButton;
+    private final Button addRouteCellButton;
+    private final Button routeSelectionModeButton;
+    private final Button toggleAssignmentOverlayButton;
+    private final Button gridColourButton;
+    private final Button generateRouteButton;
+    private final Button toggleRouteButton;
+    private final Button clearRouteButton;
     private final Button markerModeMeButton;
     private final Button markerModeTeamButton;
     private final Button markerModeLeadersButton;
@@ -123,6 +130,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final View otherTeamsSection;
     private final View teamRosterSection;
     private final View gridStatusControls;
+    private final View routePlanControls;
     private final View searchLineControls;
     private final View teamMarkerVisibilitySection;
     private final TextView currentCellValue;
@@ -140,6 +148,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView homeGpsValue;
     private final TextView plannedAreaValue;
     private final TextView gridProgressValue;
+    private final TextView routePlanValue;
     private final TextView nextCellValue;
     private final TextView teamSizeValue;
     private final TextView teamNameValue;
@@ -209,6 +218,20 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 R.id.clear_planned_area_button);
         assignSearchAreaButton = templateView.findViewById(
                 R.id.assign_search_area_button);
+        addRouteCellButton = templateView.findViewById(
+                R.id.add_route_cell_button);
+        routeSelectionModeButton = templateView.findViewById(
+                R.id.route_selection_mode_button);
+        toggleAssignmentOverlayButton = templateView.findViewById(
+                R.id.toggle_assignment_overlay_button);
+        gridColourButton = templateView.findViewById(
+                R.id.grid_colour_button);
+        generateRouteButton = templateView.findViewById(
+                R.id.generate_route_button);
+        toggleRouteButton = templateView.findViewById(
+                R.id.toggle_route_button);
+        clearRouteButton = templateView.findViewById(
+                R.id.clear_route_button);
         markerModeMeButton = templateView
                 .findViewById(R.id.marker_mode_me_button);
         markerModeTeamButton = templateView
@@ -274,6 +297,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         otherTeamsSection = templateView.findViewById(R.id.other_teams_section);
         teamRosterSection = templateView.findViewById(R.id.team_roster_section);
         gridStatusControls = templateView.findViewById(R.id.grid_status_controls);
+        routePlanControls = templateView.findViewById(R.id.route_plan_controls);
         searchLineControls = templateView.findViewById(R.id.search_line_controls);
         teamMarkerVisibilitySection = templateView
                 .findViewById(R.id.team_marker_visibility_section);
@@ -299,6 +323,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeGpsValue = templateView.findViewById(R.id.home_gps_value);
         plannedAreaValue = templateView.findViewById(R.id.planned_area_value);
         gridProgressValue = templateView.findViewById(R.id.grid_progress_value);
+        routePlanValue = templateView.findViewById(R.id.route_plan_value);
         nextCellValue = templateView.findViewById(R.id.next_cell_value);
         teamSizeValue = templateView.findViewById(R.id.team_size_value);
         teamNameValue = templateView.findViewById(R.id.team_name_value);
@@ -346,6 +371,13 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         planSearchAreaButton.setOnClickListener(this);
         clearPlannedAreaButton.setOnClickListener(this);
         assignSearchAreaButton.setOnClickListener(this);
+        addRouteCellButton.setOnClickListener(this);
+        routeSelectionModeButton.setOnClickListener(this);
+        toggleAssignmentOverlayButton.setOnClickListener(this);
+        gridColourButton.setOnClickListener(this);
+        generateRouteButton.setOnClickListener(this);
+        toggleRouteButton.setOnClickListener(this);
+        clearRouteButton.setOnClickListener(this);
         startSearchLineButton.setOnClickListener(this);
         pauseSearchLineButton.setOnClickListener(this);
         searchLineColourButton.setOnClickListener(this);
@@ -422,6 +454,44 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     "Planned search area cleared", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.assign_search_area_button) {
             showAssignSearchAreaDialog();
+        } else if (id == R.id.add_route_cell_button) {
+            boolean added = mapController.addSelectedCellToRoute();
+            Toast.makeText(getMapView().getContext(),
+                    added ? "Selected/current cell added to route"
+                            : "Select a cell and create a team first",
+                    Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.route_selection_mode_button) {
+            boolean enabled = mapController.toggleRouteSelectionMode();
+            Toast.makeText(getMapView().getContext(),
+                    enabled ? "Tap visible grid cells to build the team route"
+                            : "Route cell selection disabled",
+                    Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.toggle_assignment_overlay_button) {
+            boolean visible = mapController.toggleAssignmentOverlay();
+            Toast.makeText(getMapView().getContext(),
+                    visible ? "Team assignment overlay shown"
+                            : "Team assignment overlay hidden",
+                    Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.grid_colour_button) {
+            String label = mapController.cycleGridColor();
+            Toast.makeText(getMapView().getContext(),
+                    "Grid colour: " + label, Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.generate_route_button) {
+            boolean generated = mapController
+                    .generateSerpentineRouteFromPlannedArea();
+            Toast.makeText(getMapView().getContext(),
+                    generated ? "Serpentine route generated"
+                            : "Plan a search area and create a team first",
+                    Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.toggle_route_button) {
+            boolean visible = mapController.toggleRouteOverlay();
+            Toast.makeText(getMapView().getContext(),
+                    visible ? "Route guide shown" : "Route guide hidden",
+                    Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.clear_route_button) {
+            mapController.clearRoutePlan();
+            Toast.makeText(getMapView().getContext(),
+                    "Route cleared", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.start_search_line_button) {
             if (mapController.isSearchLineStarted()) {
                 mapController.endSearchLine();
@@ -582,6 +652,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         plannedAreaValue.setText(mapController.getPlannedSearchAreaSummary()
                 + "\n\n" + mapController.getSearchAreaAssignmentSummary());
         nextCellValue.setText(mapController.getNextCellDisplaySummary());
+        routePlanValue.setText(mapController.getRoutePlanSummary());
         assignmentValue.setText(assignmentSummary);
         homeAssignmentValue.setText(assignmentSummary);
         homeSearchLineValue.setText(searchLineSummary);
@@ -650,18 +721,34 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                         ? View.VISIBLE : View.GONE);
         boolean hasSelectedCell = !"No cell selected".equals(mapController
                 .getSelectedCellId());
-        gridStatusControls.setVisibility(leaderView && teamCreated
-                && hasSelectedCell ? View.VISIBLE : View.GONE);
+        gridStatusControls.setVisibility(((leaderView && teamCreated)
+                || hqView) && hasSelectedCell ? View.VISIBLE : View.GONE);
         planSearchAreaButton.setVisibility(canManageSearchArea
                 ? View.VISIBLE : View.GONE);
         clearPlannedAreaButton.setVisibility(canManageSearchArea
                 ? View.VISIBLE : View.GONE);
         assignSearchAreaButton.setVisibility(hqView
                 ? View.VISIBLE : View.GONE);
+        routePlanControls.setVisibility(leaderView && teamCreated
+                ? View.VISIBLE : View.GONE);
         planSearchAreaButton.setEnabled(hasOperation && !archivedOperation);
         clearPlannedAreaButton.setEnabled(hasOperation
                 && !archivedOperation);
         assignSearchAreaButton.setEnabled(hasOperation && !archivedOperation);
+        boolean canManageRoute = mapController.canManageRoutePlan();
+        addRouteCellButton.setEnabled(canManageRoute);
+        routeSelectionModeButton.setEnabled(canManageRoute);
+        routeSelectionModeButton.setText(mapController.isRouteSelectionMode()
+                ? "Stop Selecting Cells" : "Select Route Cells");
+        toggleAssignmentOverlayButton.setText(mapController
+                .isAssignmentOverlayVisible()
+                        ? "Hide Team Areas" : "Show Team Areas");
+        gridColourButton.setText("Grid Colour: "
+                + mapController.getGridColorLabel());
+        generateRouteButton.setEnabled(canManageRoute);
+        clearRouteButton.setEnabled(canManageRoute);
+        toggleRouteButton.setText(mapController.isRouteOverlayVisible()
+                ? "Hide Route" : "Show Route");
         setInputTextIfIdle(teamNameInput, mapController.getTeamName());
         setInputTextIfIdle(teamIdInput, mapController.getTeamId());
         teamMarkerVisibilityValue.setText("Showing: "
@@ -672,14 +759,15 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             hqOperationSummaryValue.setText(mapController
                     .getOperationDashboardSummary() + "\n\n"
                     + mapController.getSearchAreaAssignmentSummary());
-        renderHqOperationCards();
-        if (currentTab == TAB_TEAM || currentTab == TAB_HOME) {
+        if (currentTab == TAB_TEAM && hqView)
+            renderHqOperationCards();
+        if (currentTab == TAB_TEAM) {
             renderTeamMemberCards();
             renderInvitesAndRequests();
         }
-        if (currentTab == TAB_DEVICES || currentTab == TAB_HOME)
+        if (currentTab == TAB_DEVICES)
             renderDeviceCards();
-        if (currentTab == TAB_ALERTS || currentTab == TAB_HOME)
+        if (currentTab == TAB_ALERTS)
             renderAlertCards();
         updateAlertButtons(teamCreated);
         teamAlertsValue.setText(alertSummary);
@@ -694,7 +782,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         trackDetailsValue.setText(mapController.getTrackDetailsSummary());
         pollTeamCotMessages();
         pollGridProgressPrompt();
-        if (currentTab == TAB_GRID || currentTab == TAB_HOME)
+        if (currentTab == TAB_GRID)
             renderGridReviewCards();
         updateSwitch(trackRecordSwitch, mapController.isTrackRecording());
         updateSwitch(trackVisibilitySwitch, mapController.isTrackVisible());
@@ -2723,6 +2811,20 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
         completeParams.setMargins(dp(6), 0, 0, 0);
         row.addView(completeButton, completeParams);
+
+        Button clearButton = new Button(pluginContext);
+        clearButton.setText("Clear");
+        clearButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                mapController.clearGridCellStatus(cell.getId());
+                refreshGridUi();
+            }
+        });
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        clearParams.setMargins(dp(6), 0, 0, 0);
+        row.addView(clearButton, clearParams);
         card.addView(row);
         return card;
     }
@@ -2849,3 +2951,5 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
 }
+
+

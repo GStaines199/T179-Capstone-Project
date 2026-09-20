@@ -53,6 +53,12 @@ public class SearchGridManager {
                 utm.getEasting(), utm.getNorthing(), stateStore));
     }
 
+    public SearchGridCell cellAt(GeoPoint point) {
+        if (point == null)
+            return null;
+        return converter.cellForPoint(point, stateStore);
+    }
+
     SearchGridCell selectCell(SearchGridCell cell) {
         if (cell == null)
             return selectedCell;
@@ -292,6 +298,78 @@ public class SearchGridManager {
     public List<SearchGridCell> getPlannedAreaCells() {
         return hasPlannedArea() ? cellsForPlannedArea(null, MAX_RENDER_CELLS)
                 : new ArrayList<SearchGridCell>();
+    }
+
+    public List<SearchGridCell> getSerpentineRouteCells() {
+        List<SearchGridCell> cells = new ArrayList<>();
+        if (!hasPlannedArea())
+            return cells;
+        boolean northbound = true;
+        for (double x = plannedWest; x < plannedEast; x +=
+                GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
+            List<SearchGridCell> column = new ArrayList<>();
+            for (double y = plannedSouth; y < plannedNorth; y +=
+                    GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
+                SearchGridCell cell = createPlannedCell(x, y);
+                if (cell != null && isInsidePlannedArea(cell))
+                    column.add(cell);
+            }
+            if (northbound) {
+                cells.addAll(column);
+            } else {
+                for (int i = column.size() - 1; i >= 0; i--)
+                    cells.add(column.get(i));
+            }
+            northbound = !northbound;
+            if (cells.size() >= MAX_RENDER_CELLS)
+                break;
+        }
+        return cells;
+    }
+
+    public List<SearchGridCell> cellsForIds(List<String> cellIds) {
+        List<SearchGridCell> cells = new ArrayList<>();
+        if (cellIds == null)
+            return cells;
+        for (String cellId : cellIds) {
+            SearchGridCell cell = knownOrParsedCell(cellId);
+            if (cell != null)
+                cells.add(cell);
+        }
+        return cells;
+    }
+
+    public List<SearchGridCell> cellsBetween(SearchGridCell anchor,
+            SearchGridCell end, int maxCells) {
+        List<SearchGridCell> cells = new ArrayList<>();
+        if (anchor == null || end == null || maxCells <= 0)
+            return cells;
+        if (!anchor.getZoneDescriptor().equals(end.getZoneDescriptor()))
+            return cells;
+        double cellSize = GridCoordinateConverter.BASE_CELL_SIZE_METERS;
+        int xStep = end.getWest() >= anchor.getWest() ? 1 : -1;
+        int yStep = end.getSouth() >= anchor.getSouth() ? 1 : -1;
+        int columns = Math.abs((int) Math.round((end.getWest()
+                - anchor.getWest()) / cellSize)) + 1;
+        int rows = Math.abs((int) Math.round((end.getSouth()
+                - anchor.getSouth()) / cellSize)) + 1;
+        for (int column = 0; column < columns; column++) {
+            double west = anchor.getWest() + column * xStep * cellSize;
+            boolean reverseColumn = column % 2 == 1;
+            for (int row = 0; row < rows; row++) {
+                int rowOffset = reverseColumn ? rows - 1 - row : row;
+                double south = anchor.getSouth() + rowOffset * yStep
+                        * cellSize;
+                SearchGridCell cell = createCellForZone(anchor
+                        .getZoneDescriptor(), west, south);
+                if (cell == null || !isInsidePlannedArea(cell))
+                    continue;
+                cells.add(cell);
+                if (cells.size() >= maxCells)
+                    return cells;
+            }
+        }
+        return cells;
     }
 
     public List<SearchGridCell> getReviewCells() {
@@ -563,6 +641,11 @@ public class SearchGridManager {
     }
 
     private SearchGridCell createPlannedCell(double west, double south) {
+        return createCellForZone(plannedZone, west, south);
+    }
+
+    private SearchGridCell createCellForZone(String zone, double west,
+            double south) {
         double aggregateWest = floorToGrid(west,
                 GridCoordinateConverter.AGGREGATE_GRID_SIZE_METERS);
         double aggregateSouth = floorToGrid(south,
@@ -571,8 +654,8 @@ public class SearchGridManager {
                 / GridCoordinateConverter.BASE_CELL_SIZE_METERS);
         int row = (int) Math.floor((south - aggregateSouth)
                 / GridCoordinateConverter.BASE_CELL_SIZE_METERS);
-        return converter.createCell(converter.aggregateId(plannedZone,
-                aggregateWest, aggregateSouth), plannedZone, west, south, row,
+        return converter.createCell(converter.aggregateId(zone,
+                aggregateWest, aggregateSouth), zone, west, south, row,
                 column, stateStore);
     }
 
@@ -611,3 +694,4 @@ public class SearchGridManager {
         return Math.ceil(value / gridSize) * gridSize;
     }
 }
+

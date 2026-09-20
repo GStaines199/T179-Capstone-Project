@@ -626,6 +626,107 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:text="Route plan" />
+
+                <TextView
+                    android:id="@+id/route_plan_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="No route planned" />
+
+                <LinearLayout
+                    android:id="@+id/route_plan_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:orientation="vertical">
+
+                    <Button
+                        android:id="@+id/route_selection_mode_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Select Route Cells" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/toggle_assignment_overlay_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Hide Team Areas" />
+
+                        <Button
+                            android:id="@+id/grid_colour_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:layout_weight="1"
+                            android:text="Grid Colour: Cyan" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/add_route_cell_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Add Cell" />
+
+                        <Button
+                            android:id="@+id/generate_route_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:layout_weight="1"
+                            android:text="Auto Route" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/toggle_route_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Hide Route" />
+
+                        <Button
+                            android:id="@+id/clear_route_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:layout_weight="1"
+                            android:text="Clear Route" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    style="@style/SARtakLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
                     android:text="@string/search_line_heading" />
 
                 <TextView
@@ -1333,3 +1434,4 @@
 
     </LinearLayout>
 </ScrollView>
+

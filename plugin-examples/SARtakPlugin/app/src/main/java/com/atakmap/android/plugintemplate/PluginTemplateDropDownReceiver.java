@@ -11,8 +11,12 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.text.Editable;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -36,6 +40,7 @@ import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
+import com.atakmap.android.plugintemplate.runtime.AlertVibrationPolicy;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
 import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
 import com.atakmap.android.plugintemplate.runtime.DittoCredentialProfile;
@@ -1377,8 +1382,39 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
         for (SearchAlertMessage alert : mapController
                 .getUnacknowledgedAlertsForMe()) {
-            if (handledAlertMessages.add(alert.getAlertId()))
+            if (handledAlertMessages.add(alert.getAlertId())) {
+                vibrateForAlert(alert);
                 showTeamAlertDialog(alert);
+            }
+        }
+    }
+
+    private void vibrateForAlert(SearchAlertMessage alert) {
+        long[] pattern = AlertVibrationPolicy.patternFor(
+                alert.getAlertType());
+        if (pattern.length == 0)
+            return;
+        try {
+            Context context = getMapView().getContext();
+            Vibrator vibrator;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                VibratorManager manager = (VibratorManager) context
+                        .getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                vibrator = manager == null ? null
+                        : manager.getDefaultVibrator();
+            } else {
+                vibrator = (Vibrator) context.getSystemService(
+                        Context.VIBRATOR_SERVICE);
+            }
+            if (vibrator == null || !vibrator.hasVibrator())
+                return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+            else
+                vibrator.vibrate(pattern, -1);
+        } catch (Exception ignored) {
+            // Vibration is best-effort feedback; never let it block alert
+            // delivery.
         }
     }
 

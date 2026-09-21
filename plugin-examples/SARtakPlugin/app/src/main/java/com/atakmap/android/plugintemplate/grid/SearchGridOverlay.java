@@ -9,7 +9,6 @@ import com.atakmap.android.maps.MapView;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import java.util.List;
-import java.util.UUID;
 
 public class SearchGridOverlay {
 
@@ -21,6 +20,8 @@ public class SearchGridOverlay {
     private final SearchPartyAssignmentManager assignmentManager;
     private MapGroup overlayGroup;
     private boolean visible;
+    private boolean showLabels;
+    private String lastRenderKey = "";
 
     public SearchGridOverlay(MapView mapView, GridCoordinateConverter converter,
             SearchPartyAssignmentManager assignmentManager) {
@@ -35,6 +36,7 @@ public class SearchGridOverlay {
         if (!visible) {
             overlayGroup.clearItems();
             overlayGroup.setVisible(false);
+            lastRenderKey = "";
         } else {
             overlayGroup.setVisible(true);
         }
@@ -44,18 +46,39 @@ public class SearchGridOverlay {
         return visible;
     }
 
+    public boolean toggleLabels() {
+        showLabels = !showLabels;
+        lastRenderKey = "";
+        return showLabels;
+    }
+
+    public boolean isShowingLabels() {
+        return showLabels;
+    }
+
     public void render(SearchGridManager gridManager) {
         if (!visible)
             return;
 
         ensureOverlayGroup();
-        overlayGroup.clearItems();
         List<SearchGridCell> cells = gridManager.getSelectedAggregateCells();
-        if (cells.isEmpty())
+        if (cells.isEmpty()) {
+            if (lastRenderKey.length() > 0) {
+                overlayGroup.clearItems();
+                lastRenderKey = "";
+            }
             return;
+        }
 
         SearchGridCell selectedCell = gridManager.getSelectedCell();
         boolean show100mReference = shouldRender100mReference();
+        String renderKey = buildRenderKey(cells, selectedCell,
+                show100mReference);
+        if (renderKey.equals(lastRenderKey))
+            return;
+
+        overlayGroup.clearItems();
+        lastRenderKey = renderKey;
         if (show100mReference) {
             renderReferenceGridLines(cells);
             renderDetailedCells(cells, selectedCell);
@@ -64,6 +87,22 @@ public class SearchGridOverlay {
         } else {
             renderAggregate(cells, gridManager.getAggregateStatus(cells));
         }
+    }
+
+    private String buildRenderKey(List<SearchGridCell> cells,
+            SearchGridCell selectedCell, boolean show100mReference) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(show100mReference ? "detail" : "aggregate")
+                .append("|labels=").append(showLabels)
+                .append("|lanes=").append(assignmentManager
+                        .getLaneMemberCount())
+                .append("|selected=")
+                .append(selectedCell == null ? "" : selectedCell.getId());
+        for (SearchGridCell cell : cells) {
+            builder.append("|").append(cell.getId()).append(":")
+                    .append(cell.getStatus().name());
+        }
+        return builder.toString();
     }
 
     private void renderDetailedCells(List<SearchGridCell> cells,
@@ -232,16 +271,21 @@ public class SearchGridOverlay {
     }
 
     private void configureMapItem(MapItem item) {
+        item.setClickable(false);
         item.setMetaBoolean("archive", false);
         item.setMetaBoolean("editable", false);
         item.setMetaBoolean("movable", false);
         item.setMetaBoolean("removable", true);
         item.setMetaString("entry", "sartak");
-        item.setMetaString("callsign", item.getTitle());
+        item.setMetaBoolean("labels_on", showLabels);
+        item.setMetaBoolean("label_on", showLabels);
+        item.setMetaBoolean("showLabel", showLabels);
+        item.setMetaString("callsign", showLabels ? item.getTitle() : "");
+        if (!showLabels)
+            item.setTitle("");
     }
 
     private String uid(String title) {
-        return "sartak-grid-" + title.toLowerCase().replace(' ', '-') + "-"
-                + UUID.randomUUID();
+        return "sartak-grid-" + title.toLowerCase().replace(' ', '-');
     }
 }

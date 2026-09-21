@@ -1,6 +1,8 @@
 # Gradle / Android build files
 .gradle/
 **/.gradle/
+.takdev/
+**/.takdev/
 build/
 **/build/
 
@@ -20,6 +22,7 @@ local.properties
 output.json
 
 # Signing / credentials
+android_keystore
 *.jks
 *.keystore
 *.p12

@@ -9,8 +9,6 @@ import com.atakmap.comms.CommsMapComponent;
 import com.atakmap.comms.CotServiceRemote;
 import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
-import com.atakmap.coremap.cot.event.CotPoint;
-import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.util.ArrayList;
@@ -36,6 +34,8 @@ public class SearchGridCotWorkflow {
                     receiveCotEvent(event);
                 }
             };
+    private DittoSyncManager dittoSyncManager;
+    private String operationId = "";
 
     public SearchGridCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -52,19 +52,39 @@ public class SearchGridCotWorkflow {
         }
     }
 
+    public void setDittoSyncManager(DittoSyncManager dittoSyncManager) {
+        this.dittoSyncManager = dittoSyncManager;
+    }
+
+    public void setOperationId(String operationId) {
+        this.operationId = safe(operationId);
+    }
+
+    public void clearLocalMessages() {
+        synchronized (messages) {
+            messages.clear();
+        }
+    }
+
     public void publishStatus(String teamId, String cellId,
             SearchGridStatus status) {
         if (teamId == null || teamId.length() == 0 || cellId == null
                 || cellId.length() == 0 || status == null)
             return;
+        if (operationId.length() == 0)
+            return;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        if (identity == null || !identity.isResolved())
+            return;
         long created = System.currentTimeMillis();
         SearchGridCotMessage message = new SearchGridCotMessage(
                 "sartak-grid-" + teamId + "-" + cellId + "-"
                         + identity.getUid() + "-" + created,
                 teamId, identity.getUid(), identity.getCallsign(), cellId,
-                status, created);
+                status, created, operationId);
         messages.put(message.getUid(), message);
+        if (dittoSyncManager != null)
+            dittoSyncManager.publishSearchGridStatus(message);
         CotEvent event = createCotEvent(message);
         if (event != null)
             CotMapComponent.getExternalDispatcher().dispatchToBroadcast(event);
@@ -77,7 +97,51 @@ public class SearchGridCotWorkflow {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         synchronized (messages) {
             for (SearchGridCotMessage message : messages.values()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
                 if (!teamId.equals(message.getTeamId()) || isExpired(message))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                result.add(message);
+            }
+        }
+        if (dittoSyncManager != null) {
+            for (SearchGridCotMessage message
+                    : dittoSyncManager.getSearchGridMessages()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
+                if (!teamId.equals(message.getTeamId()) || isExpired(message))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                result.add(message);
+            }
+        }
+        return result;
+    }
+
+    public List<SearchGridCotMessage> consumeMessagesForOperation() {
+        List<SearchGridCotMessage> result = new ArrayList<>();
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        synchronized (messages) {
+            for (SearchGridCotMessage message : messages.values()) {
+                if (!matchesOperation(message.getOperationId())
+                        || isExpired(message))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                result.add(message);
+            }
+        }
+        if (dittoSyncManager != null) {
+            for (SearchGridCotMessage message
+                    : dittoSyncManager.getSearchGridMessages()) {
+                if (!matchesOperation(message.getOperationId())
+                        || isExpired(message))
                     continue;
                 if (identity != null && identity.getUid().equals(
                         message.getSenderUid()))
@@ -104,7 +168,8 @@ public class SearchGridCotWorkflow {
         event.setStart(now);
         event.setStale(now.addMinutes(5));
         event.setHow(CotEvent.HOW_MACHINE_GENERATED);
-        event.setPoint(new CotPoint(getPublishPoint()));
+        event.setPoint(CotPublishPoint.forSnapshot(
+                AtakLocationStatus.from(mapView)));
         event.setDetail(root);
         return event;
     }
@@ -120,6 +185,7 @@ public class SearchGridCotWorkflow {
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("messageUid", message.getUid());
         attributes.put("action", SearchGridCotMessage.ACTION_GRID_STATUS);
+        attributes.put("operationId", message.getOperationId());
         attributes.put("teamId", message.getTeamId());
         attributes.put("senderUid", message.getSenderUid());
         attributes.put("senderCallsign", message.getSenderCallsign());
@@ -151,6 +217,8 @@ public class SearchGridCotWorkflow {
         SearchGridCotMessage message = fromCotEvent(event);
         if (message == null || isExpired(message))
             return false;
+        if (!matchesOperation(message.getOperationId()))
+            return false;
         messages.put(message.getUid(), message);
         return true;
     }
@@ -162,9 +230,9 @@ public class SearchGridCotWorkflow {
         if (detail == null)
             return null;
         Map<String, String> attributes = new LinkedHashMap<>();
-        for (String key : new String[] { "messageUid", "action", "teamId",
-                "senderUid", "senderCallsign", "cellId", "status",
-                "created" }) {
+        for (String key : new String[] { "messageUid", "action",
+                "operationId", "teamId", "senderUid", "senderCallsign",
+                "cellId", "status", "created" }) {
             String value = detail.getAttribute(key);
             if (value != null)
                 attributes.put(key, value);
@@ -190,21 +258,13 @@ public class SearchGridCotWorkflow {
                 value(attributes, "teamId"), value(attributes, "senderUid"),
                 value(attributes, "senderCallsign"),
                 value(attributes, "cellId"),
-                statusValue(value(attributes, "status")), created);
+                statusValue(value(attributes, "status")), created,
+                value(attributes, "operationId"));
     }
 
     private boolean isExpired(SearchGridCotMessage message) {
         return System.currentTimeMillis() - message.getCreated()
                 > GRID_MESSAGE_MAX_AGE_MS;
-    }
-
-    private GeoPoint getPublishPoint() {
-        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
-        if (snapshot.isAvailable())
-            return snapshot.getPoint();
-        return mapView.getSelfMarker() != null
-                ? mapView.getSelfMarker().getPoint()
-                : new GeoPoint(0.0, 0.0);
     }
 
     static SearchGridStatus statusValue(String value) {
@@ -218,6 +278,15 @@ public class SearchGridCotWorkflow {
     static String value(Map<String, String> attributes, String key) {
         String value = attributes.get(key);
         return value == null ? "" : value;
+    }
+
+    private boolean matchesOperation(String messageOperationId) {
+        return operationId.length() > 0
+                && operationId.equals(safe(messageOperationId));
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.trim();
     }
 
     static long longValue(Map<String, String> attributes, String key,

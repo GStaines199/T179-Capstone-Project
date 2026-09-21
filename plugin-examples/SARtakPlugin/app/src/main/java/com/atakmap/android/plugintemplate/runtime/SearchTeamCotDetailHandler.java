@@ -17,6 +17,7 @@ public class SearchTeamCotDetailHandler implements MarkerDetailHandler {
         CotDetail sartak = new CotDetail(DETAIL_NAME);
         copy(marker, sartak, "messageUid");
         copy(marker, sartak, "action");
+        copy(marker, sartak, "operationId");
         copy(marker, sartak, "teamId");
         copy(marker, sartak, "teamName");
         copy(marker, sartak, "leaderUid");
@@ -39,6 +40,7 @@ public class SearchTeamCotDetailHandler implements MarkerDetailHandler {
             CotDetail detail) {
         restore(marker, detail, "messageUid");
         restore(marker, detail, "action");
+        restore(marker, detail, "operationId");
         restore(marker, detail, "teamId");
         restore(marker, detail, "teamName");
         restore(marker, detail, "leaderUid");

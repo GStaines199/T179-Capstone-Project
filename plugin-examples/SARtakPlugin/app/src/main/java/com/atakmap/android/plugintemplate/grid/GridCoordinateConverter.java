@@ -21,12 +21,21 @@ public class GridCoordinateConverter {
     public SearchGridCell cellForPoint(GeoPoint point,
             SearchGridStateStore stateStore) {
         UTMPoint utm = UTMPoint.fromGeoPoint(point);
-        String zone = utm.getZoneDescriptor();
-        double cellWest = floorToGrid(utm.getEasting(), BASE_CELL_SIZE_METERS);
-        double cellSouth = floorToGrid(utm.getNorthing(), BASE_CELL_SIZE_METERS);
-        double aggregateWest = floorToGrid(utm.getEasting(),
-                AGGREGATE_GRID_SIZE_METERS);
-        double aggregateSouth = floorToGrid(utm.getNorthing(),
+        return cellForUtmPoint(utm.getZoneDescriptor(), utm.getEasting(),
+                utm.getNorthing(), stateStore);
+    }
+
+    /**
+     * Same as {@link #cellForPoint(GeoPoint, SearchGridStateStore)} but takes
+     * pre-converted UTM coordinates. Kept free of ATAK types so it can be unit
+     * tested on a plain JVM.
+     */
+    public SearchGridCell cellForUtmPoint(String zone, double easting,
+            double northing, SearchGridStateStore stateStore) {
+        double cellWest = floorToGrid(easting, BASE_CELL_SIZE_METERS);
+        double cellSouth = floorToGrid(northing, BASE_CELL_SIZE_METERS);
+        double aggregateWest = floorToGrid(easting, AGGREGATE_GRID_SIZE_METERS);
+        double aggregateSouth = floorToGrid(northing,
                 AGGREGATE_GRID_SIZE_METERS);
 
         int column = clamp((int) Math.floor((cellWest - aggregateWest)
@@ -68,10 +77,20 @@ public class GridCoordinateConverter {
 
     public String cellIdForPoint(GeoPoint point) {
         UTMPoint utm = UTMPoint.fromGeoPoint(point);
-        double cellWest = floorToGrid(utm.getEasting(), BASE_CELL_SIZE_METERS);
-        double cellSouth = floorToGrid(utm.getNorthing(),
-                BASE_CELL_SIZE_METERS);
-        return cellId(utm.getZoneDescriptor(), cellWest, cellSouth);
+        return cellIdForUtmPoint(utm.getZoneDescriptor(), utm.getEasting(),
+                utm.getNorthing());
+    }
+
+    /**
+     * Same as {@link #cellIdForPoint(GeoPoint)} but takes pre-converted UTM
+     * coordinates. Kept free of ATAK types so it can be unit tested on a plain
+     * JVM.
+     */
+    public String cellIdForUtmPoint(String zone, double easting,
+            double northing) {
+        double cellWest = floorToGrid(easting, BASE_CELL_SIZE_METERS);
+        double cellSouth = floorToGrid(northing, BASE_CELL_SIZE_METERS);
+        return cellId(zone, cellWest, cellSouth);
     }
 
     public String aggregateId(String zone, double west, double south) {

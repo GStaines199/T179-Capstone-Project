@@ -46,6 +46,19 @@ public class TrackSessionRepository {
         return sessionId;
     }
 
+    public String getActiveSessionId(String uid, String sessionPrefix) {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor cursor = db.query("track_sessions",
+                new String[]{"session_id"},
+                "uid = ? AND is_active = 1 AND session_id LIKE ?",
+                new String[]{uid, sessionPrefix + "%"},
+                null, null, "start_timestamp DESC", "1");
+        String sessionId = null;
+        if (cursor.moveToFirst()) sessionId = cursor.getString(0);
+        cursor.close();
+        return sessionId;
+    }
+
     public long getSessionStartTimestamp(String sessionId) {
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor cursor = db.query("track_sessions",

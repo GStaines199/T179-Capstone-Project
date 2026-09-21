@@ -25,6 +25,7 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
 
     private DatabaseHelper database;
     private SearchTeamCotDetailHandler teamCotDetailHandler;
+    private DocumentedIntentFilter qrScanSystemFilter;
 
     public void onCreate(final Context context, Intent intent,
                          final MapView view) {
@@ -45,11 +46,26 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
         Log.d(TAG, "registering the plugin filter");
         DocumentedIntentFilter ddFilter = new DocumentedIntentFilter();
         ddFilter.addAction(PluginTemplateDropDownReceiver.SHOW_PLUGIN);
+        ddFilter.addAction(OperationQrScanActivity.ACTION_SCAN_RESULT);
         registerDropDownReceiver(ddr, ddFilter);
+
+        qrScanSystemFilter = new DocumentedIntentFilter();
+        qrScanSystemFilter.addAction(OperationQrScanActivity.ACTION_SCAN_RESULT);
+        qrScanSystemFilter.addAction(PluginTemplateDropDownReceiver.SHOW_PLUGIN);
+        com.atakmap.android.ipc.AtakBroadcast.getInstance()
+                .registerSystemReceiver(ddr, qrScanSystemFilter);
     }
 
     @Override
     protected void onDestroyImpl(Context context, MapView view) {
+        if (ddr != null && qrScanSystemFilter != null) {
+            try {
+                com.atakmap.android.ipc.AtakBroadcast.getInstance()
+                        .unregisterSystemReceiver(ddr);
+            } catch (Exception exception) {
+                Log.w(TAG, "Failed to unregister QR scan receiver", exception);
+            }
+        }
         super.onDestroyImpl(context, view);
     }
 

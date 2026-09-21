@@ -6,7 +6,7 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 
 import com.atakmap.android.cot.CotMapComponent;
-import com.atakmap.android.maps.MapData;
+import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
@@ -16,8 +16,6 @@ import com.atakmap.comms.CommsMapComponent;
 import com.atakmap.comms.CotServiceRemote;
 import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
-import com.atakmap.coremap.cot.event.CotPoint;
-import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.util.Collections;
@@ -44,6 +42,8 @@ public class SearchLineCotWorkflow {
                 }
             };
     private long lastUpdatePublishTime;
+    private DittoSyncManager dittoSyncManager;
+    private String operationId = "";
 
     public SearchLineCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -57,6 +57,20 @@ public class SearchLineCotWorkflow {
             CommsMapComponent.getInstance()
                     .removeOnCotEventListener(cotEventListener);
         } catch (Exception ignored) {
+        }
+    }
+
+    public void setDittoSyncManager(DittoSyncManager dittoSyncManager) {
+        this.dittoSyncManager = dittoSyncManager;
+    }
+
+    public void setOperationId(String operationId) {
+        this.operationId = safe(operationId);
+    }
+
+    public void clearLocalMessages() {
+        synchronized (messages) {
+            messages.clear();
         }
     }
 
@@ -84,6 +98,25 @@ public class SearchLineCotWorkflow {
         SearchLineCotMessage latest = null;
         synchronized (messages) {
             for (SearchLineCotMessage message : messages.values()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
+                if (!teamId.equals(message.getTeamId()))
+                    continue;
+                if (identity != null && identity.getUid().equals(
+                        message.getSenderUid()))
+                    continue;
+                if (isExpired(message))
+                    continue;
+                if (latest == null || message.getCreated()
+                        > latest.getCreated())
+                    latest = message;
+            }
+        }
+        if (dittoSyncManager != null) {
+            for (SearchLineCotMessage message
+                    : dittoSyncManager.getSearchLineMessages()) {
+                if (!matchesOperation(message.getOperationId()))
+                    continue;
                 if (!teamId.equals(message.getTeamId()))
                     continue;
                 if (identity != null && identity.getUid().equals(
@@ -102,6 +135,10 @@ public class SearchLineCotWorkflow {
     private void publish(String action, String teamId,
             SearchLineManager manager) {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        if (identity == null || !identity.isResolved())
+            return;
+        if (operationId.length() == 0)
+            return;
         long created = System.currentTimeMillis();
         SearchGridCell cell = manager.getActiveCell();
         SearchLineCotMessage message = new SearchLineCotMessage(
@@ -118,8 +155,10 @@ public class SearchLineCotWorkflow {
                 cell == null ? 0.0 : cell.getEast(),
                 cell == null ? 0.0 : cell.getNorth(),
                 manager.getLineNorthing(), manager.getColorOption(),
-                manager.getReturnMarkToleranceMeters(), created);
+                manager.getReturnMarkToleranceMeters(), created, operationId);
         messages.put(message.getUid(), message);
+        if (dittoSyncManager != null)
+            dittoSyncManager.publishSearchLine(message);
         CotEvent event = createCotEvent(message);
         if (event != null)
             CotMapComponent.getExternalDispatcher().dispatchToBroadcast(event);
@@ -142,7 +181,8 @@ public class SearchLineCotWorkflow {
         event.setStart(now);
         event.setStale(now.addMinutes(1));
         event.setHow(CotEvent.HOW_MACHINE_GENERATED);
-        event.setPoint(new CotPoint(getPublishPoint()));
+        event.setPoint(CotPublishPoint.forSnapshot(
+                AtakLocationStatus.from(mapView)));
         event.setDetail(root);
         return event;
     }
@@ -160,6 +200,7 @@ public class SearchLineCotWorkflow {
         Map<String, String> attributes = new LinkedHashMap<>();
         attributes.put("messageUid", message.getUid());
         attributes.put("action", message.getAction());
+        attributes.put("operationId", message.getOperationId());
         attributes.put("teamId", message.getTeamId());
         attributes.put("senderUid", message.getSenderUid());
         attributes.put("senderCallsign", message.getSenderCallsign());
@@ -206,6 +247,8 @@ public class SearchLineCotWorkflow {
         SearchLineCotMessage message = fromCotEvent(event);
         if (message == null || isExpired(message))
             return false;
+        if (!matchesOperation(message.getOperationId()))
+            return false;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (identity == null || !identity.getUid().equals(
                 message.getSenderUid()))
@@ -220,10 +263,11 @@ public class SearchLineCotWorkflow {
         if (detail == null)
             return null;
         Map<String, String> attributes = new LinkedHashMap<>();
-        for (String key : new String[] { "messageUid", "action", "teamId",
-                "senderUid", "senderCallsign", "zone", "aggregateId",
-                "cellId", "row", "column", "west", "south", "east", "north",
-                "lineNorthing", "color", "tolerance", "created" }) {
+        for (String key : new String[] { "messageUid", "action",
+                "operationId", "teamId", "senderUid", "senderCallsign",
+                "zone", "aggregateId", "cellId", "row", "column", "west",
+                "south", "east", "north", "lineNorthing", "color",
+                "tolerance", "created" }) {
             String value = detail.getAttribute(key);
             if (value != null)
                 attributes.put(key, value);
@@ -258,7 +302,8 @@ public class SearchLineCotWorkflow {
                 doubleValue(attributes, "north"),
                 doubleValue(attributes, "lineNorthing"),
                 colorValue(value(attributes, "color")),
-                doubleValue(attributes, "tolerance"), created);
+                doubleValue(attributes, "tolerance"), created,
+                value(attributes, "operationId"));
     }
 
     private void addStandardContactDetails(CotDetail root, String callsign) {
@@ -285,15 +330,6 @@ public class SearchLineCotWorkflow {
     private boolean isExpired(SearchLineCotMessage message) {
         long age = System.currentTimeMillis() - message.getCreated();
         return age > LINE_MESSAGE_MAX_AGE_MS;
-    }
-
-    private GeoPoint getPublishPoint() {
-        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
-        if (snapshot.isAvailable())
-            return snapshot.getPoint();
-        return mapView.getSelfMarker() != null
-                ? mapView.getSelfMarker().getPoint()
-                : new GeoPoint(0.0, 0.0);
     }
 
     private String getSelfCotType() {
@@ -324,15 +360,15 @@ public class SearchLineCotWorkflow {
         if (fromSelf.length() > 0)
             return fromSelf;
 
-        MapData data = mapView == null ? null : mapView.getMapData();
+        MetaDataHolder2 data = mapView == null ? null : mapView.getMapData();
         if (data != null) {
             String fromMapData = firstNonEmpty(
-                    data.getString("__groupName", ""),
-                    data.getString("team", ""),
-                    data.getString("atakTeam", ""),
-                    data.getString("teamColor", ""),
-                    data.getString("groupName", ""),
-                    data.getString("locationTeam", ""));
+                    data.getMetaString("__groupName", ""),
+                    data.getMetaString("team", ""),
+                    data.getMetaString("atakTeam", ""),
+                    data.getMetaString("teamColor", ""),
+                    data.getMetaString("groupName", ""),
+                    data.getMetaString("locationTeam", ""));
             if (fromMapData.length() > 0)
                 return fromMapData;
         }
@@ -439,4 +475,11 @@ public class SearchLineCotWorkflow {
     private String safe(String value) {
         return value == null ? "" : value.trim();
     }
+
+    private boolean matchesOperation(String messageOperationId) {
+        return operationId.length() > 0
+                && operationId.equals(safe(messageOperationId));
+    }
 }
+
+

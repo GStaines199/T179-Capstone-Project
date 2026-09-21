@@ -8,7 +8,7 @@ import android.preference.PreferenceManager;
 import com.atakmap.android.contact.Contact;
 import com.atakmap.android.contact.Contacts;
 import com.atakmap.android.cot.CotMapComponent;
-import com.atakmap.android.maps.MapData;
+import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
@@ -17,8 +17,6 @@ import com.atakmap.comms.CommsMapComponent;
 import com.atakmap.comms.CotServiceRemote;
 import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
-import com.atakmap.coremap.cot.event.CotPoint;
-import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.lang.reflect.Method;
@@ -33,11 +31,12 @@ public class SearchTeamCotWorkflow {
 
     private static final String ATAK_CIV_PACKAGE = "com.atakmap.app.civ";
     private static final String GROUP_NAME = "SARtak Team CoT";
-    private static final long ADVERTISE_INTERVAL_MS = 10000L;
-    private static final long PRESENCE_INTERVAL_MS = 10000L;
-    private static final long STYLE_INTERVAL_MS = 45000L;
-    private static final long PENDING_REPUBLISH_INTERVAL_MS = 5000L;
-    private static final long ADVERTISEMENT_MAX_AGE_MS = 30000L;
+    private static final long ADVERTISE_INTERVAL_MS = 5000L;
+    private static final long PRESENCE_INTERVAL_MS = 5000L;
+    private static final long STYLE_INTERVAL_MS = 30000L;
+    private static final long PENDING_REPUBLISH_INTERVAL_MS = 2000L;
+    private static final long MAP_MESSAGE_SCAN_INTERVAL_MS = 15000L;
+    private static final long ADVERTISEMENT_MAX_AGE_MS = 60000L;
     private static final long PRESENCE_MAX_AGE_MS = 45000L;
     private static final long PENDING_MESSAGE_MAX_AGE_MS = 60000L;
     private static final long TEAM_REMOVED_MAX_AGE_MS = 10 * 60 * 1000L;
@@ -55,10 +54,15 @@ public class SearchTeamCotWorkflow {
                 }
             };
     private MapGroup messageGroup;
+    private DittoSyncManager dittoSyncManager;
     private long lastAdvertiseTime;
     private long lastPresenceTime;
     private long lastStyleTime;
     private long lastPendingRepublishTime;
+    private long lastMapMessageScanTime;
+    private List<SearchTeamCotMessage> cachedMapMessages =
+            new ArrayList<>();
+    private String operationId = "";
 
     public SearchTeamCotWorkflow(MapView mapView,
             IdentityManager identityManager) {
@@ -74,6 +78,26 @@ public class SearchTeamCotWorkflow {
                     .removeOnCotEventListener(cotEventListener);
         } catch (Exception ignored) {
         }
+    }
+
+    public void setDittoSyncManager(DittoSyncManager dittoSyncManager) {
+        this.dittoSyncManager = dittoSyncManager;
+    }
+
+    public void setOperationId(String operationId) {
+        this.operationId = safe(operationId);
+    }
+
+    public void clearLocalState() {
+        synchronized (directMessages) {
+            directMessages.clear();
+        }
+        lastAdvertiseTime = 0L;
+        lastPresenceTime = 0L;
+        lastStyleTime = 0L;
+        lastPendingRepublishTime = 0L;
+        lastMapMessageScanTime = 0L;
+        cachedMapMessages = new ArrayList<>();
     }
 
     public void advertiseTeam(String teamId, String teamName) {
@@ -95,6 +119,20 @@ public class SearchTeamCotWorkflow {
         publish(SearchTeamCotMessage.ACTION_TEAM_REMOVED, teamId, teamName,
                 identity.getUid(), identity.getCallsign(), "", "");
         clearLocalMessagesForTeam(teamId);
+    }
+
+    public void removeMember(String teamId, String teamName, String targetUid,
+            String targetCallsign) {
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        publish(SearchTeamCotMessage.ACTION_MEMBER_REMOVED, teamId, teamName,
+                identity.getUid(), identity.getCallsign(), targetUid,
+                targetCallsign);
+    }
+
+    public void memberLeft(String teamId, String teamName, String leaderUid,
+            String leaderCallsign) {
+        publish(SearchTeamCotMessage.ACTION_MEMBER_LEFT, teamId, teamName,
+                leaderUid, leaderCallsign, leaderUid, leaderCallsign);
     }
 
     public void publishPresenceIfDue(String teamId, String teamName,
@@ -145,6 +183,20 @@ public class SearchTeamCotWorkflow {
                 if (SearchTeamCotMessage.ACTION_JOIN_REQUEST.equals(
                         message.getAction())
                         || SearchTeamCotMessage.ACTION_INVITE.equals(
+                                message.getAction())
+                        || SearchTeamCotMessage.ACTION_INVITE_ACCEPT.equals(
+                                message.getAction())
+                        || SearchTeamCotMessage.ACTION_INVITE_DECLINE.equals(
+                                message.getAction())
+                        || SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(
+                                message.getAction())
+                        || SearchTeamCotMessage.ACTION_JOIN_DECLINE.equals(
+                                message.getAction())
+                        || SearchTeamCotMessage.ACTION_TEAM_REMOVED.equals(
+                                message.getAction())
+                        || SearchTeamCotMessage.ACTION_MEMBER_REMOVED.equals(
+                                message.getAction())
+                        || SearchTeamCotMessage.ACTION_MEMBER_LEFT.equals(
                                 message.getAction())) {
                     toRepublish.add(message);
                 }
@@ -160,6 +212,7 @@ public class SearchTeamCotWorkflow {
                     && isCancelled(SearchTeamCotMessage.ACTION_INVITE_CANCEL,
                             message))
                 continue;
+            publishToDitto(message);
             dispatch(message);
         }
     }
@@ -218,6 +271,17 @@ public class SearchTeamCotWorkflow {
             if (!identity.getUid().equals(message.getLeaderUid()))
                 filtered.add(message);
         }
+        for (SearchTeamCotMessage message : getMessages(
+                SearchTeamCotMessage.ACTION_PRESENCE, "")) {
+            if (identity.getUid().equals(message.getLeaderUid()))
+                continue;
+            if (message.getTeamId().length() == 0
+                    || message.getTeamName().length() == 0)
+                continue;
+            if (sameMember(message.getSenderUid(), message.getSenderCallsign(),
+                    message.getLeaderUid(), message.getLeaderCallsign()))
+                filtered.add(message);
+        }
         List<SearchTeamCotMessage> active = new ArrayList<>();
         for (SearchTeamCotMessage message : dedupeByTeam(filtered)) {
             if (!isTeamRemoved(message))
@@ -243,7 +307,7 @@ public class SearchTeamCotWorkflow {
         List<SearchTeamCotMessage> messages = new ArrayList<>();
         messages.addAll(scanForMe(SearchTeamCotMessage.ACTION_JOIN_ACCEPT));
         messages.addAll(scanForMe(SearchTeamCotMessage.ACTION_JOIN_DECLINE));
-        return messages;
+        return dedupeByTeam(messages);
     }
 
     public List<SearchTeamCotMessage> getInvitesForMe() {
@@ -261,7 +325,15 @@ public class SearchTeamCotWorkflow {
         List<SearchTeamCotMessage> messages = new ArrayList<>();
         messages.addAll(scanForMe(SearchTeamCotMessage.ACTION_INVITE_ACCEPT));
         messages.addAll(scanForMe(SearchTeamCotMessage.ACTION_INVITE_DECLINE));
-        return messages;
+        return dedupeBySender(messages);
+    }
+
+    public List<SearchTeamCotMessage> getMemberRemovalsForMe() {
+        return scanForMe(SearchTeamCotMessage.ACTION_MEMBER_REMOVED);
+    }
+
+    public List<SearchTeamCotMessage> getMemberLeavesForMe() {
+        return scanForMe(SearchTeamCotMessage.ACTION_MEMBER_LEFT);
     }
 
     public List<SearchTeamCotMessage> getOutgoingInvites(String teamId) {
@@ -334,6 +406,8 @@ public class SearchTeamCotWorkflow {
             String targetCallsign, String teamColorName, int teamColorArgb,
             String memberColorName, int memberColorArgb, String memberRole) {
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        if (operationId.length() == 0)
+            return;
         long created = System.currentTimeMillis();
         SearchTeamCotMessage message = new SearchTeamCotMessage(
                 "sartak-team-" + action + "-" + teamId + "-"
@@ -341,9 +415,16 @@ public class SearchTeamCotWorkflow {
                 action, teamId, teamName, leaderUid, leaderCallsign,
                 identity.getUid(), identity.getCallsign(), targetUid,
                 targetCallsign, created, teamColorName, teamColorArgb,
-                memberColorName, memberColorArgb, memberRole);
+                memberColorName, memberColorArgb, memberRole, operationId);
         directMessages.put(message.getUid(), message);
+        publishToDitto(message);
         dispatch(message);
+    }
+
+    private void publishToDitto(SearchTeamCotMessage message) {
+        if (dittoSyncManager == null)
+            return;
+        dittoSyncManager.publishTeamEvent(message);
     }
 
     private void dispatch(SearchTeamCotMessage message) {
@@ -365,11 +446,20 @@ public class SearchTeamCotWorkflow {
                     messages.put(message.getUid(), message);
             }
         }
+        if (dittoSyncManager != null) {
+            for (SearchTeamCotMessage message
+                    : dittoSyncManager.getTeamEvents()) {
+                if (action.equals(message.getAction()))
+                    messages.put(message.getUid(), message);
+            }
+        }
         for (SearchTeamCotMessage message : scanMapMessages(action, targetUid))
             messages.put(message.getUid(), message);
 
         List<SearchTeamCotMessage> filtered = new ArrayList<>();
         for (SearchTeamCotMessage message : messages.values()) {
+            if (!matchesOperation(message.getOperationId()))
+                continue;
             if (targetUid != null && targetUid.length() > 0
                     && !targetUid.equals(message.getTargetUid()))
                 continue;
@@ -383,19 +473,35 @@ public class SearchTeamCotWorkflow {
     private List<SearchTeamCotMessage> scanMapMessages(String action,
             String targetUid) {
         List<SearchTeamCotMessage> messages = new ArrayList<>();
+        for (SearchTeamCotMessage message : getCachedMapMessages()) {
+            if (!action.equals(message.getAction()))
+                continue;
+            if (targetUid != null && targetUid.length() > 0
+                    && !targetUid.equals(message.getTargetUid()))
+                continue;
+            if (!isExpired(message))
+                messages.add(message);
+        }
+        return messages;
+    }
+
+    private List<SearchTeamCotMessage> getCachedMapMessages() {
+        long now = System.currentTimeMillis();
+        if (now - lastMapMessageScanTime < MAP_MESSAGE_SCAN_INTERVAL_MS)
+            return cachedMapMessages;
+        lastMapMessageScanTime = now;
+
+        List<SearchTeamCotMessage> messages = new ArrayList<>();
         Collection<MapItem> items = mapView.getRootGroup().getItemsRecursive();
-        if (items == null)
+        if (items == null) {
+            cachedMapMessages = messages;
             return messages;
+        }
         for (MapItem item : items) {
             if (!(item instanceof Marker))
                 continue;
             String itemAction = item.getMetaString(meta("action"), "");
-            if (!action.equals(itemAction))
-                continue;
             String itemTarget = item.getMetaString(meta("targetUid"), "");
-            if (targetUid != null && targetUid.length() > 0
-                    && !targetUid.equals(itemTarget))
-                continue;
             String created = item.getMetaString(meta("created"), "");
             if (isExpired(itemAction, created, item.getUID()))
                 continue;
@@ -413,8 +519,10 @@ public class SearchTeamCotWorkflow {
                     parseColor(item.getMetaString(meta("teamColorArgb"), "")),
                     item.getMetaString(meta("memberColorName"), ""),
                     parseColor(item.getMetaString(meta("memberColorArgb"), "")),
-                    item.getMetaString(meta("memberRole"), "")));
+                    item.getMetaString(meta("memberRole"), ""),
+                    item.getMetaString(meta("operationId"), "")));
         }
+        cachedMapMessages = messages;
         return messages;
     }
 
@@ -461,6 +569,7 @@ public class SearchTeamCotWorkflow {
                             request.getSenderCallsign(),
                             response.getTargetUid(),
                             response.getTargetCallsign())
+                    && response.getCreated() >= request.getCreated()
                     && sameMember(request.getLeaderUid(),
                             request.getLeaderCallsign(),
                             response.getSenderUid(),
@@ -485,6 +594,7 @@ public class SearchTeamCotWorkflow {
                             invite.getTargetCallsign(),
                             response.getSenderUid(),
                             response.getSenderCallsign())
+                    && response.getCreated() >= invite.getCreated()
                     && sameMember(invite.getSenderUid(),
                             invite.getSenderCallsign(),
                             response.getTargetUid(),
@@ -498,6 +608,7 @@ public class SearchTeamCotWorkflow {
         for (SearchTeamCotMessage removed : getMessages(
                 SearchTeamCotMessage.ACTION_TEAM_REMOVED, "")) {
             if (team.getTeamId().equals(removed.getTeamId())
+                    && removed.getCreated() >= team.getCreated()
                     && sameMember(team.getLeaderUid(),
                             team.getLeaderCallsign(),
                             removed.getLeaderUid(),
@@ -536,12 +647,18 @@ public class SearchTeamCotWorkflow {
                 && firstCallsign.equalsIgnoreCase(secondCallsign));
     }
 
+    private boolean matchesOperation(String messageOperationId) {
+        return operationId.length() > 0
+                && operationId.equals(safe(messageOperationId));
+    }
+
     private CotEvent createCotEvent(SearchTeamCotMessage message) {
         CoordinatedTime now = new CoordinatedTime();
         CotDetail root = new CotDetail();
         CotDetail detail = new CotDetail(SearchTeamCotDetailHandler.DETAIL_NAME);
         detail.setAttribute("messageUid", message.getUid());
         detail.setAttribute("action", message.getAction());
+        detail.setAttribute("operationId", message.getOperationId());
         detail.setAttribute("teamId", message.getTeamId());
         detail.setAttribute("teamName", message.getTeamName());
         detail.setAttribute("leaderUid", message.getLeaderUid());
@@ -573,7 +690,8 @@ public class SearchTeamCotWorkflow {
         event.setStart(now);
         event.setStale(now.addMinutes(5));
         event.setHow(CotEvent.HOW_MACHINE_GENERATED);
-        event.setPoint(new CotPoint(getPublishPoint()));
+        event.setPoint(CotPublishPoint.forSnapshot(
+                AtakLocationStatus.from(mapView)));
         event.setDetail(root);
         return event;
     }
@@ -631,6 +749,8 @@ public class SearchTeamCotWorkflow {
             return false;
         if (isExpired(message))
             return false;
+        if (!matchesOperation(message.getOperationId()))
+            return false;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (!identity.getUid().equals(message.getSenderUid()))
             directMessages.put(message.getUid(), message);
@@ -686,7 +806,7 @@ public class SearchTeamCotWorkflow {
                 parseColor(value(detail, "teamColorArgb")),
                 value(detail, "memberColorName"),
                 parseColor(value(detail, "memberColorArgb")),
-                value(detail, "memberRole"));
+                value(detail, "memberRole"), value(detail, "operationId"));
     }
 
     private String value(CotDetail detail, String key) {
@@ -712,6 +832,13 @@ public class SearchTeamCotWorkflow {
             return age > PRESENCE_MAX_AGE_MS;
         if (SearchTeamCotMessage.ACTION_JOIN_REQUEST.equals(action)
                 || SearchTeamCotMessage.ACTION_INVITE.equals(action))
+            return age > PENDING_MESSAGE_MAX_AGE_MS;
+        if (SearchTeamCotMessage.ACTION_INVITE_ACCEPT.equals(action)
+                || SearchTeamCotMessage.ACTION_INVITE_DECLINE.equals(action)
+                || SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(action)
+                || SearchTeamCotMessage.ACTION_JOIN_DECLINE.equals(action)
+                || SearchTeamCotMessage.ACTION_MEMBER_REMOVED.equals(action)
+                || SearchTeamCotMessage.ACTION_MEMBER_LEFT.equals(action))
             return age > PENDING_MESSAGE_MAX_AGE_MS;
         if (SearchTeamCotMessage.ACTION_TEAM_REMOVED.equals(action))
             return age > TEAM_REMOVED_MAX_AGE_MS;
@@ -745,15 +872,6 @@ public class SearchTeamCotWorkflow {
         return parseTimestamp(uid.substring(index + 1));
     }
 
-    private GeoPoint getPublishPoint() {
-        AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
-        if (snapshot.isAvailable())
-            return snapshot.getPoint();
-        return mapView.getSelfMarker() != null
-                ? mapView.getSelfMarker().getPoint()
-                : new GeoPoint(0.0, 0.0);
-    }
-
     private String getSelfCotType() {
         Marker self = mapView == null ? null : mapView.getSelfMarker();
         String type = self == null ? "" : self.getType();
@@ -782,15 +900,15 @@ public class SearchTeamCotWorkflow {
         if (fromSelf.length() > 0)
             return fromSelf;
 
-        MapData data = mapView == null ? null : mapView.getMapData();
+        MetaDataHolder2 data = mapView == null ? null : mapView.getMapData();
         if (data != null) {
             String fromMapData = firstNonEmpty(
-                    data.getString("__groupName", ""),
-                    data.getString("team", ""),
-                    data.getString("atakTeam", ""),
-                    data.getString("teamColor", ""),
-                    data.getString("groupName", ""),
-                    data.getString("locationTeam", ""));
+                    data.getMetaString("__groupName", ""),
+                    data.getMetaString("team", ""),
+                    data.getMetaString("atakTeam", ""),
+                    data.getMetaString("teamColor", ""),
+                    data.getMetaString("groupName", ""),
+                    data.getMetaString("locationTeam", ""));
             if (fromMapData.length() > 0)
                 return fromMapData;
         }
@@ -814,14 +932,14 @@ public class SearchTeamCotWorkflow {
         if (fromSelf.length() > 0)
             return fromSelf;
 
-        MapData data = mapView == null ? null : mapView.getMapData();
+        MetaDataHolder2 data = mapView == null ? null : mapView.getMapData();
         if (data != null) {
             String fromMapData = firstNonEmpty(
-                    data.getString("__groupRole", ""),
-                    data.getString("atakRoleType", ""),
-                    data.getString("atakRole", ""),
-                    data.getString("teamRole", ""),
-                    data.getString("role", ""));
+                    data.getMetaString("__groupRole", ""),
+                    data.getMetaString("atakRoleType", ""),
+                    data.getMetaString("atakRole", ""),
+                    data.getMetaString("teamRole", ""),
+                    data.getMetaString("role", ""));
             if (fromMapData.length() > 0)
                 return fromMapData;
         }
@@ -905,7 +1023,9 @@ public class SearchTeamCotWorkflow {
             return;
         List<MapItem> toRemove = new ArrayList<>();
         for (MapItem item : items) {
-            if (teamId.equals(item.getMetaString(meta("teamId"), "")))
+            if (teamId.equals(item.getMetaString(meta("teamId"), ""))
+                    && !SearchTeamCotMessage.ACTION_TEAM_REMOVED.equals(
+                            item.getMetaString(meta("action"), "")))
                 toRemove.add(item);
         }
         for (MapItem item : toRemove)
@@ -984,3 +1104,5 @@ public class SearchTeamCotWorkflow {
         return new ArrayList<>(byTeam.values());
     }
 }
+
+

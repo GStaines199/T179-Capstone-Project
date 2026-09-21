@@ -2,20 +2,32 @@
 package com.atakmap.android.plugintemplate;
 
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextWatcher;
+import android.text.style.ForegroundColorSpan;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.Spinner;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -25,6 +37,11 @@ import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
+import com.atakmap.android.plugintemplate.runtime.DittoCredentialProfile;
+import com.atakmap.android.plugintemplate.runtime.OperationQrCodeGenerator;
+import com.atakmap.android.plugintemplate.runtime.OperationQrScanResultStore;
+import com.atakmap.android.plugintemplate.runtime.SearchAlertMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.plugin.R;
 import com.atakmap.android.dropdown.DropDown.OnStateListener;
@@ -33,6 +50,7 @@ import com.atakmap.android.dropdown.DropDownReceiver;
 import com.atakmap.coremap.log.Log;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
@@ -45,7 +63,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private static final int TAB_HOME = 0;
     private static final int TAB_GRID = 1;
     private static final int TAB_TEAM = 2;
-    private static final int TAB_TRACK = 3;
+    private static final int TAB_ALERTS = 3;
+    private static final int TAB_DEVICES = 4;
+    private static final int TAB_TRACK = 5;
 
     private final View templateView;
     private final Context pluginContext;
@@ -53,22 +73,34 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button homeTabButton;
     private final Button gridTabButton;
     private final Button teamTabButton;
+    private final Button alertsTabButton;
+    private final Button devicesTabButton;
     private final Button trackTabButton;
-    private final Button toggleSearchAreaButton;
+    private final Switch toggleSearchAreaSwitch;
+    private final Switch toggleGridLabelsSwitch;
     private final Button markerModeMeButton;
     private final Button markerModeTeamButton;
     private final Button markerModeLeadersButton;
     private final Button markerModeAllButton;
-    private final Button trackRecordButton;
-    private final Button trackVisibilityButton;
+    private final Switch trackRecordSwitch;
+    private final Switch trackVisibilitySwitch;
     private final Button trackClearButton;
     private final Button startSearchLineButton;
     private final Button pauseSearchLineButton;
-    private final Button toggleCallsignsButton;
+    private final Switch toggleCallsignsSwitch;
     private final Button searchLineColourButton;
     private final Button saveTeamSetupButton;
     private final Button removeTeamButton;
+    private final Button createOperationButton;
+    private final Button showOperationJoinCodeButton;
+    private final Button joinOperationButton;
+    private final Button leaveOperationButton;
+    private final Button manageDittoButton;
     private final Button refreshAtakContactsButton;
+    private final Button resetSyncStateButton;
+    private final Button alertHoldPositionButton;
+    private final Button alertRequestLeaderButton;
+    private final Button alertEmergencyStopButton;
     private final EditText searchLineToleranceInput;
     private final EditText teamNameInput;
     private final EditText teamIdInput;
@@ -77,6 +109,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final View homeTabContent;
     private final View gridTabContent;
     private final View teamTabContent;
+    private final View alertsTabContent;
+    private final View devicesTabContent;
     private final View trackTabContent;
     private final View leaderTeamControls;
     private final View otherTeamsSection;
@@ -91,6 +125,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView searchLineStatusValue;
     private final TextView searchLineMembersValue;
     private final TextView pluginHealthValue;
+    private final TextView operationSummaryValue;
+    private final TextView dittoCredentialValue;
+    private final TextView readinessChecklistValue;
     private final TextView identityValue;
     private final TextView homeGpsValue;
     private final TextView gridProgressValue;
@@ -98,8 +135,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView teamNameValue;
     private final LinearLayout teamMemberCardsContainer;
     private final LinearLayout invitesRequestsContainer;
+    private final LinearLayout alertsCardsContainer;
+    private final LinearLayout devicesCardsContainer;
     private final TextView teamMarkerVisibilityValue;
     private final TextView atakContactStatusValue;
+    private final TextView devicesSummaryValue;
+    private final TextView alertsSummaryValue;
     private final TextView teamAlertsValue;
     private final TextView homeAlertsValue;
     private final TextView currentRoleValue;
@@ -108,15 +149,19 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Handler uiRefreshHandler = new Handler(Looper.getMainLooper());
     private final Set<String> handledTeamMessages = new HashSet<>();
     private final Set<String> resolvedTeamMessages = new HashSet<>();
+    private final Set<String> handledAlertMessages = new HashSet<>();
     private final Runnable uiRefreshRunnable = new Runnable() {
         @Override
         public void run() {
             refreshGridUi();
-            uiRefreshHandler.postDelayed(this, 2000L);
+            uiRefreshHandler.postDelayed(this, 5000L);
         }
     };
+    private int currentTab = TAB_HOME;
     private boolean leaderView = true;
     private boolean suppressToleranceUpdate;
+    private boolean suppressSwitchUpdate;
+    private boolean consumingPendingQrScan;
 
     /**************************** CONSTRUCTOR *****************************/
 
@@ -135,9 +180,13 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeTabButton = templateView.findViewById(R.id.home_tab_button);
         gridTabButton = templateView.findViewById(R.id.grid_tab_button);
         teamTabButton = templateView.findViewById(R.id.team_tab_button);
+        alertsTabButton = templateView.findViewById(R.id.alerts_tab_button);
+        devicesTabButton = templateView.findViewById(R.id.devices_tab_button);
         trackTabButton = templateView.findViewById(R.id.track_tab_button);
-        toggleSearchAreaButton = templateView
+        toggleSearchAreaSwitch = templateView
                 .findViewById(R.id.toggle_search_area_button);
+        toggleGridLabelsSwitch = templateView
+                .findViewById(R.id.toggle_grid_labels_button);
         markerModeMeButton = templateView
                 .findViewById(R.id.marker_mode_me_button);
         markerModeTeamButton = templateView
@@ -146,16 +195,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.marker_mode_leaders_button);
         markerModeAllButton = templateView
                 .findViewById(R.id.marker_mode_all_button);
-        trackRecordButton = templateView
+        trackRecordSwitch = templateView
                 .findViewById(R.id.track_record_button);
-        trackVisibilityButton = templateView
+        trackVisibilitySwitch = templateView
                 .findViewById(R.id.track_visibility_button);
         trackClearButton = templateView.findViewById(R.id.track_clear_button);
         startSearchLineButton = templateView
                 .findViewById(R.id.start_search_line_button);
         pauseSearchLineButton = templateView
                 .findViewById(R.id.pause_search_line_button);
-        toggleCallsignsButton = templateView
+        toggleCallsignsSwitch = templateView
                 .findViewById(R.id.toggle_callsigns_button);
         searchLineColourButton = templateView
                 .findViewById(R.id.search_line_colour_button);
@@ -163,8 +212,26 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.save_team_setup_button);
         removeTeamButton = templateView
                 .findViewById(R.id.remove_team_button);
+        createOperationButton = templateView
+                .findViewById(R.id.create_operation_button);
+        showOperationJoinCodeButton = templateView
+                .findViewById(R.id.show_operation_join_code_button);
+        joinOperationButton = templateView
+                .findViewById(R.id.join_operation_button);
+        leaveOperationButton = templateView
+                .findViewById(R.id.leave_operation_button);
+        manageDittoButton = templateView.findViewById(
+                R.id.manage_ditto_button);
         refreshAtakContactsButton = templateView
                 .findViewById(R.id.refresh_atak_contacts_button);
+        resetSyncStateButton = templateView
+                .findViewById(R.id.reset_sync_state_button);
+        alertHoldPositionButton = templateView
+                .findViewById(R.id.alert_hold_position_button);
+        alertRequestLeaderButton = templateView
+                .findViewById(R.id.alert_request_leader_button);
+        alertEmergencyStopButton = templateView
+                .findViewById(R.id.alert_emergency_stop_button);
         searchLineToleranceInput = templateView
                 .findViewById(R.id.search_line_tolerance_input);
         teamNameInput = templateView.findViewById(R.id.team_name_input);
@@ -175,6 +242,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeTabContent = templateView.findViewById(R.id.home_tab_content);
         gridTabContent = templateView.findViewById(R.id.grid_tab_content);
         teamTabContent = templateView.findViewById(R.id.team_tab_content);
+        alertsTabContent = templateView.findViewById(R.id.alerts_tab_content);
+        devicesTabContent = templateView.findViewById(
+                R.id.devices_tab_content);
         trackTabContent = templateView.findViewById(R.id.track_tab_content);
         leaderTeamControls = templateView.findViewById(R.id.leader_team_controls);
         otherTeamsSection = templateView.findViewById(R.id.other_teams_section);
@@ -194,6 +264,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.search_line_members_value);
         pluginHealthValue = templateView.findViewById(
                 R.id.plugin_health_value);
+        operationSummaryValue = templateView.findViewById(
+                R.id.operation_summary_value);
+        dittoCredentialValue = templateView.findViewById(
+                R.id.ditto_credential_value);
+        readinessChecklistValue = templateView.findViewById(
+                R.id.readiness_checklist_value);
         identityValue = templateView.findViewById(R.id.identity_value);
         homeGpsValue = templateView.findViewById(R.id.home_gps_value);
         gridProgressValue = templateView.findViewById(R.id.grid_progress_value);
@@ -203,10 +279,18 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.team_member_cards_container);
         invitesRequestsContainer = templateView
                 .findViewById(R.id.invites_requests_container);
+        alertsCardsContainer = templateView
+                .findViewById(R.id.alerts_cards_container);
+        devicesCardsContainer = templateView
+                .findViewById(R.id.devices_cards_container);
         teamMarkerVisibilityValue = templateView
                 .findViewById(R.id.team_marker_visibility_value);
         atakContactStatusValue = templateView
                 .findViewById(R.id.atak_contact_status_value);
+        devicesSummaryValue = templateView
+                .findViewById(R.id.devices_summary_value);
+        alertsSummaryValue = templateView
+                .findViewById(R.id.alerts_summary_value);
         teamAlertsValue = templateView.findViewById(R.id.team_alerts_value);
         homeAlertsValue = templateView.findViewById(R.id.home_alerts_value);
         currentRoleValue = templateView.findViewById(R.id.current_role_value);
@@ -216,22 +300,30 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeTabButton.setOnClickListener(this);
         gridTabButton.setOnClickListener(this);
         teamTabButton.setOnClickListener(this);
+        alertsTabButton.setOnClickListener(this);
+        devicesTabButton.setOnClickListener(this);
         trackTabButton.setOnClickListener(this);
-        toggleSearchAreaButton.setOnClickListener(this);
         markerModeMeButton.setOnClickListener(this);
         markerModeTeamButton.setOnClickListener(this);
         markerModeLeadersButton.setOnClickListener(this);
         markerModeAllButton.setOnClickListener(this);
-        toggleCallsignsButton.setOnClickListener(this);
-        trackRecordButton.setOnClickListener(this);
-        trackVisibilityButton.setOnClickListener(this);
         trackClearButton.setOnClickListener(this);
         startSearchLineButton.setOnClickListener(this);
         pauseSearchLineButton.setOnClickListener(this);
         searchLineColourButton.setOnClickListener(this);
         saveTeamSetupButton.setOnClickListener(this);
         removeTeamButton.setOnClickListener(this);
+        createOperationButton.setOnClickListener(this);
+        showOperationJoinCodeButton.setOnClickListener(this);
+        joinOperationButton.setOnClickListener(this);
+        leaveOperationButton.setOnClickListener(this);
+        manageDittoButton.setOnClickListener(this);
         refreshAtakContactsButton.setOnClickListener(this);
+        resetSyncStateButton.setOnClickListener(this);
+        alertHoldPositionButton.setOnClickListener(this);
+        alertRequestLeaderButton.setOnClickListener(this);
+        alertEmergencyStopButton.setOnClickListener(this);
+        setupToggleSwitches();
         setupToleranceInput();
         templateView.findViewById(R.id.select_current_cell_button)
                 .setOnClickListener(this);
@@ -267,13 +359,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             showTab(TAB_GRID);
         } else if (id == R.id.team_tab_button) {
             showTab(TAB_TEAM);
+        } else if (id == R.id.alerts_tab_button) {
+            showTab(TAB_ALERTS);
+        } else if (id == R.id.devices_tab_button) {
+            showTab(TAB_DEVICES);
         } else if (id == R.id.track_tab_button) {
             showTab(TAB_TRACK);
-        } else if (id == R.id.toggle_search_area_button) {
-            boolean visible = mapController.toggleGridOverlay();
-            Toast.makeText(getMapView().getContext(), visible
-                    ? "SARtak search grid shown"
-                    : "SARtak search grid hidden", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.marker_mode_me_button) {
             setTeamMarkerMode(TeamMarkerVisibilityMode.ME_ONLY);
         } else if (id == R.id.marker_mode_team_button) {
@@ -282,21 +373,6 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             setTeamMarkerMode(TeamMarkerVisibilityMode.LEADERS);
         } else if (id == R.id.marker_mode_all_button) {
             setTeamMarkerMode(TeamMarkerVisibilityMode.ALL_VISIBLE);
-        } else if (id == R.id.toggle_callsigns_button) {
-            boolean showing = mapController.toggleTeamCallsigns();
-            Toast.makeText(getMapView().getContext(), showing
-                    ? "Callsigns shown"
-                    : "Callsigns hidden", Toast.LENGTH_SHORT).show();
-        } else if (id == R.id.track_record_button) {
-            boolean recording = mapController.toggleTrackRecording();
-            Toast.makeText(getMapView().getContext(), recording
-                    ? "Track recording resumed"
-                    : "Track recording paused", Toast.LENGTH_SHORT).show();
-        } else if (id == R.id.track_visibility_button) {
-            boolean visible = mapController.toggleTrackVisibility();
-            Toast.makeText(getMapView().getContext(), visible
-                    ? "Track shown on map"
-                    : "Track hidden from map", Toast.LENGTH_SHORT).show();
         } else if (id == R.id.track_clear_button) {
             mapController.clearTrackHistory();
             Toast.makeText(getMapView().getContext(),
@@ -329,10 +405,28 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             }
         } else if (id == R.id.remove_team_button) {
             showRemoveTeamDialog();
+        } else if (id == R.id.create_operation_button) {
+            showCreateOperationDialog();
+        } else if (id == R.id.show_operation_join_code_button) {
+            showOperationJoinCodeDialog();
+        } else if (id == R.id.join_operation_button) {
+            showJoinOperationDialog();
+        } else if (id == R.id.leave_operation_button) {
+            showLeaveOperationDialog();
+        } else if (id == R.id.manage_ditto_button) {
+            showDittoSetupDialog();
         } else if (id == R.id.refresh_atak_contacts_button) {
             Toast.makeText(getMapView().getContext(),
                     mapController.refreshAtakTeamContacts(),
                     Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.reset_sync_state_button) {
+            showResetSyncStateDialog();
+        } else if (id == R.id.alert_hold_position_button) {
+            handleAlertButton(SearchAlertMessage.TYPE_HOLD_POSITION);
+        } else if (id == R.id.alert_request_leader_button) {
+            handleAlertButton(SearchAlertMessage.TYPE_REQUEST_LEADER);
+        } else if (id == R.id.alert_emergency_stop_button) {
+            handleAlertButton(SearchAlertMessage.TYPE_EMERGENCY_STOP);
         } else if (id == R.id.select_current_cell_button) {
             mapController.selectCurrentCell();
             Toast.makeText(getMapView().getContext(),
@@ -356,14 +450,21 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
     private void showTab(int tab) {
+        currentTab = tab;
         homeTabContent.setVisibility(tab == TAB_HOME ? View.VISIBLE : View.GONE);
         gridTabContent.setVisibility(tab == TAB_GRID ? View.VISIBLE : View.GONE);
         teamTabContent.setVisibility(tab == TAB_TEAM ? View.VISIBLE : View.GONE);
+        alertsTabContent.setVisibility(tab == TAB_ALERTS
+                ? View.VISIBLE : View.GONE);
+        devicesTabContent.setVisibility(tab == TAB_DEVICES
+                ? View.VISIBLE : View.GONE);
         trackTabContent.setVisibility(tab == TAB_TRACK ? View.VISIBLE : View.GONE);
 
         homeTabButton.setEnabled(tab != TAB_HOME);
         gridTabButton.setEnabled(tab != TAB_GRID);
         teamTabButton.setEnabled(tab != TAB_TEAM);
+        alertsTabButton.setEnabled(tab != TAB_ALERTS);
+        devicesTabButton.setEnabled(tab != TAB_DEVICES);
         trackTabButton.setEnabled(tab != TAB_TRACK);
     }
 
@@ -385,8 +486,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
     private void refreshGridUi() {
+        consumePendingOperationQrScan();
         refreshRoleUi();
         boolean teamCreated = mapController.isTeamCreated();
+        boolean hasOperation = mapController.hasActiveOperation();
         if (!leaderView
                 && (mapController.getTeamMarkerVisibilityMode()
                         == TeamMarkerVisibilityMode.LEADERS
@@ -395,15 +498,14 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             mapController.setTeamMarkerVisibilityMode(
                     TeamMarkerVisibilityMode.MY_TEAM);
         }
-        toggleSearchAreaButton.setText(mapController.isGridOverlayVisible()
-                ? R.string.hide_lanes
-                : R.string.show_lanes);
-        String status = mapController.getSelectedCellStatus();
-        String cellStatus = status.length() == 0
-                ? mapController.getSelectedCellId()
-                : mapController.getSelectedCellId() + " - " + status;
+        updateSwitch(toggleSearchAreaSwitch,
+                mapController.isGridOverlayVisible());
+        updateSwitch(toggleGridLabelsSwitch,
+                mapController.isShowingGridMapLabels());
+        String cellStatus = mapController.getSelectedCellDisplaySummary();
         String assignmentSummary = mapController.getAssignmentSummary();
-        String alertSummary = mapController.getSearchLineWarningSummary();
+        String lineWarningSummary = mapController.getSearchLineWarningSummary();
+        String alertSummary = mapController.getAlertSummary();
         String searchLineSummary = mapController.getSearchLineSummary();
         String searchLineMembers = mapController.getSearchLineMemberSummary();
 
@@ -415,6 +517,25 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         searchLineStatusValue.setText(searchLineSummary);
         searchLineMembersValue.setText(searchLineMembers);
         pluginHealthValue.setText(mapController.getPluginHealthSummary());
+        operationSummaryValue.setText(mapController.getOperationSummary());
+        operationSummaryValue.setTextColor(hasOperation
+                ? Color.rgb(66, 195, 106)
+                : Color.rgb(216, 182, 76));
+        dittoCredentialValue.setText(mapController.getDittoCredentialSummary());
+        dittoCredentialValue.setTextColor(mapController
+                .canCreateOperationFromLocalDittoConfig()
+                        ? Color.rgb(66, 195, 106)
+                        : Color.rgb(216, 84, 76));
+        readinessChecklistValue.setText(colorReadinessSummary(mapController
+                .getOperationReadinessSummary()));
+        createOperationButton.setVisibility(!hasOperation && leaderView
+                ? View.VISIBLE : View.GONE);
+        joinOperationButton.setVisibility(hasOperation
+                ? View.GONE : View.VISIBLE);
+        showOperationJoinCodeButton.setVisibility(hasOperation
+                ? View.VISIBLE : View.GONE);
+        leaveOperationButton.setVisibility(hasOperation
+                ? View.VISIBLE : View.GONE);
         identityValue.setText(mapController.getIdentitySummary());
         homeGpsValue.setText(mapController.getGpsSummary());
         homeGpsValue.setTextColor(mapController.isGpsActive()
@@ -424,13 +545,19 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         teamSizeValue.setText(teamCreated
                 ? String.valueOf(mapController.getTeamSize()) : "0");
         teamNameValue.setText(teamCreated
-                ? mapController.getTeamName() + " | " + mapController
-                        .getTeamId()
+                ? mapController.getTeamName() + " | Colour: "
+                        + mapController.getTeamColorName() + " | "
+                        + mapController.getTeamId()
                 : (leaderView ? "No team created" : "Not in a team"));
+        int visibleTeamCount = mapController.getVisibleTeamAdvertisementCount();
         saveTeamSetupButton.setText(leaderView
-                ? (teamCreated ? "Edit Team Setup"
+                ? (!hasOperation ? "Select Operation First"
+                        : teamCreated ? "Edit Team Setup"
                         : "Create Team")
-                : (teamCreated ? "Leave Team" : "Join Team"));
+                : (!hasOperation ? "Select Operation First"
+                        : teamCreated ? "Leave Team" : "Join Team ("
+                        + visibleTeamCount + " visible)"));
+        saveTeamSetupButton.setEnabled(hasOperation);
         refreshAtakContactsButton.setVisibility(leaderView
                 && teamCreated ? View.VISIBLE : View.GONE);
         removeTeamButton.setVisibility(leaderView && teamCreated
@@ -448,19 +575,28 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + mapController.getTeamMarkerVisibilityLabel());
         updateMarkerVisibilityButtons();
         atakContactStatusValue.setText(mapController.getTeamSyncSummary());
-        renderTeamMemberCards();
-        renderInvitesAndRequests();
+        if (currentTab == TAB_TEAM || currentTab == TAB_HOME) {
+            renderTeamMemberCards();
+            renderInvitesAndRequests();
+        }
+        if (currentTab == TAB_DEVICES || currentTab == TAB_HOME)
+            renderDeviceCards();
+        if (currentTab == TAB_ALERTS || currentTab == TAB_HOME)
+            renderAlertCards();
+        updateAlertButtons(teamCreated);
         teamAlertsValue.setText(alertSummary);
         homeAlertsValue.setText(alertSummary);
+        alertsSummaryValue.setText(alertSummary);
+        if (!"No team connection alerts".equals(lineWarningSummary)
+                && lineWarningSummary.length() > 0) {
+            teamAlertsValue.setText(alertSummary + "\n" + lineWarningSummary);
+            homeAlertsValue.setText(alertSummary + "\n" + lineWarningSummary);
+        }
         trackStatusValue.setText(mapController.getTrackStatusSummary());
         trackDetailsValue.setText(mapController.getTrackDetailsSummary());
         pollTeamCotMessages();
-        trackRecordButton.setText(mapController.isTrackRecording()
-                ? R.string.track_pause
-                : R.string.track_resume);
-        trackVisibilityButton.setText(mapController.isTrackVisible()
-                ? R.string.track_hide
-                : R.string.track_show);
+        updateSwitch(trackRecordSwitch, mapController.isTrackRecording());
+        updateSwitch(trackVisibilitySwitch, mapController.isTrackVisible());
         trackClearButton.setVisibility(mapController.hasVisibleTrackData()
                 ? View.VISIBLE : View.GONE);
         startSearchLineButton.setText(mapController.isSearchLineStarted()
@@ -471,9 +607,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 : R.string.search_line_pause);
         pauseSearchLineButton.setVisibility(mapController.isSearchLineStarted()
                 ? View.VISIBLE : View.GONE);
-        toggleCallsignsButton.setText(mapController.isShowingTeamCallsigns()
-                ? R.string.hide_callsigns
-                : R.string.show_callsigns);
+        updateSwitch(toggleCallsignsSwitch,
+                mapController.isShowingTeamCallsigns());
         searchLineColourButton.setText("Line Colour: "
                 + mapController.getSearchLineColorLabel());
         String toleranceText = String.valueOf(Math.round(mapController
@@ -515,6 +650,102 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             labels[i] = values[i].getLabel();
         }
         return labels;
+    }
+
+    private void setupToggleSwitches() {
+        toggleSearchAreaSwitch.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView,
+                            boolean isChecked) {
+                        if (suppressSwitchUpdate)
+                            return;
+                        if (mapController.isGridOverlayVisible() != isChecked)
+                            mapController.toggleGridOverlay();
+                        Toast.makeText(getMapView().getContext(), isChecked
+                                ? "SARtak search grid shown"
+                                : "SARtak search grid hidden",
+                                Toast.LENGTH_SHORT).show();
+                        refreshGridUi();
+                    }
+                });
+
+        toggleGridLabelsSwitch.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView,
+                            boolean isChecked) {
+                        if (suppressSwitchUpdate)
+                            return;
+                        if (mapController.isShowingGridMapLabels()
+                                != isChecked)
+                            mapController.toggleGridMapLabels();
+                        Toast.makeText(getMapView().getContext(), isChecked
+                                ? "SARtak grid labels shown"
+                                : "SARtak grid labels hidden",
+                                Toast.LENGTH_SHORT).show();
+                        refreshGridUi();
+                    }
+                });
+
+        toggleCallsignsSwitch.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView,
+                            boolean isChecked) {
+                        if (suppressSwitchUpdate)
+                            return;
+                        if (mapController.isShowingTeamCallsigns()
+                                != isChecked)
+                            mapController.toggleTeamCallsigns();
+                        Toast.makeText(getMapView().getContext(), isChecked
+                                ? "Callsigns shown" : "Callsigns hidden",
+                                Toast.LENGTH_SHORT).show();
+                        refreshGridUi();
+                    }
+                });
+
+        trackRecordSwitch.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView,
+                            boolean isChecked) {
+                        if (suppressSwitchUpdate)
+                            return;
+                        if (mapController.isTrackRecording() != isChecked)
+                            mapController.toggleTrackRecording();
+                        Toast.makeText(getMapView().getContext(), isChecked
+                                ? "Track recording resumed"
+                                : "Track recording paused",
+                                Toast.LENGTH_SHORT).show();
+                        refreshGridUi();
+                    }
+                });
+
+        trackVisibilitySwitch.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(CompoundButton buttonView,
+                            boolean isChecked) {
+                        if (suppressSwitchUpdate)
+                            return;
+                        if (mapController.isTrackVisible() != isChecked)
+                            mapController.toggleTrackVisibility();
+                        Toast.makeText(getMapView().getContext(), isChecked
+                                ? "Track shown on map"
+                                : "Track hidden from map",
+                                Toast.LENGTH_SHORT).show();
+                        refreshGridUi();
+                    }
+                });
+    }
+
+    private void updateSwitch(Switch toggleSwitch, boolean checked) {
+        if (toggleSwitch == null || toggleSwitch.isChecked() == checked)
+            return;
+        suppressSwitchUpdate = true;
+        toggleSwitch.setChecked(checked);
+        suppressSwitchUpdate = false;
     }
 
     private void setupToleranceInput() {
@@ -597,6 +828,443 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .show();
     }
 
+    private void showDittoSetupDialog() {
+        DittoCredentialProfile selected = mapController
+                .getSelectedDittoCredentialProfile();
+        List<DittoCredentialProfile> profiles = mapController
+                .getDittoCredentialProfiles();
+
+        LinearLayout content = new LinearLayout(getMapView().getContext());
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(12), dp(8), dp(12), 0);
+
+        TextView summary = new TextView(getMapView().getContext());
+        summary.setText(mapController.getDittoCredentialSummary());
+        summary.setTextColor(Color.LTGRAY);
+        content.addView(summary);
+
+        Button addButton = createDialogButton("Add New Ditto Profile");
+        content.addView(addButton);
+
+        Button updateButton = createDialogButton("Update Selected Profile");
+        updateButton.setEnabled(selected != null);
+        content.addView(updateButton);
+
+        Button selectButton = createDialogButton("Select Saved Profile");
+        selectButton.setEnabled(!profiles.isEmpty());
+        content.addView(selectButton);
+
+        Button removeButton = createDialogButton("Remove Selected Profile");
+        removeButton.setEnabled(selected != null);
+        content.addView(removeButton);
+
+        final AlertDialog dialog = new AlertDialog.Builder(getMapView()
+                .getContext())
+                .setTitle("Ditto Setup")
+                .setMessage("Save Ditto credentials on this device for creating SARtak operation QR/join codes.")
+                .setView(content)
+                .setNegativeButton("Close", null)
+                .create();
+
+        addButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+                showDittoProfileEditor(null);
+            }
+        });
+        updateButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+                showDittoProfileEditor(mapController
+                        .getSelectedDittoCredentialProfile());
+            }
+        });
+        selectButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+                showSelectDittoProfileDialog();
+            }
+        });
+        removeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+                showRemoveDittoProfileDialog();
+            }
+        });
+
+        dialog.show();
+    }
+
+    private void showDittoProfileEditor(
+            final DittoCredentialProfile existing) {
+        LinearLayout content = new LinearLayout(getMapView().getContext());
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(12), dp(8), dp(12), 0);
+
+        addDialogLabel(content, "Connection type");
+        final Spinner connectionTypeInput = new Spinner(getMapView()
+                .getContext());
+        final String[] connectionTypes = new String[] {
+                DittoCredentialProfile.CONNECTION_SDK,
+                DittoCredentialProfile.CONNECTION_HTTP
+        };
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(getMapView()
+                .getContext(), android.R.layout.simple_spinner_item,
+                connectionTypes);
+        adapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item);
+        connectionTypeInput.setAdapter(adapter);
+        connectionTypeInput.setSelection(existing != null
+                && existing.isHttpProfile() ? 1 : 0);
+        content.addView(connectionTypeInput);
+
+        final TextView modeHelp = new TextView(getMapView().getContext());
+        modeHelp.setTextColor(Color.LTGRAY);
+        modeHelp.setTextSize(12);
+        content.addView(modeHelp);
+
+        final EditText labelInput = addDialogInput(content, "Profile name",
+                existing == null ? "" : existing.getRawLabel(), true);
+        final EditText databaseInput = addDialogInput(content, "Database ID",
+                existing == null ? "" : existing.getDatabaseId(), true);
+        final EditText authUrlInput = addDialogInput(content,
+                "Auth URL / HTTP URL",
+                existing == null ? "https://" : existing.getAuthUrl(), true);
+        final EditText tokenInput = addDialogInput(content,
+                "Development token / HTTP token",
+                existing == null ? "" : existing.getDevelopmentToken(), false);
+        updateDittoProfileEditorHints(connectionTypeInput, modeHelp,
+                authUrlInput, tokenInput);
+        connectionTypeInput.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(AdapterView<?> parent,
+                            View view, int position, long id) {
+                        updateDittoProfileEditorHints(connectionTypeInput,
+                                modeHelp, authUrlInput, tokenInput);
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+                    }
+                });
+
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle(existing == null ? "Add Ditto Profile"
+                        : "Update Ditto Profile")
+                .setMessage("SDK profiles are used for current SARtak offline mesh sync. HTTP profiles can be saved for later server/API workflows.")
+                .setView(content)
+                .setPositiveButton("Save",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                boolean saved = mapController
+                                        .saveDittoCredentialProfile(
+                                                existing == null ? ""
+                                                        : existing.getId(),
+                                                labelInput.getText()
+                                                        .toString(),
+                                                connectionTypeInput
+                                                        .getSelectedItem()
+                                                        .toString(),
+                                                databaseInput.getText()
+                                                        .toString(),
+                                                authUrlInput.getText()
+                                                        .toString(),
+                                                tokenInput.getText()
+                                                        .toString());
+                                Toast.makeText(getMapView().getContext(),
+                                        saved ? "Ditto profile saved"
+                                                : "Ditto profile incomplete",
+                                        Toast.LENGTH_LONG).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showSelectDittoProfileDialog() {
+        final List<DittoCredentialProfile> profiles = mapController
+                .getDittoCredentialProfiles();
+        if (profiles.isEmpty()) {
+            Toast.makeText(getMapView().getContext(),
+                    "No Ditto profiles saved", Toast.LENGTH_LONG).show();
+            return;
+        }
+        CharSequence[] labels = new CharSequence[profiles.size()];
+        for (int i = 0; i < profiles.size(); i++)
+            labels[i] = profiles.get(i).getLabel();
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Select Ditto Profile")
+                .setItems(labels, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        mapController.selectDittoCredentialProfile(profiles
+                                .get(which).getId());
+                        Toast.makeText(getMapView().getContext(),
+                                "Ditto profile selected", Toast.LENGTH_SHORT)
+                                .show();
+                        refreshGridUi();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showRemoveDittoProfileDialog() {
+        DittoCredentialProfile selected = mapController
+                .getSelectedDittoCredentialProfile();
+        if (selected == null) {
+            Toast.makeText(getMapView().getContext(),
+                    "No Ditto profile selected", Toast.LENGTH_LONG).show();
+            return;
+        }
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Remove Ditto Profile")
+                .setMessage("Remove \"" + selected.getLabel()
+                        + "\" from this device?")
+                .setPositiveButton("Remove",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                boolean removed = mapController
+                                        .removeSelectedDittoCredentialProfile();
+                                Toast.makeText(getMapView().getContext(),
+                                        removed ? "Ditto profile removed"
+                                                : "No profile removed",
+                                        Toast.LENGTH_LONG).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showCreateOperationDialog() {
+        if (!mapController.isLeaderRole()) {
+            Toast.makeText(getMapView().getContext(),
+                    "Only Team Lead devices can create SARtak operations",
+                    Toast.LENGTH_LONG).show();
+            refreshGridUi();
+            return;
+        }
+        if (!mapController.canCreateOperationFromLocalDittoConfig()) {
+            Toast.makeText(getMapView().getContext(),
+                    "Add a Ditto profile in Ditto Setup before creating an operation",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        final EditText input = new EditText(getMapView().getContext());
+        input.setSingleLine(true);
+        input.setHint("Operation name");
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Create Operation")
+                .setMessage("This creates a local operation profile and scopes SARtak sync data to that operation.")
+                .setView(input)
+                .setPositiveButton("Create",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                String name = input.getText().toString()
+                                        .trim();
+                                if (name.length() == 0)
+                                    name = "SAR Operation";
+                                boolean created = mapController
+                                        .createOperation(name);
+                                Toast.makeText(getMapView().getContext(),
+                                        created ? "Operation created"
+                                                : "Operation requires Team Lead role and Ditto config",
+                                        Toast.LENGTH_LONG).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showOperationJoinCodeDialog() {
+        final String joinCode = mapController.getOperationJoinCode();
+        if (joinCode.length() == 0) {
+            Toast.makeText(getMapView().getContext(),
+                    "No operation join code available", Toast.LENGTH_LONG)
+                    .show();
+            return;
+        }
+        LinearLayout content = new LinearLayout(getMapView().getContext());
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(12), dp(8), dp(12), 0);
+        try {
+            Bitmap qrCode = OperationQrCodeGenerator.create(joinCode, dp(220));
+            ImageView qrView = new ImageView(getMapView().getContext());
+            qrView.setImageBitmap(qrCode);
+            qrView.setAdjustViewBounds(true);
+            LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(
+                    dp(220), dp(220));
+            qrParams.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+            qrParams.setMargins(0, 0, 0, dp(8));
+            content.addView(qrView, qrParams);
+        } catch (Exception exception) {
+            Log.w(TAG, "Failed to render operation QR code", exception);
+        }
+        final EditText codeView = new EditText(getMapView().getContext());
+        codeView.setText(joinCode);
+        codeView.setSelectAllOnFocus(true);
+        content.addView(codeView);
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Operation Join Code")
+                .setMessage("Share this QR/code with devices that should join this search operation.")
+                .setView(content)
+                .setPositiveButton("Copy",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                ClipboardManager clipboard =
+                                        (ClipboardManager) getMapView()
+                                                .getContext()
+                                                .getSystemService(Context
+                                                        .CLIPBOARD_SERVICE);
+                                if (clipboard != null) {
+                                    clipboard.setPrimaryClip(ClipData
+                                            .newPlainText(
+                                                    "SARtak operation code",
+                                                    joinCode));
+                                    Toast.makeText(getMapView().getContext(),
+                                            "Join code copied",
+                                            Toast.LENGTH_SHORT).show();
+                                }
+                            }
+                        })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void showJoinOperationDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Join Operation")
+                .setMessage("Scan the leader's QR code or paste the operation join code.")
+                .setPositiveButton("Scan QR",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                startOperationQrScanner();
+                            }
+                        })
+                .setNeutralButton("Paste Code",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                showPasteOperationJoinCodeDialog();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showPasteOperationJoinCodeDialog() {
+        final EditText input = new EditText(getMapView().getContext());
+        input.setSingleLine(false);
+        input.setMinLines(3);
+        input.setHint("Paste SARtak operation join code");
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Join Operation")
+                .setMessage("Paste the join code from the operation organiser. Team setup will start after this device joins the operation.")
+                .setView(input)
+                .setPositiveButton("Join",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                boolean joined = mapController
+                                        .joinOperationFromCode(input.getText()
+                                                .toString().trim());
+                                Toast.makeText(getMapView().getContext(),
+                                        joined ? "Operation joined"
+                                                : "Invalid operation code",
+                                        Toast.LENGTH_LONG).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void startOperationQrScanner() {
+        Intent intent = new Intent(pluginContext,
+                OperationQrScanActivity.class);
+        intent.putExtra(OperationQrScanActivity.EXTRA_HOST_PACKAGE,
+                getMapView().getContext().getPackageName());
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            pluginContext.startActivity(intent);
+        } catch (Throwable throwable) {
+            Log.w(TAG, "Unable to open SARtak QR scanner", throwable);
+            Toast.makeText(getMapView().getContext(),
+                    "QR scanner unavailable. Paste the join code instead.",
+                    Toast.LENGTH_LONG).show();
+            showPasteOperationJoinCodeDialog();
+        }
+    }
+
+    private void joinOperationFromScannedCode(String joinCode) {
+        boolean joined = mapController.joinOperationFromCode(joinCode);
+        Toast.makeText(getMapView().getContext(),
+                joined ? "Operation joined from QR"
+                        : "Invalid SARtak operation QR",
+                Toast.LENGTH_LONG).show();
+        if (joined)
+            showDropDown(templateView, HALF_WIDTH, FULL_HEIGHT, FULL_WIDTH,
+                    HALF_HEIGHT, false, this);
+        refreshGridUi();
+    }
+
+    private void consumePendingOperationQrScan() {
+        if (consumingPendingQrScan)
+            return;
+        String joinCode = OperationQrScanResultStore.consume(pluginContext);
+        if (joinCode.length() == 0)
+            return;
+        consumingPendingQrScan = true;
+        try {
+            joinOperationFromScannedCode(joinCode);
+        } finally {
+            consumingPendingQrScan = false;
+        }
+    }
+
+    private void showLeaveOperationDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Leave Operation")
+                .setMessage("Leave the active operation? This clears local SARtak team membership for this device, but does not delete ATAK data.")
+                .setPositiveButton("Leave",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                mapController.leaveOperation();
+                                handledTeamMessages.clear();
+                                resolvedTeamMessages.clear();
+                                handledAlertMessages.clear();
+                                Toast.makeText(getMapView().getContext(),
+                                        "Operation left", Toast.LENGTH_LONG)
+                                        .show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     private void showRemoveTeamDialog() {
         new AlertDialog.Builder(getMapView().getContext())
                 .setTitle("Remove Team")
@@ -657,6 +1325,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                             public void onClick(DialogInterface dialog,
                                     int which) {
                                 mapController.leaveTeam();
+                                handledAlertMessages.clear();
                                 Toast.makeText(getMapView().getContext(),
                                         "Left team", Toast.LENGTH_SHORT)
                                         .show();
@@ -670,7 +1339,18 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private void pollTeamCotMessages() {
         mapController.advertiseTeamIfDue();
 
+        for (SearchTeamCotMessage removal
+                : mapController.getMemberRemovalsForMe()) {
+            if (handledTeamMessages.add(removal.getUid()))
+                handleMemberRemoval(removal);
+        }
+
         if (leaderView && mapController.isTeamCreated()) {
+            for (SearchTeamCotMessage left
+                    : mapController.getMemberLeavesForLeader()) {
+                if (handledTeamMessages.add(left.getUid()))
+                    handleMemberLeft(left);
+            }
             for (SearchTeamCotMessage request
                     : mapController.getPendingJoinRequests()) {
                 if (handledTeamMessages.add(request.getUid()))
@@ -693,6 +1373,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 if (handledTeamMessages.add(response.getUid()))
                     handleJoinResponse(response);
             }
+        }
+
+        for (SearchAlertMessage alert : mapController
+                .getUnacknowledgedAlertsForMe()) {
+            if (handledAlertMessages.add(alert.getAlertId()))
+                showTeamAlertDialog(alert);
         }
     }
 
@@ -810,6 +1496,27 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     response.getSenderCallsign() + " declined the invite",
                     Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void handleMemberRemoval(SearchTeamCotMessage removal) {
+        if (!mapController.applyMemberRemoval(removal))
+            return;
+        resolvedTeamMessages.clear();
+        Toast.makeText(getMapView().getContext(),
+                removal.getLeaderCallsign() + " removed you from "
+                        + removal.getTeamName(),
+                Toast.LENGTH_LONG).show();
+        refreshGridUi();
+    }
+
+    private void handleMemberLeft(SearchTeamCotMessage left) {
+        String callsign = mapController.applyMemberLeft(left);
+        if (callsign.length() == 0)
+            return;
+        Toast.makeText(getMapView().getContext(),
+                callsign + " has left the team",
+                Toast.LENGTH_LONG).show();
+        refreshGridUi();
     }
 
     private void showAddMemberDialog() {
@@ -950,6 +1657,157 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
     }
 
+    private void renderDeviceCards() {
+        devicesCardsContainer.removeAllViews();
+        java.util.List<DeviceConnectivitySnapshot> devices =
+                mapController.getVisibleDevices();
+        int atakCount = 0;
+        int dittoCount = 0;
+        int staleCount = 0;
+        for (DeviceConnectivitySnapshot device : devices) {
+            String connection = device.getConnectionSummary();
+            if (connection.contains("ATAK"))
+                atakCount++;
+            if (connection.contains("Ditto"))
+                dittoCount++;
+            if (connection.toLowerCase(java.util.Locale.US).contains("stale"))
+                staleCount++;
+            devicesCardsContainer.addView(createDeviceCard(device));
+        }
+        devicesSummaryValue.setText(mapController.getDeviceDiagnosticsSummary(
+                devices.size(), atakCount, dittoCount, staleCount));
+        if (devices.isEmpty())
+            devicesCardsContainer.addView(createCardText(
+                    "No ATAK contacts or Ditto peers visible yet", 13,
+                    false));
+    }
+
+    private void renderAlertCards() {
+        alertsCardsContainer.removeAllViews();
+        java.util.List<SearchAlertMessage> alerts = mapController
+                .getActiveTeamAlerts();
+        if (alerts.isEmpty()) {
+            alertsCardsContainer.addView(createCardText(
+                    "No active team alerts", 13, false));
+            return;
+        }
+
+        for (SearchAlertMessage alert : alerts)
+            alertsCardsContainer.addView(createAlertCard(alert));
+    }
+
+    private View createAlertCard(final SearchAlertMessage alert) {
+        LinearLayout card = createActionCard();
+        boolean fromMe = alert.getSenderUid().equals(mapController
+                .getSelfMemberId());
+        card.addView(createCardText(alert.getTitle(), 15, true));
+        card.addView(createCardText("From: " + alert.getSenderCallsign(),
+                13, false));
+        card.addView(createCardText(alert.getMessage(), 13, false));
+        if (alert.requiresHalt())
+            card.addView(createCardText("Search line paused while active",
+                    12, false));
+        if (!Double.isNaN(alert.getLatitude())
+                && !Double.isNaN(alert.getLongitude()))
+            card.addView(createCardText(String.format(
+                    java.util.Locale.US, "Sender location: %.6f, %.6f",
+                    alert.getLatitude(), alert.getLongitude()), 12, false));
+
+        if (fromMe) {
+            card.addView(createCardText(mapController.getAlertAckSummary(alert),
+                    12, false));
+            card.addView(createCancelButton("Clear alert / resume",
+                    new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            mapController.cancelTeamAlert(alert);
+                            refreshGridUi();
+                        }
+                    }));
+        } else if (mapController.hasAcknowledgedAlert(alert)) {
+            card.addView(createCardText("Acknowledged by this device", 12,
+                    false));
+        } else {
+            card.addView(createCancelButton("Acknowledge",
+                    new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            acknowledgeAlert(alert);
+                        }
+                    }));
+        }
+        return card;
+    }
+
+    private void updateAlertButtons(boolean teamCreated) {
+        updateAlertButton(alertHoldPositionButton,
+                SearchAlertMessage.TYPE_HOLD_POSITION, "Hold Position",
+                teamCreated);
+        updateAlertButton(alertRequestLeaderButton,
+                SearchAlertMessage.TYPE_REQUEST_LEADER,
+                "Request Team Leader", teamCreated);
+        updateAlertButton(alertEmergencyStopButton,
+                SearchAlertMessage.TYPE_EMERGENCY_STOP, "Emergency Stop",
+                teamCreated);
+    }
+
+    private void updateAlertButton(Button button, String alertType,
+            String label, boolean enabled) {
+        if (button == null)
+            return;
+        button.setEnabled(enabled);
+        button.setText(mapController.hasActiveAlertType(alertType)
+                ? "Clear " + label : label);
+    }
+
+    private void handleAlertButton(String alertType) {
+        SearchAlertMessage active = mapController.getOutgoingAlertOfType(
+                alertType);
+        if (active != null) {
+            boolean cleared = mapController.cancelTeamAlert(active);
+            Toast.makeText(getMapView().getContext(),
+                    cleared ? "Alert cleared" : "Unable to clear alert",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        boolean sent = mapController.sendTeamAlert(alertType);
+        Toast.makeText(getMapView().getContext(),
+                sent ? SearchAlertMessage.titleForType(alertType) + " sent"
+                        : "Join or create a team with Ditto active before sending alerts",
+                Toast.LENGTH_LONG).show();
+    }
+
+    private void showTeamAlertDialog(final SearchAlertMessage alert) {
+        String message = alert.getMessage();
+        if (!Double.isNaN(alert.getLatitude())
+                && !Double.isNaN(alert.getLongitude()))
+            message += String.format(java.util.Locale.US,
+                    "\n\nSender location:\n%.6f, %.6f",
+                    alert.getLatitude(), alert.getLongitude());
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle(alert.getTitle())
+                .setMessage(message)
+                .setCancelable(false)
+                .setPositiveButton("Acknowledge",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                acknowledgeAlert(alert);
+                            }
+                        })
+                .show();
+    }
+
+    private void acknowledgeAlert(SearchAlertMessage alert) {
+        boolean acknowledged = mapController.acknowledgeAlert(alert);
+        Toast.makeText(getMapView().getContext(),
+                acknowledged ? "Alert acknowledged"
+                        : "Unable to acknowledge alert",
+                Toast.LENGTH_LONG).show();
+        refreshGridUi();
+    }
+
     private void renderInvitesAndRequests() {
         invitesRequestsContainer.removeAllViews();
         int count = 0;
@@ -972,6 +1830,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 count++;
             }
         } else if (!leaderView) {
+            java.util.List<SearchTeamCotMessage> joinResponses = mapController
+                    .getJoinResponsesForMe();
             for (SearchTeamCotMessage invite : mapController.getInvitesForMe()) {
                 if (resolvedTeamMessages.contains(invite.getUid()))
                     continue;
@@ -980,7 +1840,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             }
             for (SearchTeamCotMessage request
                     : mapController.getOutgoingJoinRequests()) {
-                if (resolvedTeamMessages.contains(request.getUid()))
+                if (resolvedTeamMessages.contains(request.getUid())
+                        || hasJoinResponse(request, joinResponses))
                     continue;
                 invitesRequestsContainer.addView(
                         createOutgoingJoinRequestCard(request));
@@ -1142,9 +2003,20 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private boolean hasInviteResponse(SearchTeamCotMessage invite,
             java.util.List<SearchTeamCotMessage> responses) {
         for (SearchTeamCotMessage response : responses) {
-            if (invite.getTargetUid().equals(response.getSenderUid())
-                    || invite.getTargetCallsign().equalsIgnoreCase(
-                            response.getSenderCallsign()))
+            if (response.getCreated() >= invite.getCreated()
+                    && (invite.getTargetUid().equals(response.getSenderUid())
+                            || invite.getTargetCallsign().equalsIgnoreCase(
+                                    response.getSenderCallsign())))
+                return true;
+        }
+        return false;
+    }
+
+    private boolean hasJoinResponse(SearchTeamCotMessage request,
+            java.util.List<SearchTeamCotMessage> responses) {
+        for (SearchTeamCotMessage response : responses) {
+            if (response.getCreated() >= request.getCreated()
+                    && request.getTeamId().equals(response.getTeamId()))
                 return true;
         }
         return false;
@@ -1226,15 +2098,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
         card.addView(header);
 
-                card.addView(createCardText("ID: " + member.getUniqueId()
-                + " | Team: " + member.getTeamColorName()
+        card.addView(createCardText("ID: " + member.getUniqueId()
+                + " | SARtak team colour: " + member.getTeamColorName()
                 + " | Personal: " + member.getColorName()
                 + " | " + member.getLaneLabel(), 13, false));
-        card.addView(createCardText("ATAK group: "
+        card.addView(createCardText("Native ATAK team: "
                 + member.getAtakGroupName(), 13, false));
         card.addView(createCardText("GPS: " + member.getGpsCoordinates()
                 + " | Alt: " + member.getAltitude(), 13, false));
-        card.addView(createCardText("Grid: " + member.getCurrentGridCell()
+        card.addView(createCardText("Grid: "
+                + member.getCurrentGridCellDisplay()
                 + " | Last ping: " + member.getLastPing(), 13, false));
         card.addView(createCardText(member.hasReliableHeading()
                 ? "Heading: " + Math.round(member.getHeadingDegrees())
@@ -1249,6 +2122,69 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         card.addView(createCardText("Membership: "
                 + member.getMembershipStatus().name(), 12, false));
         return card;
+    }
+
+    private View createDeviceCard(DeviceConnectivitySnapshot device) {
+        LinearLayout card = createActionCard();
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(43, 48, 52));
+        background.setStroke(dp(device.isSelf() ? 2 : 1),
+                device.isSelf() ? Color.rgb(216, 182, 76)
+                        : deviceConnectionColor(device));
+        card.setBackground(background);
+
+        card.addView(createCardText(device.getCallsign(), 15, true));
+        card.addView(createCardText("Connected by: "
+                + device.getConnectionSummary(), 13, false));
+        card.addView(createCardText(device.getLastUpdateSummary(),
+                13, false));
+        card.addView(createCardText("SARtak team: "
+                + device.getTeamSummary(), 13, false));
+        card.addView(createCardText("Native ATAK team: "
+                + device.getAtakGroupName(), 13, false));
+        card.addView(createCardText("Role: " + device.getRole(),
+                13, false));
+        card.addView(createCardText("UID: " + device.getUid(),
+                12, false));
+        return card;
+    }
+
+    private int deviceConnectionColor(DeviceConnectivitySnapshot device) {
+        String connection = device.getConnectionSummary();
+        if (connection.contains("stale"))
+            return Color.rgb(216, 182, 76);
+        if (connection.contains("ATAK") && connection.contains("Ditto"))
+            return Color.rgb(66, 195, 106);
+        if (connection.contains("Ditto"))
+            return Color.rgb(74, 163, 255);
+        if (connection.contains("ATAK"))
+            return Color.rgb(180, 124, 255);
+        return Color.rgb(138, 143, 152);
+    }
+
+    private void showResetSyncStateDialog() {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Reset local SARtak sync state?")
+                .setMessage("This clears this device's local SARtak team, "
+                        + "pending messages, and visible sync caches. It does "
+                        + "not delete another device's data.")
+                .setPositiveButton("Reset",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                handledTeamMessages.clear();
+                                resolvedTeamMessages.clear();
+                                handledAlertMessages.clear();
+                                mapController.resetLocalSyncState();
+                                Toast.makeText(getMapView().getContext(),
+                                        "Local SARtak sync state reset",
+                                        Toast.LENGTH_SHORT).show();
+                                refreshGridUi();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showRemoveMemberDialog(final SearchTeamMember member) {
@@ -1280,6 +2216,88 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         return textView;
     }
 
+    private Button createDialogButton(String label) {
+        Button button = new Button(getMapView().getContext());
+        button.setText(label);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(8), 0, 0);
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    private EditText addDialogInput(LinearLayout content, String label,
+            String value, boolean singleLine) {
+        addDialogLabel(content, label);
+
+        EditText input = new EditText(getMapView().getContext());
+        input.setText(value);
+        input.setSingleLine(singleLine);
+        if (!singleLine)
+            input.setMinLines(2);
+        content.addView(input);
+        return input;
+    }
+
+    private void addDialogLabel(LinearLayout content, String label) {
+        TextView labelView = new TextView(getMapView().getContext());
+        labelView.setText(label);
+        labelView.setTextColor(Color.LTGRAY);
+        labelView.setTextSize(12);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        labelParams.setMargins(0, dp(8), 0, 0);
+        content.addView(labelView, labelParams);
+    }
+
+    private void updateDittoProfileEditorHints(Spinner connectionTypeInput,
+            TextView modeHelp, EditText authUrlInput, EditText tokenInput) {
+        boolean http = DittoCredentialProfile.CONNECTION_HTTP.equals(
+                connectionTypeInput.getSelectedItem().toString());
+        if (http) {
+            modeHelp.setText("HTTP profiles are saved for future server/API workflows and are not used by the current offline mesh runtime.");
+            authUrlInput.setHint("HTTP API URL");
+            tokenInput.setHint("HTTP access token");
+        } else {
+            modeHelp.setText("SDK profiles are used by SARtak's current Ditto offline mesh sync.");
+            authUrlInput.setHint("Ditto auth URL");
+            tokenInput.setHint("Development / playground token");
+        }
+    }
+
+    private int readinessColor(int readinessLevel) {
+        if (readinessLevel == SARTakMapController.READINESS_READY)
+            return Color.rgb(66, 195, 106);
+        if (readinessLevel == SARTakMapController.READINESS_WAITING)
+            return Color.rgb(216, 182, 76);
+        return Color.rgb(216, 84, 76);
+    }
+
+    private SpannableString colorReadinessSummary(String summary) {
+        String value = summary == null ? "" : summary;
+        SpannableString colored = new SpannableString(value);
+        int start = 0;
+        while (start < value.length()) {
+            int end = value.indexOf('\n', start);
+            if (end < 0)
+                end = value.length();
+            String line = value.substring(start, end);
+            int color = Color.LTGRAY;
+            if (line.startsWith("[OK]"))
+                color = readinessColor(SARTakMapController.READINESS_READY);
+            else if (line.startsWith("[WAIT]"))
+                color = readinessColor(SARTakMapController.READINESS_WAITING);
+            else if (line.startsWith("[NO]"))
+                color = readinessColor(SARTakMapController.READINESS_BLOCKED);
+            colored.setSpan(new ForegroundColorSpan(color), start, end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            start = end + 1;
+        }
+        return colored;
+    }
+
     private int getConnectionColor(SearchTeamMember member) {
         if (member.getConnectionStatus()
                 == SearchTeamMember.ConnectionStatus.CONNECTED)
@@ -1304,12 +2322,30 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         if (action == null)
             return;
 
+        if (action.equals(OperationQrScanActivity.ACTION_SCAN_RESULT)) {
+            String joinCode = intent.getStringExtra(
+                    OperationQrScanActivity.EXTRA_JOIN_CODE);
+            if (joinCode != null) {
+                OperationQrScanResultStore.consume(pluginContext);
+                joinOperationFromScannedCode(joinCode);
+            } else {
+                consumePendingOperationQrScan();
+            }
+            return;
+        }
+
         if (action.equals(SHOW_PLUGIN)) {
 
             Log.d(TAG, "showing plugin drop down");
             showDropDown(templateView, HALF_WIDTH, FULL_HEIGHT, FULL_WIDTH,
                     HALF_HEIGHT, false, this);
             startUiRefresh();
+            String joinCode = intent.getStringExtra(
+                    OperationQrScanActivity.EXTRA_JOIN_CODE);
+            if (joinCode != null)
+                joinOperationFromScannedCode(joinCode);
+            else
+                consumePendingOperationQrScan();
         }
     }
 

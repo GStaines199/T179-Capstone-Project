@@ -81,6 +81,49 @@ public class SearcherRepositoryTest {
     }
 
     @Test
+    public void clearSelfFlagExcept_demotesTheStaleSelfRecord() {
+        // The UID changes when ATAK gains an identity mid-session, leaving the
+        // fallback identity behind still flagged as self.
+        repo.insertOrUpdate("SARTAK-old", "Pixel 7-0F3A", "Pixel 7",
+                1000L, 2000L, true);
+        repo.insertOrUpdate("ANDROID-new", "ALPHA", "Pixel 7",
+                3000L, 3000L, true);
+
+        repo.clearSelfFlagExcept("ANDROID-new");
+
+        String[] identity = repo.getSelfIdentity();
+        assertNotNull(identity);
+        assertEquals("ANDROID-new", identity[0]);
+        assertEquals("ALPHA", identity[1]);
+    }
+
+    @Test
+    public void clearSelfFlagExcept_leavesTheCurrentSelfRecordAlone() {
+        repo.insertOrUpdate("uid1", "Alice", "Samsung A52",
+                1000L, 2000L, true);
+
+        repo.clearSelfFlagExcept("uid1");
+
+        String[] identity = repo.getSelfIdentity();
+        assertNotNull(identity);
+        assertEquals("uid1", identity[0]);
+    }
+
+    @Test
+    public void clearSelfFlagExcept_doesNotTouchOtherSearchers() {
+        repo.insertOrUpdate("uid1", "Alice", "Samsung A52",
+                1000L, 2000L, true);
+        repo.insertOrUpdate("uid2", "Bob", "Pixel 6", 1000L, 2000L, false);
+
+        repo.clearSelfFlagExcept("uid1");
+        repo.updateLastSeen("uid2", 9999L);
+
+        String[] identity = repo.getSelfIdentity();
+        assertNotNull(identity);
+        assertEquals("uid1", identity[0]);
+    }
+
+    @Test
     public void onlySelfFlaggedRecord_isReturnedBySelfQuery() {
         repo.insertOrUpdate("uid1", "Alice", "Device A", 1000L, 2000L, true);
         repo.insertOrUpdate("uid2", "Bob",   "Device B", 1000L, 2000L, false);

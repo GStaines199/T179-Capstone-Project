@@ -15,6 +15,9 @@ public class SearchTeamStyle {
         public int getArgb() { return argb; }
     }
 
+    private static final ColorChoice UNASSIGNED =
+            new ColorChoice("Unassigned", 0xFF8A8F98);
+
     private static final ColorChoice[] TEAM_COLORS = new ColorChoice[] {
             new ColorChoice("Blue", 0xFF4AA3FF),
             new ColorChoice("Cyan", 0xFF33D6D0),
@@ -25,6 +28,10 @@ public class SearchTeamStyle {
             new ColorChoice("Purple", 0xFFB47CFF),
             new ColorChoice("Red", 0xFFD8544C)
     };
+
+    public static ColorChoice unassignedColor() {
+        return UNASSIGNED;
+    }
 
     private static final ColorChoice[] MEMBER_COLORS = new ColorChoice[] {
             new ColorChoice("White", 0xFFFFFFFF),

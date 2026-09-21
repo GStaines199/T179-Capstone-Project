@@ -8,19 +8,24 @@ import android.graphics.Path;
 import android.util.Base64;
 
 import com.atakmap.android.maps.MapGroup;
+import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.coremap.maps.assets.Icon;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class SearchTeamMarkerOverlay {
 
     private static final String GROUP_NAME = "SARtak Team Markers";
     private static final int ICON_SIZE = 36;
     private static final int ICON_CENTER = ICON_SIZE / 2;
+    private static final boolean USE_CUSTOM_SARTAK_ICONS = false;
 
     private final MapView mapView;
     private final SearchPartyAssignmentManager assignmentManager;
@@ -71,7 +76,7 @@ public class SearchTeamMarkerOverlay {
     public void setVisible(boolean visible) {
         this.visible = visible;
         ensureMarkerGroup();
-        if (!visible) {
+        if (!visible || !USE_CUSTOM_SARTAK_ICONS) {
             markerGroup.clearItems();
             markerGroup.setVisible(false);
         } else {
@@ -81,17 +86,31 @@ public class SearchTeamMarkerOverlay {
     }
 
     public void render() {
-        if (!visible)
-            return;
-
         ensureMarkerGroup();
-        markerGroup.clearItems();
+        if (!visible || !USE_CUSTOM_SARTAK_ICONS) {
+            markerGroup.clearItems();
+            markerGroup.setVisible(false);
+            return;
+        }
+        markerGroup.setVisible(true);
+
+        Set<String> wantedUids = new HashSet<>();
         List<SearchLineMemberStatus> lineStatuses = searchLineManager
                 .getMemberStatuses();
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
-            if (shouldShow(member))
-                markerGroup.addItem(createMarker(member, lineStatuses));
+            if (!shouldShow(member))
+                continue;
+            String uid = markerUid(member);
+            wantedUids.add(uid);
+            Marker marker = findMarker(uid);
+            if (marker == null) {
+                marker = new Marker(new GeoPoint(member.getLatitude(),
+                        member.getLongitude()), uid);
+                markerGroup.addItem(marker);
+            }
+            configureMarker(marker, member, lineStatuses);
         }
+        removeStaleMarkers(wantedUids);
     }
 
     private boolean shouldShow(SearchTeamMember member) {
@@ -118,18 +137,16 @@ public class SearchTeamMarkerOverlay {
         }
     }
 
-    private Marker createMarker(SearchTeamMember member,
+    private void configureMarker(Marker marker, SearchTeamMember member,
             List<SearchLineMemberStatus> lineStatuses) {
         GeoPoint point = new GeoPoint(member.getLatitude(),
                 member.getLongitude());
-        Marker marker = new Marker(point, "sartak-team-"
-                + member.getUniqueId());
+        marker.setPoint(point);
         marker.setTitle(showCallsigns ? member.getCallsign() : "");
         marker.setType(member.isTeamLeader()
                 ? "a-f-G-U-C"
                 : "a-f-G-U-C-I");
         marker.setAlwaysShowText(showCallsigns);
-        marker.setTouchable(true);
         marker.setMetaString("callsign",
                 showCallsigns ? member.getCallsign() : "");
         marker.setMetaString("entry", "sartak");
@@ -144,11 +161,51 @@ public class SearchTeamMarkerOverlay {
         marker.setMetaBoolean("editable", false);
         marker.setMetaBoolean("movable", false);
         marker.setMetaBoolean("removable", true);
-        marker.setMetaBoolean("adapt_marker_icon", false);
-        marker.setIcon(createIcon(member,
-                member.getUniqueId().equals(selectedMemberId),
-                hasWarningOutline(member, lineStatuses)));
-        return marker;
+        marker.setMetaString("sartak.team.color.name",
+                member.getTeamColorName());
+        marker.setMetaString("sartak.member.color.name",
+                member.getColorName());
+        marker.setMetaString("sartak.member.role", member.isTeamLeader()
+                ? "Team Lead" : "Team Member");
+        marker.setMetaDouble("heading", member.getHeadingDegrees());
+        marker.setMetaDouble("trackHeading", member.getHeadingDegrees());
+        marker.setMetaDouble("speed", member.getSpeedMetersPerSecond());
+        marker.setMetaBoolean("headingReliable", member.hasReliableHeading());
+        if (USE_CUSTOM_SARTAK_ICONS) {
+            marker.setMetaBoolean("adapt_marker_icon", false);
+            marker.setIcon(createIcon(member,
+                    member.getUniqueId().equals(selectedMemberId),
+                    hasWarningOutline(member, lineStatuses)));
+        } else {
+            marker.setMetaBoolean("adapt_marker_icon", true);
+        }
+    }
+
+    private String markerUid(SearchTeamMember member) {
+        return "sartak-team-" + member.getUniqueId();
+    }
+
+    private Marker findMarker(String uid) {
+        if (uid == null || uid.length() == 0 || markerGroup == null)
+            return null;
+        for (MapItem item : markerGroup.getItems()) {
+            if (uid.equals(item.getUID()) && item instanceof Marker)
+                return (Marker) item;
+        }
+        return null;
+    }
+
+    private void removeStaleMarkers(Set<String> wantedUids) {
+        List<MapItem> stale = new ArrayList<>();
+        for (MapItem item : markerGroup.getItems()) {
+            if ("sartak".equals(item.getMetaString("entry", ""))
+                    && "team-member-marker".equals(item.getMetaString(
+                            "sartak.kind", ""))
+                    && !wantedUids.contains(item.getUID()))
+                stale.add(item);
+        }
+        for (MapItem item : stale)
+            markerGroup.removeItem(item);
     }
 
     private Icon createIcon(SearchTeamMember member, boolean selected,
@@ -232,14 +289,33 @@ public class SearchTeamMarkerOverlay {
 
     private boolean hasWarningOutline(SearchTeamMember member,
             List<SearchLineMemberStatus> lineStatuses) {
+        return hasWarningOutline(member, lineStatuses,
+                searchLineManager.isStarted());
+    }
+
+    /**
+     * Whether a member's marker gets a warning outline.
+     *
+     * <p>Static and package-private so a unit test can reach it: the rest of
+     * this class needs a MapView, which a JVM test cannot build. Taking
+     * lineStarted as a parameter rather than reading the manager is what makes
+     * that possible.
+     *
+     * <p>Asks {@link SearchLineMemberStatus#isOffLine(double)} rather than
+     * comparing the raw distance itself. Reading the distance directly is how
+     * this method previously came to test a number without first asking
+     * whether there was a position behind it.
+     */
+    static boolean hasWarningOutline(SearchTeamMember member,
+            List<SearchLineMemberStatus> lineStatuses, boolean lineStarted) {
         if (member.needsConnectionAlert())
             return true;
-        if (!searchLineManager.isStarted())
+        if (!lineStarted)
             return false;
         for (SearchLineMemberStatus status : lineStatuses) {
             if (member.getUniqueId().equals(status.getMember().getUniqueId())
-                    && Math.abs(status.getDistanceFromLineMeters())
-                            > SearchLineManager.SLOW_DOWN_THRESHOLD_METERS)
+                    && status.isOffLine(
+                            SearchLineManager.SLOW_DOWN_THRESHOLD_METERS))
                 return true;
         }
         return false;

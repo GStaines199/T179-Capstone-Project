@@ -116,8 +116,14 @@ public class SearchLineOverlay {
 
     private void renderSlowDownMarkers(List<SearchLineMemberStatus> statuses) {
         for (SearchLineMemberStatus status : statuses) {
-            if (!status.isTooFarAhead(SearchLineManager
-                    .SLOW_DOWN_THRESHOLD_METERS))
+            // Checked explicitly rather than relying on isTooFarAhead alone:
+            // this marker is drawn *at the member's coordinates*, so a missing
+            // fix would put a "Slow/Hold" label on the map at a place the
+            // searcher has never been.
+            if (!MemberPositionPolicy.mayDrawSlowDownMarker(
+                    status.getMember(),
+                    status.isTooFarAhead(SearchLineManager
+                            .SLOW_DOWN_THRESHOLD_METERS)))
                 continue;
             GeoPoint point = new GeoPoint(status.getMember().getLatitude(),
                     status.getMember().getLongitude());
@@ -153,7 +159,6 @@ public class SearchLineOverlay {
         Marker marker = new Marker(point, uid(title));
         marker.setTitle(title);
         marker.setAlwaysShowText(true);
-        marker.setTouchable(false);
         marker.setMetaString("callsign", title);
         marker.setMetaString("entry", "sartak");
         marker.setMetaBoolean("archive", false);

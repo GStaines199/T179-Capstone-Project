@@ -294,6 +294,93 @@ public class GridCoordinateConverterTest {
     }
 
     // =========================================================================
+    // cellForUtmPoint — pure-Java seam behind cellForPoint(GeoPoint)
+    // =========================================================================
+
+    @Test
+    public void cellForUtmPoint_createsCorrectCell() {
+        SearchGridCell cell = converter.cellForUtmPoint(ZONE, EASTING,
+                NORTHING, mockStateStore);
+
+        assertEquals(CELL_WEST, cell.getWest(), 0.001);
+        assertEquals(CELL_SOUTH, cell.getSouth(), 0.001);
+        assertEquals(EXPECTED_ROW, cell.getRow());
+        assertEquals(EXPECTED_COL, cell.getColumn());
+        assertEquals(ZONE, cell.getZoneDescriptor());
+    }
+
+    @Test
+    public void cellForUtmPoint_createsCellWithCorrectId() {
+        SearchGridCell cell = converter.cellForUtmPoint(ZONE, EASTING,
+                NORTHING, mockStateStore);
+
+        assertTrue(cell.getId().startsWith("utm-"));
+        assertTrue(cell.getId().contains(ZONE));
+        assertTrue(cell.getId().contains("-c100-"));
+        assertTrue(cell.getId().contains("e" + Math.round(CELL_WEST)));
+        assertTrue(cell.getId().contains("n" + Math.round(CELL_SOUTH)));
+    }
+
+    @Test
+    public void cellForUtmPoint_roundsDownTo100mGrid() {
+        SearchGridCell cell = converter.cellForUtmPoint(ZONE, 300_349.9,
+                6_200_750.0, mockStateStore);
+
+        // 300349.9 floors to 300300, not rounds to 300400.
+        assertEquals(300_300.0, cell.getWest(), 0.001);
+    }
+
+    @Test
+    public void cellForUtmPoint_atAggregateOrigin_rowColAreZero() {
+        SearchGridCell cell = converter.cellForUtmPoint(ZONE, 300_000.0,
+                6_200_000.0, mockStateStore);
+
+        assertEquals(0, cell.getRow());
+        assertEquals(0, cell.getColumn());
+        assertEquals(300_000.0, cell.getWest(), 0.001);
+        assertEquals(6_200_000.0, cell.getSouth(), 0.001);
+    }
+
+    @Test
+    public void cellForUtmPoint_atMaxRow_createsCellAtRowNine() {
+        SearchGridCell cell = converter.cellForUtmPoint(ZONE, 300_000.0,
+                6_200_900.0, mockStateStore);
+
+        assertEquals(GridCoordinateConverter.AGGREGATE_CELLS_PER_SIDE - 1,
+                cell.getRow());
+        assertEquals(0, cell.getColumn());
+    }
+
+    @Test
+    public void cellForUtmPoint_statusIsQueriedFromStateStore() {
+        when(mockStateStore.getStatus(anyString()))
+                .thenReturn(SearchGridStatus.COMPLETE);
+
+        SearchGridCell cell = converter.cellForUtmPoint(ZONE, EASTING,
+                NORTHING, mockStateStore);
+
+        assertEquals(SearchGridStatus.COMPLETE, cell.getStatus());
+    }
+
+    // =========================================================================
+    // cellIdForUtmPoint — pure-Java seam behind cellIdForPoint(GeoPoint)
+    // =========================================================================
+
+    @Test
+    public void cellIdForUtmPoint_returnsExpectedFormat() {
+        String id = converter.cellIdForUtmPoint(ZONE, EASTING, NORTHING);
+
+        assertEquals("utm-" + ZONE + "-c100-e300300-n6200700", id);
+    }
+
+    @Test
+    public void cellIdForUtmPoint_roundsDownTo100mGrid() {
+        String id = converter.cellIdForUtmPoint(ZONE, 300_349.9, 6_200_750.0);
+
+        assertTrue(id.contains("e300300"));
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 

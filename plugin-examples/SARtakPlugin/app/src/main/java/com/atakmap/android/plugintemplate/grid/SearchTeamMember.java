@@ -2,6 +2,10 @@ package com.atakmap.android.plugintemplate.grid;
 
 public class SearchTeamMember {
 
+    private static final double MIN_HEADING_SPEED_METERS_PER_SECOND = 0.4;
+    private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
+            12.0;
+
     public enum TeamRole {
         TEAM_LEADER,
         SEARCHER
@@ -25,8 +29,8 @@ public class SearchTeamMember {
     private TeamRole role;
     private String colorName;
     private int displayColor;
-    private String teamColorName = "White";
-    private int teamColorArgb = 0xFFFFFFFF;
+    private String teamColorName = "Unassigned";
+    private int teamColorArgb = 0xFF8A8F98;
     private double latitude;
     private double longitude;
     private double headingDegrees;
@@ -40,7 +44,7 @@ public class SearchTeamMember {
     private String distanceFromYou;
     private String distanceFromSearchLine;
     private boolean liveAtakContact;
-    private String atakGroupName = "Ungrouped ATAK";
+    private String atakGroupName = "Unassigned";
     private boolean headingReliable;
     private double speedMetersPerSecond;
     private long lastPresenceTimestamp;
@@ -132,7 +136,9 @@ public class SearchTeamMember {
     }
 
     public boolean hasReliableHeading() {
-        return headingReliable && speedMetersPerSecond > 0.4;
+        return headingReliable
+                && speedMetersPerSecond
+                        > MIN_HEADING_SPEED_METERS_PER_SECOND;
     }
 
     public double getSpeedMetersPerSecond() {
@@ -179,6 +185,10 @@ public class SearchTeamMember {
         return currentGridCell;
     }
 
+    public String getCurrentGridCellDisplay() {
+        return SearchGridDisplayFormatter.formatCellReference(currentGridCell);
+    }
+
     public String getLastPing() {
         return lastPing;
     }
@@ -202,7 +212,7 @@ public class SearchTeamMember {
     public void setAtakGroupName(String atakGroupName) {
         this.atakGroupName = atakGroupName == null
                 || atakGroupName.trim().length() == 0
-                        ? "Ungrouped ATAK" : atakGroupName.trim();
+                        ? "Unassigned" : atakGroupName.trim();
     }
 
     public void setLiveAtakContact(boolean liveAtakContact) {
@@ -237,8 +247,9 @@ public class SearchTeamMember {
     public void updateMovement(double headingDegrees,
             boolean headingReliable, double speedMetersPerSecond) {
         this.headingDegrees = headingDegrees;
+        double safeSpeed = sanitizeSpeed(speedMetersPerSecond);
         this.headingReliable = headingReliable;
-        this.speedMetersPerSecond = speedMetersPerSecond;
+        this.speedMetersPerSecond = safeSpeed;
     }
 
     public void updateMapPosition(double latitude, double longitude,
@@ -269,11 +280,11 @@ public class SearchTeamMember {
         lastPing = lastPingMessage;
         lastPresenceTimestamp = System.currentTimeMillis();
         if (!liveAtakContact) {
-            gpsCoordinates = "ATAK contact pending";
-            altitude = "ATAK contact pending";
-            currentGridCell = "ATAK contact pending";
-            distanceFromYou = "ATAK contact pending";
-            distanceFromSearchLine = "ATAK contact pending";
+            gpsCoordinates = "Location unavailable";
+            altitude = "Location unavailable";
+            currentGridCell = "Location unavailable";
+            distanceFromYou = "Location unavailable";
+            distanceFromSearchLine = "Location unavailable";
         }
     }
 
@@ -288,6 +299,17 @@ public class SearchTeamMember {
                 : "Lane " + laneNumber;
     }
 
+    /**
+     * Whether this member is rostered onto a lane of the search line.
+     *
+     * <p>Deliberately a membership question only. It stays true while a
+     * member's GPS is down: they are still assigned to walk their lane, we
+     * simply do not know where they are. Do not add a position check here --
+     * lane count divides the cell into lanes, so a member dropping out on a
+     * lost fix would re-shape the search line for everybody else. Ask
+     * {@link MemberPositionPolicy#hasUsablePosition(SearchTeamMember)} instead
+     * before doing anything with the coordinates.
+     */
     public boolean contributesLane() {
         return membershipStatus == MembershipStatus.ACTIVE_MEMBER;
     }
@@ -295,5 +317,15 @@ public class SearchTeamMember {
     public boolean needsConnectionAlert() {
         return membershipStatus == MembershipStatus.ACTIVE_MEMBER
                 && connectionStatus != ConnectionStatus.CONNECTED;
+    }
+
+    private double sanitizeSpeed(double speedMetersPerSecond) {
+        if (Double.isNaN(speedMetersPerSecond)
+                || Double.isInfinite(speedMetersPerSecond)
+                || speedMetersPerSecond < 0.0
+                || speedMetersPerSecond
+                        > MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND)
+            return 0.0;
+        return speedMetersPerSecond;
     }
 }

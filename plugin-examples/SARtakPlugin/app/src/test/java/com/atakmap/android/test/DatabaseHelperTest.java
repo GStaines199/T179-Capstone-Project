@@ -62,6 +62,51 @@ public class DatabaseHelperTest {
     }
 
     @Test
+    public void locationPoints_hasRawGnssColumns() {
+        assertTrue(columnExists("location_points", "provider"));
+        assertTrue(columnExists("location_points", "vertical_accuracy_meters"));
+        assertTrue(columnExists("location_points", "bearing_accuracy_degrees"));
+        assertTrue(columnExists("location_points", "speed_accuracy_mps"));
+    }
+
+    @Test
+    public void onUpgrade_fromVersion1_addsRawGnssColumnsWithoutDroppingExistingData() {
+        // Simulate a pre-migration (version 1) schema with one stored row.
+        db.execSQL("DROP TABLE IF EXISTS location_points");
+        db.execSQL("CREATE TABLE location_points (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "uid TEXT," +
+                "callsign TEXT," +
+                "latitude REAL," +
+                "longitude REAL," +
+                "altitude REAL," +
+                "accuracy_meters REAL," +
+                "bearing_degrees REAL," +
+                "speed_mps REAL," +
+                "timestamp INTEGER," +
+                "session_id TEXT)");
+        db.execSQL("INSERT INTO location_points (uid, callsign, latitude, longitude, " +
+                "altitude, accuracy_meters, bearing_degrees, speed_mps, timestamp, session_id) " +
+                "VALUES ('uid1', 'Alice', -27.47, 153.02, 10.0, 5.0, 90.0, 1.5, 1000, 'sessionX')");
+
+        dbHelper.onUpgrade(db, 1, 2);
+
+        assertTrue(columnExists("location_points", "provider"));
+        assertTrue(columnExists("location_points", "vertical_accuracy_meters"));
+        assertTrue(columnExists("location_points", "bearing_accuracy_degrees"));
+        assertTrue(columnExists("location_points", "speed_accuracy_mps"));
+
+        Cursor cursor = db.rawQuery(
+                "SELECT uid, latitude, provider FROM location_points WHERE session_id = ?",
+                new String[]{"sessionX"});
+        assertTrue(cursor.moveToFirst());
+        assertEquals("uid1", cursor.getString(0));
+        assertEquals(-27.47, cursor.getDouble(1), 0.0001);
+        assertTrue(cursor.isNull(2));
+        cursor.close();
+    }
+
+    @Test
     public void searcherIdentity_hasRequiredColumns() {
         assertTrue(columnExists("searcher_identity", "uid"));
         assertTrue(columnExists("searcher_identity", "callsign"));

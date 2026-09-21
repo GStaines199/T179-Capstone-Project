@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 
-import com.atakmap.android.maps.MapData;
+import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 
@@ -36,14 +36,14 @@ public class AtakRoleResolver {
                         self.getMetaString("teamRole", ""),
                         self.getMetaString("__groupRole", ""));
             }
-            MapData data = mapView.getMapData();
+            MetaDataHolder2 data = mapView.getMapData();
             if (isEmpty(role) && data != null) {
                 role = firstNonEmpty(
-                        data.getString("atakRoleType", ""),
-                        data.getString("atakRole", ""),
-                        data.getString("role", ""),
-                        data.getString("teamRole", ""),
-                        data.getString("__groupRole", ""));
+                        data.getMetaString("atakRoleType", ""),
+                        data.getMetaString("atakRole", ""),
+                        data.getMetaString("role", ""),
+                        data.getMetaString("teamRole", ""),
+                        data.getMetaString("__groupRole", ""));
             }
             if (isEmpty(role) && self != null)
                 role = self.getType();
@@ -112,3 +112,5 @@ public class AtakRoleResolver {
                 || normalized.contains("team_lead");
     }
 }
+
+

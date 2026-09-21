@@ -1,7 +1,7 @@
 package com.atakmap.android.plugintemplate.runtime;
 
-import com.atakmap.android.maps.MapData;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.GeoPointMetaData;
@@ -197,7 +197,7 @@ public class AtakLocationStatus {
 
     /**
      * Read-only view of the key/value pairs ATAK publishes in
-     * {@link MapData}, so the GPS checks do not depend on the ATAK runtime.
+     * ATAK metadata, so the GPS checks do not depend on the ATAK runtime.
      */
     interface MetaSource {
         boolean containsKey(String key);
@@ -240,28 +240,28 @@ public class AtakLocationStatus {
         }
     };
 
-    private static MetaSource wrap(final MapData data) {
+    private static MetaSource wrap(final MetaDataHolder2 data) {
         if (data == null)
             return EMPTY;
         return new MetaSource() {
             @Override
             public boolean containsKey(String key) {
-                return data.containsKey(key);
+                return data.hasMetaValue(key);
             }
 
             @Override
             public boolean getBoolean(String key, boolean defaultValue) {
-                return data.getBoolean(key, defaultValue);
+                return data.getMetaBoolean(key, defaultValue);
             }
 
             @Override
             public long getLong(String key, long defaultValue) {
-                return data.getLong(key, defaultValue);
+                return data.getMetaLong(key, defaultValue);
             }
 
             @Override
             public String getString(String key, String defaultValue) {
-                return data.getString(key, defaultValue);
+                return data.getMetaString(key, defaultValue);
             }
 
             @Override

@@ -50,10 +50,11 @@ buildscript {
     ext.takrepoUser = getProperty('takrepo.user', 'invalid')
     ext.takrepoPassword = getProperty('takrepo.password', 'invalid')
     ext.takdevPlugin = getProperty('takdev.plugin', "${rootDir}/../../atak-gradle-takdev.jar")
-    // Default to the ATAK 5.6 plugin API. The installed ATAK app may report a
-    // patch version such as 5.6.0.23, but the plugin API requirement remains
-    // 5.6.0. Developers can set atak.version=5.8.0 in local.properties or pass
-    // -Patak.version=5.8.0 when testing against ATAK 5.8.
+    // Default to the ATAK 5.6 plugin API, matching the SDK at the repo root
+    // (ATAK CIV 5.6.0.24). The installed ATAK app may report a patch version
+    // such as 5.6.0.24, but the plugin API requirement remains 5.6.0.
+    // Developers can set atak.version=<x.y.z> in local.properties or pass
+    // -Patak.version=<x.y.z> when testing against another ATAK release.
     ext.ATAK_VERSION = getProperty('atak.version', '5.6.0')
 
     repositories {
@@ -253,8 +254,8 @@ android {
         }
     }
 
-    // ATAK 5.8 performs an inner signing check. Keeping the store archive out
-    // of app bundles matches the 5.8 SDK template and prevents load failures.
+    // ATAK performs an inner signing check. Keeping the store archive out of
+    // app bundles matches the SDK template and prevents load failures.
     bundle {
         storeArchive {
             enable = false

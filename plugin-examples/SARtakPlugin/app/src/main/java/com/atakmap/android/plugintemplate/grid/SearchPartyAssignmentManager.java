@@ -577,18 +577,31 @@ public class SearchPartyAssignmentManager {
         }
     }
 
+    /**
+     * Spreads the team across the cell into lanes abreast of the search line.
+     *
+     * <p>Lanes are divided across the line, which is the easting axis only
+     * while the team is walking north or south. {@code direction} is therefore
+     * required rather than assumed: dividing along easting for an east-bound
+     * team would stack every lane along their own direction of travel, putting
+     * the whole team in single file down one strip of ground.
+     */
     public void arrangeMembersForCell(SearchGridCell cell,
             GridCoordinateConverter converter, GeoPoint leaderPoint,
-            double lineNorthing) {
+            double lineOffset, SearchLineDirection direction) {
         if (cell == null || leaderPoint == null || !leaderPoint.isValid())
             return;
+        if (direction == null)
+            direction = SearchLineDirection.NORTH;
 
         List<SearchTeamMember> laneMembers = getLaneMembers();
         int laneCount = Math.max(1, laneMembers.size());
-        double laneWidth = (cell.getEast() - cell.getWest()) / laneCount;
+        double laneAxisMin = direction.lineMin(cell);
+        double laneWidth = (direction.lineMax(cell) - laneAxisMin) / laneCount;
         UTMPoint leaderUtm = UTMPoint.fromGeoPoint(leaderPoint);
-        int leaderLaneIndex = clamp((int) Math.floor((leaderUtm.getEasting()
-                - cell.getWest()) / laneWidth), 0, laneCount - 1);
+        int leaderLaneIndex = clamp((int) Math.floor((direction.lineCoordinate(
+                leaderUtm.getEasting(), leaderUtm.getNorthing())
+                - laneAxisMin) / laneWidth), 0, laneCount - 1);
 
         SearchTeamMember leader = findMemberById(selfMemberId);
         if (leader != null && leader.contributesLane()) {
@@ -623,8 +636,9 @@ public class SearchPartyAssignmentManager {
                     member.getLongitude(), member.getHeadingDegrees(),
                     cell.getId(), formatDistance(distance(leaderUtm,
                             memberPoint)),
-                    formatLineOffset(memberPoint.getNorthing()
-                            - lineNorthing));
+                    formatLineOffset(direction.progressMeters(
+                            memberPoint.getEasting(),
+                            memberPoint.getNorthing(), lineOffset)));
         }
     }
 
@@ -850,11 +864,13 @@ public class SearchPartyAssignmentManager {
         return Math.round(meters) + " m";
     }
 
+    /**
+     * Only reached for a member with a live fix, so the position is known by
+     * construction -- see the {@code hasLiveAtakContact} guard in
+     * {@link #arrangeMembersForCell}.
+     */
     private String formatLineOffset(double meters) {
-        long rounded = Math.round(Math.abs(meters));
-        if (rounded <= 2)
-            return "On line";
-        return rounded + " m " + (meters > 0 ? "ahead" : "behind");
+        return MemberPositionPolicy.lineDistanceLabel(true, meters);
     }
 
     private double distance(UTMPoint first, UTMPoint second) {

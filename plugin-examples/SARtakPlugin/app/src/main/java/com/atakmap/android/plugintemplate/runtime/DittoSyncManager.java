@@ -4,6 +4,7 @@ import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
+import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
@@ -488,7 +489,10 @@ public class DittoSyncManager {
         document.put("south", cell == null ? 0.0 : cell.getSouth());
         document.put("east", cell == null ? 0.0 : cell.getEast());
         document.put("north", cell == null ? 0.0 : cell.getNorth());
-        document.put("lineNorthing", message.getLineNorthing());
+        document.put("direction", message.getDirection().name());
+        document.put("lineOffset", message.getLineOffset());
+        // Kept under the old name for peers that predate directional lines.
+        document.put("lineNorthing", message.getLineOffset());
         document.put("color", message.getColorOption().name());
         document.put("tolerance", message.getToleranceMeters());
         document.put("created", message.getCreated());
@@ -1008,11 +1012,14 @@ public class DittoSyncManager {
                 object.optDouble("south", 0.0),
                 object.optDouble("east", 0.0),
                 object.optDouble("north", 0.0),
-                object.optDouble("lineNorthing", 0.0),
+                object.optDouble("lineOffset",
+                        object.optDouble("lineNorthing", 0.0)),
                 lineColorValue(object.optString("color", "")),
                 object.optDouble("tolerance", 0.0),
                 object.optLong("created", 0L),
-                object.optString("operationId", ""));
+                object.optString("operationId", ""),
+                SearchLineDirection.fromName(
+                        object.optString("direction", "")));
     }
 
     private void updateSharedMapMarkers(List<String> jsonDocuments) {

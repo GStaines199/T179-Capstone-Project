@@ -631,6 +631,21 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
+                        android:text="@string/search_line_direction" />
+
+                    <Button
+                        android:id="@+id/search_line_direction_button"
+                        style="@style/SARtakActionButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/search_line_direction" />
+
+                    <TextView
+                        style="@style/SARtakLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
                         android:text="@string/search_line_colour" />
 
                     <Button

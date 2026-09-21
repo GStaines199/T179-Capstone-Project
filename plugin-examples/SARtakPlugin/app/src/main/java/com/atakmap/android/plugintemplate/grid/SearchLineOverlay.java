@@ -66,20 +66,71 @@ public class SearchLineOverlay {
         renderSlowDownMarkers(manager.getMemberStatuses());
     }
 
+    /**
+     * Draws the arrow showing which way the line is advancing.
+     *
+     * <p>The shaft alone was ambiguous: a plain segment crossing the line
+     * reads the same whichever end the team is walking towards, and it was
+     * labelled only "Direction". Barbs at the tip and the compass name in the
+     * label make it answerable at a glance, which is the point of drawing it.
+     */
     private void renderDirectionIndicator(SearchLineManager manager) {
         GeoPoint start = manager.getDirectionStart();
         GeoPoint end = manager.getDirectionEnd();
         if (start == null || end == null)
             return;
+        int color = Color.argb(220, 255, 255, 255);
         DrawingShape direction = createLine("Search Direction",
-                new GeoPoint[] { start, end },
-                Color.argb(220, 255, 255, 255), 3.0);
+                new GeoPoint[] { start, end }, color, 3.0);
         direction.setMetaString("sartak.kind", "search-line-direction");
         lineGroup.addItem(direction);
-        Marker label = createLabel("Direction", end,
-                Color.argb(220, 255, 255, 255));
+        renderArrowHead(start, end, color);
+
+        Marker label = createLabel(manager.getDirectionLabel(), end, color);
         label.setMetaString("sartak.kind", "search-line-direction-label");
         lineGroup.addItem(label);
+    }
+
+    /**
+     * Two barbs swept back from the tip of the direction arrow.
+     *
+     * <p>Built in latitude and longitude rather than UTM because the overlay
+     * has no converter and needs none: the barbs only have to look like an
+     * arrowhead, and at the fourteen-metre scale of this arrow the difference
+     * from true bearings is not visible. The longitude component is divided by
+     * cos(latitude) so the barbs stay symmetric away from the equator instead
+     * of splaying as the map is searched further south.
+     */
+    private void renderArrowHead(GeoPoint start, GeoPoint end, int color) {
+        double latScale = Math.cos(Math.toRadians(end.getLatitude()));
+        if (latScale < 0.01)
+            latScale = 0.01;
+        double dLat = end.getLatitude() - start.getLatitude();
+        double dLon = (end.getLongitude() - start.getLongitude()) * latScale;
+        double length = Math.sqrt(dLat * dLat + dLon * dLon);
+        if (length <= 0.0)
+            return;
+
+        double unitLat = dLat / length;
+        double unitLon = dLon / length;
+        double barb = length * 0.35;
+        // Rotate the reversed unit vector by +/- 30 degrees to get the barbs.
+        double cos = Math.cos(Math.toRadians(30.0));
+        double sin = Math.sin(Math.toRadians(30.0));
+        addBarb(end, -unitLat, -unitLon, cos, sin, barb, latScale, color);
+        addBarb(end, -unitLat, -unitLon, cos, -sin, barb, latScale, color);
+    }
+
+    private void addBarb(GeoPoint tip, double unitLat, double unitLon,
+            double cos, double sin, double barb, double latScale, int color) {
+        double lat = unitLat * cos - unitLon * sin;
+        double lon = unitLat * sin + unitLon * cos;
+        GeoPoint tail = new GeoPoint(tip.getLatitude() + lat * barb,
+                tip.getLongitude() + lon * barb / latScale);
+        DrawingShape shape = createLine("Search direction barb",
+                new GeoPoint[] { tip, tail }, color, 3.0);
+        shape.setMetaString("sartak.kind", "search-line-direction");
+        lineGroup.addItem(shape);
     }
 
     private void renderMemberReturnMarks(List<SearchLineMemberStatus> statuses,

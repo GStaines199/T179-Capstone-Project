@@ -24,6 +24,7 @@ import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
+import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchLineManager;
 import com.atakmap.android.plugintemplate.grid.SearchLineOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
@@ -294,6 +295,33 @@ public class SARTakMapController {
         searchLineManager.setReturnMarkToleranceMeters(toleranceMeters);
         publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
+    }
+
+    /**
+     * Turns the search line to a new compass direction.
+     *
+     * <p>Re-arranges the team as well as re-aiming the line, because the lanes
+     * are divided across the line: keeping the old arrangement after a turn
+     * would leave the team strung out along their new direction of travel
+     * rather than abreast of it.
+     */
+    public void setSearchLineDirection(SearchLineDirection direction) {
+        searchLineManager.setDirection(direction, getCurrentUserPoint());
+        arrangeTeamMembers();
+        publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
+        refreshOverlay();
+    }
+
+    public SearchLineDirection getSearchLineDirection() {
+        return searchLineManager.getDirection();
+    }
+
+    public int getSearchLineDirectionIndex() {
+        return searchLineManager.getDirection().ordinal();
+    }
+
+    public String getSearchLineDirectionLabel() {
+        return searchLineManager.getDirectionLabel();
     }
 
     public boolean sendTeamAlert(String alertType) {
@@ -1689,10 +1717,10 @@ public class SARTakMapController {
         GeoPoint leaderPoint = getCurrentUserPoint();
         if (leaderPoint == null)
             return;
-        double lineNorthing = searchLineManager.getArrangementNorthing(cell,
+        double lineOffset = searchLineManager.getArrangementOffset(cell,
                 leaderPoint);
         assignmentManager.arrangeMembersForCell(cell, converter, leaderPoint,
-                lineNorthing);
+                lineOffset, searchLineManager.getDirection());
     }
 
     private SearchGridCell ensureSelectedCell() {

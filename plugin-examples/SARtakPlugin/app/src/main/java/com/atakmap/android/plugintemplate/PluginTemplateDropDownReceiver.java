@@ -34,6 +34,7 @@ import android.widget.Toast;
 import com.atak.plugins.impl.PluginLayoutInflater;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
+import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
@@ -89,6 +90,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button pauseSearchLineButton;
     private final Switch toggleCallsignsSwitch;
     private final Button searchLineColourButton;
+    private final Button searchLineDirectionButton;
     private final Button saveTeamSetupButton;
     private final Button removeTeamButton;
     private final Button createOperationButton;
@@ -208,6 +210,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.toggle_callsigns_button);
         searchLineColourButton = templateView
                 .findViewById(R.id.search_line_colour_button);
+        searchLineDirectionButton = templateView
+                .findViewById(R.id.search_line_direction_button);
         saveTeamSetupButton = templateView
                 .findViewById(R.id.save_team_setup_button);
         removeTeamButton = templateView
@@ -311,6 +315,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         startSearchLineButton.setOnClickListener(this);
         pauseSearchLineButton.setOnClickListener(this);
         searchLineColourButton.setOnClickListener(this);
+        searchLineDirectionButton.setOnClickListener(this);
         saveTeamSetupButton.setOnClickListener(this);
         removeTeamButton.setOnClickListener(this);
         createOperationButton.setOnClickListener(this);
@@ -391,6 +396,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             handlePauseResumeSearchLine();
         } else if (id == R.id.search_line_colour_button) {
             showLineColourDialog();
+        } else if (id == R.id.search_line_direction_button) {
+            showLineDirectionDialog();
         } else if (id == R.id.save_team_setup_button) {
             if (leaderView) {
                 if (mapController.isTeamCreated())
@@ -611,6 +618,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 mapController.isShowingTeamCallsigns());
         searchLineColourButton.setText("Line Colour: "
                 + mapController.getSearchLineColorLabel());
+        searchLineDirectionButton.setText("Direction: "
+                + mapController.getSearchLineDirectionLabel());
         String toleranceText = String.valueOf(Math.round(mapController
                 .getSearchLineToleranceMeters()));
         if (!toleranceText.contentEquals(searchLineToleranceInput.getText())) {
@@ -620,6 +629,48 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     .getText().length());
             suppressToleranceUpdate = false;
         }
+    }
+
+    /**
+     * Lets the leader re-aim the search line.
+     *
+     * <p>Turning the line re-anchors it to where the leader is standing and
+     * re-arranges the team abreast of the new heading, so the toast names the
+     * new direction rather than confirming silently -- the map moves
+     * underneath the team when this is tapped.
+     */
+    private void showLineDirectionDialog() {
+        final SearchLineDirection[] values = SearchLineDirection.values();
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Search direction")
+                .setSingleChoiceItems(getLineDirectionLabels(),
+                        mapController.getSearchLineDirectionIndex(),
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                if (which >= 0 && which < values.length) {
+                                    mapController.setSearchLineDirection(
+                                            values[which]);
+                                    Toast.makeText(getMapView().getContext(),
+                                            "Search direction: "
+                                                    + values[which].getLabel(),
+                                            Toast.LENGTH_SHORT).show();
+                                    refreshGridUi();
+                                }
+                                dialog.dismiss();
+                            }
+                        })
+                .show();
+    }
+
+    private String[] getLineDirectionLabels() {
+        SearchLineDirection[] values = SearchLineDirection.values();
+        String[] labels = new String[values.length];
+        for (int i = 0; i < values.length; i++) {
+            labels[i] = values[i].getLabel();
+        }
+        return labels;
     }
 
     private void showLineColourDialog() {

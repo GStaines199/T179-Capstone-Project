@@ -50,15 +50,24 @@ public final class MemberPositionPolicy {
      * searcher whose position was unknown was therefore shown as being exactly
      * where they should be. Position must be resolved before formatting, never
      * inferred from the number.
+     *
+     * <p>The compact form: distance and side only, with no instruction
+     * attached. Where there is room to tell a searcher what to do about it,
+     * use {@link SearchLineGuidance#guidanceLabel} instead. Both classify the
+     * distance through {@link SearchLineGuidance#bandFor} so that the
+     * threshold for "on line" cannot drift between them -- it was written out
+     * by hand in three places before.
      */
     public static String lineDistanceLabel(boolean positionKnown,
             double distanceMeters) {
-        if (!positionKnown || Double.isNaN(distanceMeters))
+        SearchLineGuidance.Band band = SearchLineGuidance.bandFor(
+                positionKnown, distanceMeters);
+        if (band == SearchLineGuidance.Band.UNKNOWN)
             return UNKNOWN_POSITION_LABEL;
-        long rounded = Math.round(Math.abs(distanceMeters));
-        if (rounded <= 2)
-            return "On line";
-        return rounded + " m " + (distanceMeters > 0 ? "ahead" : "behind");
+        if (band == SearchLineGuidance.Band.ON_LINE)
+            return SearchLineGuidance.Band.ON_LINE.getLabel();
+        return Math.round(Math.abs(distanceMeters)) + " m "
+                + (distanceMeters > 0 ? "ahead" : "behind");
     }
 
     /**

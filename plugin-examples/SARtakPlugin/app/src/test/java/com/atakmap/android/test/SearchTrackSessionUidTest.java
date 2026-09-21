@@ -24,9 +24,13 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Unit tests for the track-session UID generated when a searcher's GNSS
- * capture starts: {@code track-<uid>-<random UUID>}, one active session per
- * searcher UID, reused across restarts and regenerated after the track is
- * cleared.
+ * capture starts: {@code track-<operation>-<uid>-<random UUID>}, one active
+ * session per searcher UID, reused across restarts and regenerated after the
+ * track is cleared.
+ * <p>
+ * Track logging is operation-scoped, so the manager records nothing until
+ * {@link SearchTrackManager#setOperationId(String)} has been called - see
+ * SARTakMapController, which does this when an operation is joined.
  * <p>
  * Dependencies (build.gradle):
  *   testImplementation 'junit:junit:4.13.2'
@@ -36,6 +40,7 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = 26, manifest = Config.NONE)
 public class SearchTrackSessionUidTest {
 
+    private static final String OPERATION_ID = "op-7f3a";
     private static final String UID = "ANDROID-1234567890abcdef";
     private static final String CALLSIGN = "ALPHA";
     private static final String OTHER_UID = "ANDROID-fedcba0987654321";
@@ -52,6 +57,7 @@ public class SearchTrackSessionUidTest {
         sessions = new TrackSessionRepository(dbHelper);
         manager = new SearchTrackManager(sessions,
                 new LocationRepository(dbHelper));
+        manager.setOperationId(OPERATION_ID);
     }
 
     @After
@@ -136,9 +142,12 @@ public class SearchTrackSessionUidTest {
         assertNull(manager.getActiveSessionId());
     }
 
-    /** Asserts a session id is "track-&lt;uid&gt;-&lt;random UUID&gt;". */
+    /**
+     * Asserts a session id is
+     * "track-&lt;operation&gt;-&lt;uid&gt;-&lt;random UUID&gt;".
+     */
     private static void assertSessionUid(String expectedUid, String sessionId) {
-        String prefix = "track-" + expectedUid + "-";
+        String prefix = "track-" + OPERATION_ID + "-" + expectedUid + "-";
         assertTrue("unexpected session id: " + sessionId,
                 sessionId.startsWith(prefix));
 

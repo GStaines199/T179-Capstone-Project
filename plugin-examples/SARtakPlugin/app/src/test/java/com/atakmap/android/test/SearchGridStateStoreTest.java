@@ -14,14 +14,23 @@ import org.mockito.junit.MockitoJUnitRunner;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @RunWith(MockitoJUnitRunner.class)
 public class SearchGridStateStoreTest {
 
+    /**
+     * Grid state is operation-scoped: the store reads and writes nothing
+     * until an operation id is set (SARTakMapController does this when an
+     * operation is created or joined), and the id is part of the pref key so
+     * two operations cannot overwrite each other's cell status.
+     */
+    private static final String OPERATION_ID = "op-7f3a";
     private static final String CELL_ID = "cell_42";
-    private static final String PREF_KEY = "cell." + CELL_ID;
+    private static final String PREF_KEY =
+            "cell." + OPERATION_ID + "." + CELL_ID;
 
     @Mock
     private Context mockContext;
@@ -53,6 +62,7 @@ public class SearchGridStateStoreTest {
                 .thenReturn(mockPreferences);
 
         store = new SearchGridStateStore(mockContext);
+        store.setOperationId(OPERATION_ID);
     }
 
     @Test
@@ -92,6 +102,15 @@ public class SearchGridStateStoreTest {
         assertEquals(PREF_KEY, keyCaptor.getValue());
         assertEquals(SearchGridStatus.IN_PROGRESS.name(), valueCaptor.getValue());
         verify(mockEditor).apply();
+    }
+
+    @Test
+    public void setStatus_withNoOperation_writesNothing() {
+        SearchGridStateStore unscoped = new SearchGridStateStore(mockContext);
+
+        unscoped.setStatus(CELL_ID, SearchGridStatus.IN_PROGRESS);
+
+        verify(mockEditor, never()).putString(anyString(), anyString());
     }
 
     @Test

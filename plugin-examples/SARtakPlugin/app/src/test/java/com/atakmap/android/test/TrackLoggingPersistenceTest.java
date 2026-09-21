@@ -67,6 +67,14 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = 26, manifest = Config.NONE)
 public class TrackLoggingPersistenceTest {
 
+    /**
+     * Track logging is operation-scoped, so the manager records nothing until
+     * an operation id is set. A real restart re-applies it from the restored
+     * operation (SARTakMapController), so {@link #open()} does the same and
+     * the session prefix stays stable across the simulated restart.
+     */
+    private static final String OPERATION_ID = "op-7f3a";
+
     private static final String UID = "ANDROID-1234567890abcdef";
     private static final String CALLSIGN = "ALPHA";
     private static final String OTHER_UID = "ANDROID-fedcba0987654321";
@@ -97,6 +105,7 @@ public class TrackLoggingPersistenceTest {
         locations = new LocationRepository(dbHelper);
         sessions = new TrackSessionRepository(dbHelper);
         tracks = new SearchTrackManager(sessions, locations);
+        tracks.setOperationId(OPERATION_ID);
     }
 
     /**

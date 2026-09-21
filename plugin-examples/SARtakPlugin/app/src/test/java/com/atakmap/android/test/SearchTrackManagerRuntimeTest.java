@@ -24,6 +24,13 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = 26, manifest = Config.NONE)
 public class SearchTrackManagerRuntimeTest {
 
+    /**
+     * Track logging is operation-scoped: the manager records nothing and
+     * reports no session until an operation id is set, which
+     * SARTakMapController does when an operation is created or joined.
+     */
+    private static final String OPERATION_ID = "op-7f3a";
+
     private DatabaseHelper dbHelper;
     private SearchTrackManager manager;
 
@@ -33,6 +40,7 @@ public class SearchTrackManagerRuntimeTest {
         dbHelper = new DatabaseHelper(context);
         manager = new SearchTrackManager(new TrackSessionRepository(dbHelper),
                 new LocationRepository(dbHelper));
+        manager.setOperationId(OPERATION_ID);
     }
 
     @After
@@ -93,6 +101,19 @@ public class SearchTrackManagerRuntimeTest {
     }
 
     @Test
+    public void getStatusSummary_withNoOperation_asksForAnOperation() {
+        SearchTrackManager unscoped = new SearchTrackManager(
+                new TrackSessionRepository(dbHelper),
+                new LocationRepository(dbHelper));
+
+        unscoped.startOrResume("uid1", "Alpha");
+
+        assertEquals("Waiting for active operation",
+                unscoped.getStatusSummary());
+        assertNull(unscoped.getActiveSessionId());
+    }
+
+    @Test
     public void getStatusSummary_whenRecording_returnsRecordingMessage() {
         manager.startOrResume("uid1", "Alpha");
 
@@ -129,7 +150,8 @@ public class SearchTrackManagerRuntimeTest {
         String summary = manager.getDetailsSummary();
 
         assertTrue(summary.contains("Track points: 1"));
-        assertTrue(summary.contains("Session: track-uid1-"));
+        assertTrue(summary.contains("Session: track-" + OPERATION_ID
+                + "-uid1-"));
         assertTrue(summary.contains("Visibility: Shown on map"));
     }
 

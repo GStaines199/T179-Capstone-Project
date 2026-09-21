@@ -157,12 +157,21 @@ android {
             storePassword getOptionalLocalProperty("takDebugKeyFilePassword") ?: "android"
             keyAlias getOptionalLocalProperty("takDebugKeyAlias") ?: "androiddebugkey"
             keyPassword getOptionalLocalProperty("takDebugKeyPassword") ?: "android"
+            // ATAK's plugin loader is the consumer here, and every reference
+            // template in this repo ships v1-signed (AGP 4.2.2 / minSdk 21).
+            // AGP drops v1 by default once minSdk >= 24, which this module now
+            // is, so set both explicitly rather than inheriting that default.
+            enableV1Signing true
+            enableV2Signing true
         }
         release {
             storeFile file(getOptionalLocalProperty("takReleaseKeyFile") ?: getOptionalLocalProperty("takDebugKeyFile") ?: "${System.properties['user.home']}/.android/debug.keystore")
             storePassword getOptionalLocalProperty("takReleaseKeyFilePassword") ?: getOptionalLocalProperty("takDebugKeyFilePassword") ?: "android"
             keyAlias getOptionalLocalProperty("takReleaseKeyAlias") ?: getOptionalLocalProperty("takDebugKeyAlias") ?: "androiddebugkey"
             keyPassword getOptionalLocalProperty("takReleaseKeyPassword") ?: getOptionalLocalProperty("takDebugKeyPassword") ?: "android"
+            // v1 kept on for ATAK's loader - see note on the debug config above.
+            enableV1Signing true
+            enableV2Signing true
         }
     }
 

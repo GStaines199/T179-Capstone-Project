@@ -97,6 +97,7 @@ public class TrackLoggingPersistenceTest {
         locations = new LocationRepository(dbHelper);
         sessions = new TrackSessionRepository(dbHelper);
         tracks = new SearchTrackManager(sessions, locations);
+        tracks.setOperationId("operation-persistence-test");
     }
 
     /**

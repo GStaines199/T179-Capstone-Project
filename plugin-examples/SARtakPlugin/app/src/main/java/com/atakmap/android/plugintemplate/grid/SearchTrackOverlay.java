@@ -18,7 +18,9 @@ public class SearchTrackOverlay {
     private final MapView mapView;
     private MapGroup trackGroup;
     private boolean visible = true;
-    private String lastRenderKey = "";public SearchTrackOverlay(MapView mapView) {
+    private String lastRenderKey = "";
+
+    public SearchTrackOverlay(MapView mapView) {
         this.mapView = mapView;
     }
 

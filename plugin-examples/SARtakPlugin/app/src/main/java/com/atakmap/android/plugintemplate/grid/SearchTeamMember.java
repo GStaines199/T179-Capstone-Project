@@ -25,7 +25,7 @@ public class SearchTeamMember {
     }
 
     private final String uniqueId;
-    private final String callsign;
+    private String callsign;
     private TeamRole role;
     private String colorName;
     private int displayColor;
@@ -81,6 +81,11 @@ public class SearchTeamMember {
 
     public String getCallsign() {
         return callsign;
+    }
+
+    public void setCallsign(String callsign) {
+        if (callsign != null && callsign.trim().length() > 0)
+            this.callsign = callsign.trim();
     }
 
     public TeamRole getRole() {

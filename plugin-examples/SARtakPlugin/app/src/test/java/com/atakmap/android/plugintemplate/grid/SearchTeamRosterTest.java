@@ -205,6 +205,18 @@ public class SearchTeamRosterTest {
     }
 
     @Test
+    public void setSelfIdentity_refreshesCallsignForTheSameUid() {
+        manager.setTeamCreated(true);
+        manager.setSelfIdentity(SELF_UID, SELF_CALLSIGN);
+
+        manager.setSelfIdentity(SELF_UID, "Rescue One Updated");
+
+        assertEquals("Rescue One Updated",
+                manager.getSelfMember().getCallsign());
+        assertEquals(1, manager.getVisibleMembers().size());
+    }
+
+    @Test
     public void setSelfIdentity_retiresThePreviousSelfWhenTheUidChanges() {
         manager.setTeamCreated(true);
         manager.setSelfIdentity(SELF_UID, SELF_CALLSIGN);

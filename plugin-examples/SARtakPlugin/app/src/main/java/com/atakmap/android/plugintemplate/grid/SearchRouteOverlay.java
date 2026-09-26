@@ -15,13 +15,15 @@ import java.util.UUID;
 public class SearchRouteOverlay {
 
     private static final String GROUP_NAME = "SARtak Search Route Overlay";
-    private static final double DASHES_PER_LEG = 8.0;
-    private static final int MAX_RENDERED_LEGS = 600;
+    private static final double DASHES_PER_LEG = 4.0;
+    private static final int MAX_RENDERED_LEGS = 250;
 
     private final MapView mapView;
     private MapGroup routeGroup;
     private boolean visible = true;
-    private String lastRenderKey = "";public SearchRouteOverlay(MapView mapView) {
+    private String lastRenderKey = "";
+
+    public SearchRouteOverlay(MapView mapView) {
         this.mapView = mapView;
     }
 
@@ -81,8 +83,6 @@ public class SearchRouteOverlay {
                 .append(plan == null ? 0L : plan.getUpdatedAt()).append('|')
                 .append(color).append('|')
                 .append(routeCells.size()).append('|');
-        for (SearchGridCell cell : routeCells)
-            builder.append(cell.getId()).append(',');
         return builder.toString();
     }
     private void renderDottedLeg(GeoPoint start, GeoPoint end, int legIndex,

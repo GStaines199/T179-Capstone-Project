@@ -141,6 +141,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView searchLineStatusValue;
     private final TextView searchLineMembersValue;
     private final TextView pluginHealthValue;
+    private final TextView currentOperationValue;
     private final TextView operationSummaryValue;
     private final TextView dittoCredentialValue;
     private final TextView readinessChecklistValue;
@@ -313,6 +314,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.search_line_members_value);
         pluginHealthValue = templateView.findViewById(
                 R.id.plugin_health_value);
+        currentOperationValue = templateView.findViewById(
+                R.id.current_operation_value);
         operationSummaryValue = templateView.findViewById(
                 R.id.operation_summary_value);
         dittoCredentialValue = templateView.findViewById(
@@ -659,6 +662,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         searchLineStatusValue.setText(searchLineSummary);
         searchLineMembersValue.setText(searchLineMembers);
         pluginHealthValue.setText(mapController.getPluginHealthSummary());
+        currentOperationValue.setText(mapController.getOperationHeadline());
         operationSummaryValue.setText(mapController.getOperationSummary());
         operationSummaryValue.setTextColor(hasOperation
                 ? Color.rgb(66, 195, 106)
@@ -1550,27 +1554,39 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         input.setSingleLine(false);
         input.setMinLines(3);
         input.setHint("Paste SARtak operation join code");
-        new AlertDialog.Builder(getMapView().getContext())
+        final AlertDialog dialog = new AlertDialog.Builder(
+                getMapView().getContext())
                 .setTitle("Join Operation")
                 .setMessage("Paste the join code from the operation organiser. Team setup will start after this device joins the operation.")
                 .setView(input)
-                .setPositiveButton("Join",
-                        new DialogInterface.OnClickListener() {
+                .setPositiveButton("Join", null)
+                .setNegativeButton("Cancel", null)
+                .create();
+        dialog.setOnShowListener(new DialogInterface.OnShowListener() {
+            @Override
+            public void onShow(DialogInterface ignored) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                        .setOnClickListener(new View.OnClickListener() {
                             @Override
-                            public void onClick(DialogInterface dialog,
-                                    int which) {
+                            public void onClick(View view) {
                                 boolean joined = mapController
                                         .joinOperationFromCode(input.getText()
                                                 .toString().trim());
+                                if (!joined) {
+                                    input.setError("Enter a valid SARtak operation code");
+                                    input.requestFocus();
+                                    return;
+                                }
                                 Toast.makeText(getMapView().getContext(),
-                                        joined ? "Operation joined"
-                                                : "Invalid operation code",
+                                        "Operation joined",
                                         Toast.LENGTH_LONG).show();
+                                dialog.dismiss();
                                 refreshGridUi();
                             }
-                        })
-                .setNegativeButton("Cancel", null)
-                .show();
+                        });
+            }
+        });
+        dialog.show();
     }
 
     private void startOperationQrScanner() {
@@ -2680,9 +2696,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
     private EditText addDialogInput(LinearLayout content, String label,
             String value, boolean singleLine) {
-        addDialogLabel(content, label);
+        TextView labelView = addDialogLabel(content, label);
 
         EditText input = new EditText(getMapView().getContext());
+        input.setId(View.generateViewId());
+        input.setHint(label);
+        labelView.setLabelFor(input.getId());
         input.setText(value);
         input.setSingleLine(singleLine);
         if (!singleLine)
@@ -2726,7 +2745,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         return spinner.getSelectedItem().toString();
     }
 
-    private void addDialogLabel(LinearLayout content, String label) {
+    private TextView addDialogLabel(LinearLayout content, String label) {
         TextView labelView = new TextView(getMapView().getContext());
         labelView.setText(label);
         labelView.setTextColor(Color.LTGRAY);
@@ -2736,6 +2755,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         labelParams.setMargins(0, dp(8), 0, 0);
         content.addView(labelView, labelParams);
+        return labelView;
     }
 
     private void updateDittoProfileEditorHints(Spinner connectionTypeInput,

@@ -6,11 +6,15 @@ import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.UUID;
 
 
 public class SearchTrackManager {
+
+    private static final int MAX_DISPLAY_TRACK_POINTS = 1500;
 
     private final TrackSessionRepository trackSessionRepository;
     private final LocationRepository locationRepository;
@@ -21,6 +25,8 @@ public class SearchTrackManager {
     private String activeCallsign;
     private String operationId = "";
     private long sessionStartedAt;
+    private List<double[]> cachedTrackPoints = Collections.emptyList();
+    private boolean trackCacheDirty = true;
 
     public SearchTrackManager(TrackSessionRepository trackSessionRepository,
             LocationRepository locationRepository) {
@@ -50,6 +56,7 @@ public class SearchTrackManager {
         }
         activeSessionId = existingSession;
         recording = true;
+        trackCacheDirty = true;
     }
 
     public void setOperationId(String operationId) {
@@ -59,6 +66,8 @@ public class SearchTrackManager {
         this.operationId = nextOperationId;
         activeSessionId = null;
         sessionStartedAt = 0L;
+        cachedTrackPoints = Collections.emptyList();
+        trackCacheDirty = true;
         if (activeUid != null && activeCallsign != null && recording)
             startOrResume(activeUid, activeCallsign);
     }
@@ -142,6 +151,7 @@ public class SearchTrackManager {
                 || !activeUid.equals(uid))
             startOrResume(uid, callsign);
 
+        boolean cacheWasCurrent = !trackCacheDirty;
         locationRepository.insertFix(uid, callsign, latitude, longitude,
                 ReportedMeasurement.of(altitude),
                 ReportedMeasurement.toFloat(accuracy),
@@ -149,12 +159,28 @@ public class SearchTrackManager {
                 ReportedMeasurement.toFloat(speed), timestamp,
                 activeSessionId);
         trackSessionRepository.incrementPointCount(activeSessionId);
+        if (cacheWasCurrent) {
+            List<double[]> updated = new ArrayList<>(cachedTrackPoints);
+            updated.add(new double[] {latitude, longitude, timestamp,
+                    accuracy == null ? Double.NaN : accuracy});
+            if (updated.size() > MAX_DISPLAY_TRACK_POINTS)
+                updated = new ArrayList<>(updated.subList(updated.size()
+                        - MAX_DISPLAY_TRACK_POINTS, updated.size()));
+            cachedTrackPoints = updated;
+        } else {
+            trackCacheDirty = true;
+        }
     }
 
     public List<double[]> getTrackPoints() {
         if (activeSessionId == null)
-            return java.util.Collections.emptyList();
-        return locationRepository.getPointsForSession(activeSessionId);
+            return Collections.emptyList();
+        if (trackCacheDirty) {
+            cachedTrackPoints = locationRepository.getPointsForSession(
+                    activeSessionId);
+            trackCacheDirty = false;
+        }
+        return new ArrayList<>(cachedTrackPoints);
     }
 
     public String getStatusSummary() {
@@ -239,6 +265,8 @@ public class SearchTrackManager {
             );
             activeSessionId = null;
             sessionStartedAt = 0L;
+            cachedTrackPoints = Collections.emptyList();
+            trackCacheDirty = true;
         }
     }
 }

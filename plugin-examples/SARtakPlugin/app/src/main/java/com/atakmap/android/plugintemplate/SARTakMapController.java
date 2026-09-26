@@ -89,6 +89,7 @@ public class SARTakMapController {
     private static final int MAX_ROUTE_RANGE_CELLS = 1200;
     private static final long MAP_REFRESH_DEBOUNCE_MS = 250L;
     private static final long BACKGROUND_REFRESH_INTERVAL_MS = 8000L;
+    private static final long DEFERRED_SERVICE_START_MS = 3000L;
 
     private final MapView mapView;
     private final GridCoordinateConverter converter;
@@ -124,6 +125,7 @@ public class SARTakMapController {
     private final Handler overlayHandler = new Handler(Looper.getMainLooper());
     private final Runnable backgroundRunnable;
     private final Runnable deferredOverlayRunnable;
+    private final Runnable deferredServiceStartRunnable;
     private final java.util.Map<String, Long> rosterJoinTimes =
             new java.util.HashMap<>();
     private final java.util.Map<String, Long> inactiveMembershipTimes =
@@ -139,6 +141,7 @@ public class SARTakMapController {
     private SearchGridCell routeSelectionAnchor;
     private String routeSelectionHint = "Route selection off";
     private SearchLineColorOption gridColorOption = SearchLineColorOption.CYAN;
+    private volatile boolean disposed;
 
     public SARTakMapController(MapView mapView, Context pluginContext) {
         this.mapView = mapView;
@@ -193,7 +196,9 @@ public class SARTakMapController {
         this.dittoAtakContactBridge = new DittoAtakContactBridge(mapView);
         this.sharedMapMarkerSyncManager = new SharedMapMarkerSyncManager(
                 mapView, identityManager, dittoSyncManager);
-        this.dittoSyncManager.useOperationProfile(activeOperationProfile);
+        // Merely restoring an operation must not start Ditto while ATAK is
+        // still constructing plugins on its main thread.
+        this.dittoSyncManager.prepareOperationProfile(activeOperationProfile);
         this.teamCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.gridCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.searchLineCotWorkflow.setDittoSyncManager(dittoSyncManager);
@@ -203,7 +208,7 @@ public class SARTakMapController {
                 new RawGnssCaptureManager.Listener() {
                     @Override
                     public void onRawGnssCaptured(RawGnssCapture capture) {
-                        refreshOverlay();
+                        scheduleOverlayRefresh();
                     }
                 });
         this.locationCaptureManager = new LocationCaptureManager(mapView,
@@ -211,7 +216,7 @@ public class SARTakMapController {
                 new LocationCaptureManager.Listener() {
                     @Override
                     public void onLocationCaptured() {
-                        refreshOverlay();
+                        scheduleOverlayRefresh();
                     }
                 });
         this.mapEventListener = new MapEventDispatcher.MapEventDispatchListener() {
@@ -236,12 +241,43 @@ public class SARTakMapController {
                         BACKGROUND_REFRESH_INTERVAL_MS);
             }
         };
+        this.deferredServiceStartRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (disposed)
+                    return;
+                Thread worker = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            dittoSyncManager.start();
+                        } catch (Throwable throwable) {
+                            Log.w(TAG, "Deferred SARtak service startup failed",
+                                    throwable);
+                            healthManager.reportNotCapturing(
+                                    "Sync startup failed: " + throwable
+                                            .getClass().getSimpleName());
+                        } finally {
+                            if (!disposed)
+                                backgroundHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (!disposed)
+                                            startBackgroundRefresh();
+                                    }
+                                });
+                        }
+                    }
+                }, "SARtak-Ditto-Startup");
+                worker.setDaemon(true);
+                worker.start();
+            }
+        };
         try {
             registerMapListeners();
             initialiseRuntime();
-            startBackgroundRefresh();
-            teamMarkerOverlay.render();
-            trackOverlay.render(trackManager.getTrackPoints());
+            backgroundHandler.postDelayed(deferredServiceStartRunnable,
+                    DEFERRED_SERVICE_START_MS);
         } catch (Throwable throwable) {
             Log.w(TAG, "SARtak runtime startup failed", throwable);
             healthManager.setTrackingActive(false);
@@ -531,10 +567,16 @@ public class SARTakMapController {
     public String getAlertAckSummary(SearchAlertMessage alert) {
         if (alert == null)
             return "No alert selected";
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        String selfCallsign = identity == null ? "" : identity.getCallsign();
         java.util.Set<String> expected = new java.util.LinkedHashSet<>();
         java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
-            if (member.getUniqueId().equals(alert.getSenderUid()))
+            if (matchesMember(member.getUniqueId(), member.getCallsign(),
+                    alert.getSenderUid(), alert.getSenderCallsign())
+                    || matchesMember(member.getUniqueId(), member.getCallsign(),
+                            selfUid, selfCallsign))
                 continue;
             expected.add(member.getUniqueId());
             names.put(member.getUniqueId(), member.getCallsign());
@@ -1159,6 +1201,13 @@ public class SARTakMapController {
         return activeOperationProfile == null
                 ? "No active operation selected"
                 : activeOperationProfile.getSummary();
+    }
+
+    public String getOperationHeadline() {
+        if (!hasActiveOperation())
+            return "No active operation selected";
+        return activeOperationProfile.getOperationName()
+                + (activeOperationProfile.isArchived() ? " (archived)" : "");
     }
 
     public String getOperationDashboardSummary() {
@@ -1796,9 +1845,10 @@ public class SARTakMapController {
             builder.ditto = true;
             builder.teamName = snapshot.getTeamName();
             builder.teamId = snapshot.getTeamId();
-            if (builder.role.length() == 0)
-                builder.role = AtakTeamContactDataSource.ContactSnapshot
-                        .fromDitto(snapshot).getRole();
+            String dittoRole = AtakTeamContactDataSource.ContactSnapshot
+                    .fromDitto(snapshot).getRole();
+            if (dittoRole != null && dittoRole.trim().length() > 0)
+                builder.role = dittoRole.trim();
             builder.lastDittoUpdate = snapshot.getUpdatedAt();
             if (builder.atakGroupName.length() == 0)
                 builder.atakGroupName = AtakTeamContactDataSource
@@ -1810,6 +1860,13 @@ public class SARTakMapController {
         for (DeviceBuilder builder : devices.values()) {
             boolean isSelf = matchesMember(selfUid, selfCallsign,
                     builder.uid, builder.callsign);
+            if (isSelf) {
+                builder.role = getRoleLabel();
+                if (isHqRole()) {
+                    builder.teamName = "";
+                    builder.teamId = "";
+                }
+            }
             snapshots.add(builder.build(isSelf));
         }
         java.util.Collections.sort(snapshots,
@@ -1978,9 +2035,11 @@ public class SARTakMapController {
     public boolean toggleTrackVisibility() {
         boolean visible = trackManager.toggleVisible();
         atakTrackBridge.setVisible(visible);
-        trackOverlay.setVisible(visible
-                && !atakTrackBridge.hasAtakTrackTrail());
-        trackOverlay.render(trackManager.getTrackPoints());
+        boolean showLocalTrack = visible
+                && !atakTrackBridge.hasAtakTrackTrail();
+        trackOverlay.setVisible(showLocalTrack);
+        if (showLocalTrack)
+            trackOverlay.render(trackManager.getTrackPoints());
         return visible;
     }
 
@@ -2038,6 +2097,7 @@ public class SARTakMapController {
     }
 
     public void dispose() {
+        disposed = true;
         locationCaptureManager.stop();
         rawGnssCaptureManager.stop();
         healthManager.stop();
@@ -2047,6 +2107,7 @@ public class SARTakMapController {
         gridCotWorkflow.dispose();
         searchLineCotWorkflow.dispose();
         backgroundHandler.removeCallbacks(backgroundRunnable);
+        backgroundHandler.removeCallbacks(deferredServiceStartRunnable);
         overlayHandler.removeCallbacks(deferredOverlayRunnable);
         unregisterMapListeners();
         gridOverlay.setVisible(false);
@@ -2076,14 +2137,18 @@ public class SARTakMapController {
     private void renderOverlaysOnly() {
         gridOverlay.render(gridManager);
         searchLineOverlay.render(searchLineManager);
-        searchRouteOverlay.render(activeRoutePlan,
-                gridManager.cellsForIds(activeRoutePlan == null
-                        ? null : activeRoutePlan.getCellIds()), converter);
-        assignmentOverlay.render(dittoSyncManager.getRoutePlans());
+        if (searchRouteOverlay.isVisible())
+            searchRouteOverlay.render(activeRoutePlan,
+                    gridManager.cellsForIds(activeRoutePlan == null
+                            ? null : activeRoutePlan.getCellIds()), converter);
+        if (assignmentOverlay.isVisible())
+            assignmentOverlay.render(dittoSyncManager.getRoutePlans());
         teamMarkerOverlay.render();
-        trackOverlay.setVisible(trackManager.isVisible()
-                && !atakTrackBridge.hasAtakTrackTrail());
-        trackOverlay.render(trackManager.getTrackPoints());
+        boolean showLocalTrack = trackManager.isVisible()
+                && !atakTrackBridge.hasAtakTrackTrail();
+        trackOverlay.setVisible(showLocalTrack);
+        if (showLocalTrack)
+            trackOverlay.render(trackManager.getTrackPoints());
     }
 
     private void startBackgroundRefresh() {
@@ -2103,7 +2168,6 @@ public class SARTakMapController {
         advertiseTeamIfDue();
         applyTeamLifecycleMessages();
         applyDittoMembershipSnapshots();
-        syncDittoDevicesToAtakMarkers();
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
@@ -2118,7 +2182,9 @@ public class SARTakMapController {
         updateCurrentGridCellFromLocation();
         publishDittoDeviceStateIfDue();
         applyDittoDeviceSnapshots();
-        refreshOverlay();
+        arrangeTeamMembers();
+        renderOverlaysOnly();
+        publishSearchLineUpdateIfDue();
     }
 
     private void updateCurrentGridCellFromLocation() {
@@ -2381,7 +2447,6 @@ public class SARTakMapController {
             healthManager.setTrackingActive(false);
         }
         locationCaptureManager.start();
-        dittoSyncManager.start();
         rawGnssCaptureManager.start();
     }
 
@@ -2829,8 +2894,7 @@ public class SARTakMapController {
 
         if (!assignmentManager.getTeamId().equals(membership.getTeamId()))
             return false;
-        if (membership.isLeftOrRemoved()
-                && membership.getUpdatedAt() >= localTeamJoinTime) {
+        if (membership.isLeftOrRemoved()) {
             rememberInactiveMembership(membership.getTeamId(),
                     membership.getMemberUid(), membership.getMemberCallsign(),
                     membership.getUpdatedAt());
@@ -3096,8 +3160,9 @@ public class SARTakMapController {
             String secondUid, String secondCallsign) {
         String leftUid = firstUid == null ? "" : firstUid.trim();
         String rightUid = secondUid == null ? "" : secondUid.trim();
-        if (leftUid.length() > 0 && leftUid.equals(rightUid))
-            return true;
+        if (leftUid.length() > 0 || rightUid.length() > 0)
+            return leftUid.length() > 0 && rightUid.length() > 0
+                    && leftUid.equals(rightUid);
         String leftCallsign = firstCallsign == null ? ""
                 : firstCallsign.trim();
         String rightCallsign = secondCallsign == null ? ""

@@ -71,6 +71,7 @@ public class AccuracyMetadataTest {
         trackManager = new SearchTrackManager(
                 new TrackSessionRepository(dbHelper),
                 new LocationRepository(dbHelper));
+        trackManager.setOperationId("operation-accuracy-test");
         PluginHealthManager healthManager = new PluginHealthManager();
         healthManager.start();
         healthManager.setStorageReady(true, "Local storage ready");

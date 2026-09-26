@@ -355,6 +355,24 @@ public class DittoSyncManager {
         return operationProfile;
     }
 
+    /**
+     * Restores operation credentials without touching the native Ditto
+     * runtime. ATAK constructs plugin components on its UI thread, so native
+     * store creation and subscription registration are deferred until core
+     * startup has settled.
+     */
+    public void prepareOperationProfile(OperationProfile profile) {
+        if (started)
+            stop();
+        operationProfile = profile;
+        configured = hasDittoCredentials();
+        clearLocalCaches();
+        status = profile == null ? "Ditto: no operation selected"
+                : configured ? "Ditto: waiting to start"
+                        : "Ditto: not configured ("
+                                + missingCredentialSummary() + ")";
+    }
+
     public String getRemoteOperationStatus(String operationId) {
         synchronized (operationStatuses) {
             String value = operationStatuses.get(safe(operationId));

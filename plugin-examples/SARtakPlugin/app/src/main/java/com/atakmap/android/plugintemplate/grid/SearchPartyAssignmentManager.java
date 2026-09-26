@@ -229,6 +229,10 @@ public class SearchPartyAssignmentManager {
         String trimmedCallsign = callsign == null || callsign.trim().length() == 0
                 ? "Team Leader" : callsign.trim();
         if (trimmedUid.equals(selfMemberId)) {
+            SearchTeamMember self = findAnyMemberById(trimmedUid);
+            if (self != null)
+                self.setCallsign(trimmedCallsign);
+            applyTeamStyle();
             return;
         }
 
@@ -248,6 +252,7 @@ public class SearchPartyAssignmentManager {
                     "No GPS Signal", "No GPS Signal", "No GPS Signal",
                     "No GPS Signal", "No GPS Signal", "No GPS Signal"));
         } else {
+            self.setCallsign(trimmedCallsign);
             self.setMembershipStatus(
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
         }
@@ -264,6 +269,7 @@ public class SearchPartyAssignmentManager {
         String uid = contact.getUid().trim();
         SearchTeamMember existing = findAnyMemberById(uid);
         if (existing != null) {
+            existing.setCallsign(contact.getCallsign());
             existing.setMembershipStatus(
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
             existing.setAtakGroupName(contact.getAtakGroupName());
@@ -310,6 +316,7 @@ public class SearchPartyAssignmentManager {
         String trimmedUid = uid.trim();
         SearchTeamMember existing = findAnyMemberById(trimmedUid);
         if (existing != null) {
+            existing.setCallsign(callsign);
             existing.setMembershipStatus(
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
             existing.setRole(role);

@@ -14,14 +14,16 @@ import java.util.UUID;
 public class SearchTeamAssignmentOverlay {
 
     private static final String GROUP_NAME = "SARtak Team Assignments";
-    private static final int MAX_ASSIGNMENT_CELLS = 2500;
+    private static final int MAX_ASSIGNMENT_CELLS = 600;
 
     private final MapView mapView;
     private final GridCoordinateConverter converter;
     private final SearchGridManager gridManager;
     private MapGroup assignmentGroup;
-    private boolean visible = true;
-    private String lastRenderKey = "";public SearchTeamAssignmentOverlay(MapView mapView,
+    private boolean visible;
+    private String lastRenderKey = "";
+
+    public SearchTeamAssignmentOverlay(MapView mapView,
             GridCoordinateConverter converter, SearchGridManager gridManager) {
         this.mapView = mapView;
         this.converter = converter;
@@ -88,8 +90,6 @@ public class SearchTeamAssignmentOverlay {
                     .append(plan.getUpdatedAt()).append('|')
                     .append(plan.getTeamColorArgb()).append('|')
                     .append(plan.getCellIds().size()).append('|');
-            for (String cellId : plan.getCellIds())
-                builder.append(cellId).append(',');
         }
         return builder.toString();
     }

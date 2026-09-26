@@ -40,6 +40,7 @@ public class SearchTrackSessionUidTest {
     private static final String CALLSIGN = "ALPHA";
     private static final String OTHER_UID = "ANDROID-fedcba0987654321";
     private static final String OTHER_CALLSIGN = "BRAVO";
+    private static final String OPERATION_ID = "operation-session-test";
 
     private DatabaseHelper dbHelper;
     private TrackSessionRepository sessions;
@@ -52,6 +53,7 @@ public class SearchTrackSessionUidTest {
         sessions = new TrackSessionRepository(dbHelper);
         manager = new SearchTrackManager(sessions,
                 new LocationRepository(dbHelper));
+        manager.setOperationId(OPERATION_ID);
     }
 
     @After
@@ -138,7 +140,7 @@ public class SearchTrackSessionUidTest {
 
     /** Asserts a session id is "track-&lt;uid&gt;-&lt;random UUID&gt;". */
     private static void assertSessionUid(String expectedUid, String sessionId) {
-        String prefix = "track-" + expectedUid + "-";
+        String prefix = "track-" + OPERATION_ID + "-" + expectedUid + "-";
         assertTrue("unexpected session id: " + sessionId,
                 sessionId.startsWith(prefix));
 

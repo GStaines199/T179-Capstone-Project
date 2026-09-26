@@ -17,7 +17,7 @@ public class SearchGridManager {
         CIRCLE
     }
 
-    private static final int MAX_RENDER_CELLS = 2500;
+    private static final int MAX_RENDER_CELLS = 600;
     private static final int MAX_REVIEW_CELLS = 200;
 
     private final GridCoordinateConverter converter;

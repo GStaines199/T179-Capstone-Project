@@ -11,8 +11,11 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.text.Editable;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -1778,6 +1781,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
     private void showTeamAlertDialog(final SearchAlertMessage alert) {
+        String type = alert.getAlertType();
+        if (SearchAlertMessage.TYPE_EMERGENCY_STOP.equals(type)
+                || SearchAlertMessage.TYPE_HOLD_POSITION.equals(type)) {
+            vibrateForAlert(type);
+        }
         String message = alert.getMessage();
         if (!Double.isNaN(alert.getLatitude())
                 && !Double.isNaN(alert.getLongitude()))
@@ -1797,6 +1805,23 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                             }
                         })
                 .show();
+    }
+
+    private void vibrateForAlert(String alertType) {
+        Context context = getMapView().getContext();
+        Vibrator vibrator = (Vibrator) context.getSystemService(
+                Context.VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            return;
+        }
+        long[] pattern = SearchAlertMessage.TYPE_EMERGENCY_STOP.equals(alertType)
+                ? new long[] { 0, 1000, 250, 1000, 250, 1000 }   // 3x 1s pulses
+                : new long[] { 0, 500 };                          // single burst
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+        } else {
+            vibrator.vibrate(pattern, -1);
+        }
     }
 
     private void acknowledgeAlert(SearchAlertMessage alert) {

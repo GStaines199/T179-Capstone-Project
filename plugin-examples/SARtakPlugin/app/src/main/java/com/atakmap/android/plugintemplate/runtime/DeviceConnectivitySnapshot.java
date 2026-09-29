@@ -8,19 +8,21 @@ public class DeviceConnectivitySnapshot {
     private final String lastUpdateSummary;
     private final String teamSummary;
     private final String role;
+    private final String sartakRole;
     private final String atakGroupName;
     private final boolean self;
 
     public DeviceConnectivitySnapshot(String uid, String callsign,
             String connectionSummary, String lastUpdateSummary,
-            String teamSummary, String role, String atakGroupName,
-            boolean self) {
+            String teamSummary, String role, String sartakRole,
+            String atakGroupName, boolean self) {
         this.uid = safe(uid);
         this.callsign = safe(callsign);
         this.connectionSummary = safe(connectionSummary);
         this.lastUpdateSummary = safe(lastUpdateSummary);
         this.teamSummary = safe(teamSummary);
         this.role = safe(role);
+        this.sartakRole = safe(sartakRole);
         this.atakGroupName = safe(atakGroupName);
         this.self = self;
     }
@@ -47,6 +49,10 @@ public class DeviceConnectivitySnapshot {
 
     public String getRole() {
         return role;
+    }
+
+    public String getSartakRole() {
+        return sartakRole;
     }
 
     public String getAtakGroupName() {

@@ -2142,8 +2142,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + device.getTeamSummary(), 13, false));
         card.addView(createCardText("Native ATAK team: "
                 + device.getAtakGroupName(), 13, false));
-        card.addView(createCardText("Role: " + device.getRole(),
+        card.addView(createCardText("SARtak role: "
+                + (device.getSartakRole().length() == 0
+                        ? "Not on SARtak team" : device.getSartakRole()),
                 13, false));
+        card.addView(createCardText("Native ATAK role: "
+                + device.getRole(), 13, false));
         card.addView(createCardText("UID: " + device.getUid(),
                 12, false));
         return card;

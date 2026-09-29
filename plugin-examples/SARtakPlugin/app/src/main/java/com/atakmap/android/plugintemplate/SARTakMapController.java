@@ -1289,6 +1289,9 @@ public class SARTakMapController {
         for (DeviceBuilder builder : devices.values()) {
             boolean isSelf = matchesMember(selfUid, selfCallsign,
                     builder.uid, builder.callsign);
+            SearchTeamMember member = assignmentManager.findMemberById(
+                    builder.uid);
+            builder.sartakRole = member == null ? "" : member.getRoleLabel();
             snapshots.add(builder.build(isSelf));
         }
         java.util.Collections.sort(snapshots,
@@ -2522,6 +2525,7 @@ public class SARTakMapController {
         private String teamName = "";
         private String teamId = "";
         private String role = "";
+        private String sartakRole = "";
         private String atakGroupName = "";
 
         DeviceBuilder(String uid, String callsign) {
@@ -2537,7 +2541,7 @@ public class SARTakMapController {
                     connectionSummary(), latest <= 0L ? "No updates yet"
                             : "Last update " + formatAge(latest),
                     teamSummary(), role.length() == 0 ? "Unknown role" : role,
-                    atakGroupName.length() == 0 ? "No ATAK group"
+                    sartakRole, atakGroupName.length() == 0 ? "No ATAK group"
                             : atakGroupName,
                     self);
         }

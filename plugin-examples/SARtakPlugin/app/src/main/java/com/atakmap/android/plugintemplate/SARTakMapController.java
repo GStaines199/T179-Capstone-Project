@@ -108,6 +108,16 @@ public class SARTakMapController {
     private final OperationStateStore operationStateStore;
     private final DatabaseHelper databaseHelper;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
+    // Runs on the main thread, same as PluginTemplateDropDownReceiver's own
+    // uiRefreshHandler (Looper.getMainLooper() - "background" refers to it
+    // running whether or not the drop-down UI is open, not to a background
+    // thread: ATAK's MapView/Marker APIs that this cycle touches are not
+    // generally safe to call off the UI thread, so moving this to a real
+    // background thread is a bigger change than a quick fix here - see
+    // runBackgroundTeamRefresh). Deliberately a different period than
+    // PluginTemplateDropDownReceiver's 5000ms so the two main-thread cycles
+    // cannot stay phase-locked and keep compounding into one longer stall.
+    private static final long BACKGROUND_REFRESH_INTERVAL_MS = 4300L;
     private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
     private final Runnable backgroundRunnable;
     private final java.util.Map<String, Long> rosterJoinTimes =
@@ -201,7 +211,16 @@ public class SARTakMapController {
             @Override
             public void run() {
                 runBackgroundTeamRefresh();
-                backgroundHandler.postDelayed(this, 5000L);
+                // Deliberately not the same 5000ms interval
+                // PluginTemplateDropDownReceiver's uiRefreshHandler uses.
+                // Both run on the main thread (see the note on
+                // BACKGROUND_REFRESH_INTERVAL_MS - "background" is a misnomer
+                // here), so if the two cycles ever land close together they
+                // compound into one longer stall; a different period means
+                // they cannot stay phase-locked for the rest of the session,
+                // they will always drift apart again.
+                backgroundHandler.postDelayed(this,
+                        BACKGROUND_REFRESH_INTERVAL_MS);
             }
         };
         registerMapListeners();
@@ -1537,7 +1556,8 @@ public class SARTakMapController {
 
     private void startBackgroundRefresh() {
         backgroundHandler.removeCallbacks(backgroundRunnable);
-        backgroundHandler.postDelayed(backgroundRunnable, 5000L);
+        backgroundHandler.postDelayed(backgroundRunnable,
+                BACKGROUND_REFRESH_INTERVAL_MS);
     }
 
     private void runBackgroundTeamRefresh() {

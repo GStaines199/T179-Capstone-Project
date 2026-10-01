@@ -12,6 +12,7 @@ import com.atakmap.coremap.cot.event.CotEvent;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -95,30 +96,15 @@ public class SearchGridCotWorkflow {
         if (teamId == null || teamId.length() == 0)
             return result;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        synchronized (messages) {
-            for (SearchGridCotMessage message : messages.values()) {
-                if (!matchesOperation(message.getOperationId()))
-                    continue;
-                if (!teamId.equals(message.getTeamId()) || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
-        }
-        if (dittoSyncManager != null) {
-            for (SearchGridCotMessage message
-                    : dittoSyncManager.getSearchGridMessages()) {
-                if (!matchesOperation(message.getOperationId()))
-                    continue;
-                if (!teamId.equals(message.getTeamId()) || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
+        for (SearchGridCotMessage message : mergedMessages().values()) {
+            if (!matchesOperation(message.getOperationId()))
+                continue;
+            if (!teamId.equals(message.getTeamId()) || isExpired(message))
+                continue;
+            if (identity != null && identity.getUid().equals(
+                    message.getSenderUid()))
+                continue;
+            result.add(message);
         }
         return result;
     }
@@ -126,30 +112,54 @@ public class SearchGridCotWorkflow {
     public List<SearchGridCotMessage> consumeMessagesForOperation() {
         List<SearchGridCotMessage> result = new ArrayList<>();
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        synchronized (messages) {
-            for (SearchGridCotMessage message : messages.values()) {
-                if (!matchesOperation(message.getOperationId())
-                        || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
-        }
-        if (dittoSyncManager != null) {
-            for (SearchGridCotMessage message
-                    : dittoSyncManager.getSearchGridMessages()) {
-                if (!matchesOperation(message.getOperationId())
-                        || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
+        for (SearchGridCotMessage message : mergedMessages().values()) {
+            if (!matchesOperation(message.getOperationId())
+                    || isExpired(message))
+                continue;
+            if (identity != null && identity.getUid().equals(
+                    message.getSenderUid()))
+                continue;
+            result.add(message);
         }
         return result;
+    }
+
+    /**
+     * Combines the locally CoT-received messages with whatever Ditto has
+     * synced, deduped by message UID. publishStatus sends every message
+     * through both transports using the same UID, so without this a device
+     * receiving a status change over both CoT and Ditto would see it twice -
+     * this is the one place both consumer methods read from so that can only
+     * happen once.
+     */
+    private Map<String, SearchGridCotMessage> mergedMessages() {
+        List<SearchGridCotMessage> local;
+        synchronized (messages) {
+            local = new ArrayList<>(messages.values());
+        }
+        List<SearchGridCotMessage> ditto = dittoSyncManager == null
+                ? Collections.<SearchGridCotMessage>emptyList()
+                : dittoSyncManager.getSearchGridMessages();
+        return dedupeByUid(local, ditto);
+    }
+
+    /**
+     * Merges two message collections keyed by UID, keeping the primary
+     * collection's copy when the same UID appears in both. Pure and
+     * ATAK-type-free (SearchGridCotMessage carries no ATAK types) so the
+     * dedup rule is unit-testable directly - see
+     * SearchGridCotWorkflowSchemaTest.
+     */
+    static Map<String, SearchGridCotMessage> dedupeByUid(
+            Collection<SearchGridCotMessage> primary,
+            Collection<SearchGridCotMessage> secondary) {
+        Map<String, SearchGridCotMessage> merged = new LinkedHashMap<>();
+        for (SearchGridCotMessage message : primary)
+            merged.put(message.getUid(), message);
+        for (SearchGridCotMessage message : secondary)
+            if (!merged.containsKey(message.getUid()))
+                merged.put(message.getUid(), message);
+        return merged;
     }
 
     private CotEvent createCotEvent(SearchGridCotMessage message) {

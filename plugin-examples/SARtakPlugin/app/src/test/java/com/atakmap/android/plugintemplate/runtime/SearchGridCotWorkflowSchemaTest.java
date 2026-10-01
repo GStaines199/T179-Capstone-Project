@@ -149,4 +149,63 @@ public class SearchGridCotWorkflowSchemaTest {
         assertEquals(SearchGridStatus.NOT_STARTED, restored.getStatus());
         assertTrue(restored.getUid().startsWith("sender-uid-42-grid-"));
     }
+
+    // -------------------------------------------------------------------------
+    // No duplicate broadcasts when a message arrives over both CoT and Ditto
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void dedupeByUid_sameMessageInBothSources_appearsOnlyOnce() {
+        SearchGridCotMessage message = sampleMessage();
+
+        Map<String, SearchGridCotMessage> merged = SearchGridCotWorkflow
+                .dedupeByUid(java.util.Collections.singletonList(message),
+                        java.util.Collections.singletonList(message));
+
+        assertEquals(1, merged.size());
+        assertEquals(message, merged.get(message.getUid()));
+    }
+
+    @Test
+    public void dedupeByUid_differentMessages_keepsBoth() {
+        SearchGridCotMessage fromCot = sampleMessage();
+        SearchGridCotMessage fromDitto = new SearchGridCotMessage(
+                "a-different-uid", "team1", "uid2", "Bravo Two", "cellB",
+                SearchGridStatus.COMPLETE, CREATED);
+
+        Map<String, SearchGridCotMessage> merged = SearchGridCotWorkflow
+                .dedupeByUid(java.util.Collections.singletonList(fromCot),
+                        java.util.Collections.singletonList(fromDitto));
+
+        assertEquals(2, merged.size());
+    }
+
+    @Test
+    public void dedupeByUid_sameUidDifferentContent_keepsThePrimaryCopy() {
+        SearchGridCotMessage primary = sampleMessage();
+        SearchGridCotMessage secondary = new SearchGridCotMessage(
+                primary.getUid(), primary.getTeamId(),
+                primary.getSenderUid(), primary.getSenderCallsign(),
+                primary.getCellId(), SearchGridStatus.COMPLETE,
+                primary.getCreated());
+
+        Map<String, SearchGridCotMessage> merged = SearchGridCotWorkflow
+                .dedupeByUid(java.util.Collections.singletonList(primary),
+                        java.util.Collections.singletonList(secondary));
+
+        assertEquals(1, merged.size());
+        assertEquals(SearchGridStatus.IN_PROGRESS,
+                merged.get(primary.getUid()).getStatus());
+    }
+
+    @Test
+    public void dedupeByUid_withEmptySources_returnsEmpty() {
+        Map<String, SearchGridCotMessage> merged = SearchGridCotWorkflow
+                .dedupeByUid(java.util.Collections
+                        .<SearchGridCotMessage>emptyList(),
+                        java.util.Collections
+                                .<SearchGridCotMessage>emptyList());
+
+        assertTrue(merged.isEmpty());
+    }
 }

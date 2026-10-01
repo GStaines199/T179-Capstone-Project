@@ -205,25 +205,43 @@ public class DittoAtakContactBridge {
         configureMarker(marker, snapshot, markerVisible, showCallsigns);
     }
 
+    /**
+     * Re-applies a Ditto snapshot onto its marker. Style-affecting fields
+     * (type, title, callsign/role/colour meta) are only written when the
+     * computed value actually differs from what the marker already carries -
+     * sync() calls this on every poll for every visible device, and
+     * unconditionally re-setting the same colour meta every tick is what was
+     * causing markers to visibly flicker, since "adapt_marker_icon" makes
+     * ATAK recompute the icon on each meta write regardless of whether the
+     * value changed. Position, track and visibility are left unconditional:
+     * those genuinely do change every tick as a device moves, so gating them
+     * would make the marker lag behind real movement instead of fixing a
+     * cosmetic flicker.
+     */
     private void configureMarker(Marker marker, DittoDeviceSnapshot snapshot,
             boolean markerVisible, boolean showCallsigns) {
         marker.setPoint(new GeoPoint(snapshot.getLatitude(),
                 snapshot.getLongitude(), safeAltitude(snapshot.getAltitude())));
-        marker.setTitle(showCallsigns ? displayCallsign(snapshot) : "");
-        marker.setType(isLeader(snapshot) ? "a-f-G-U-C" : "a-f-G-U-C-I");
+        String title = showCallsigns ? displayCallsign(snapshot) : "";
+        setTitleIfChanged(marker, title);
+        setTypeIfChanged(marker, isLeader(snapshot) ? "a-f-G-U-C"
+                : "a-f-G-U-C-I");
         marker.setAlwaysShowText(showCallsigns);
-        marker.setMetaString("callsign",
-                showCallsigns ? displayCallsign(snapshot) : "");
-        marker.setMetaString("atakRoleType", roleName(snapshot));
-        marker.setMetaString("sartak.ditto.contact", "true");
-        marker.setMetaString("sartak.operation.id", snapshot.getOperationId());
-        marker.setMetaString("sartak.team.id", safe(snapshot.getTeamId()));
-        marker.setMetaString("sartak.team.name", safe(snapshot.getTeamName()));
-        marker.setMetaString("sartak.team.color.name",
+        setMetaStringIfChanged(marker, "callsign", title);
+        setMetaStringIfChanged(marker, "atakRoleType", roleName(snapshot));
+        setMetaStringIfChanged(marker, "sartak.ditto.contact", "true");
+        setMetaStringIfChanged(marker, "sartak.operation.id",
+                snapshot.getOperationId());
+        setMetaStringIfChanged(marker, "sartak.team.id",
+                safe(snapshot.getTeamId()));
+        setMetaStringIfChanged(marker, "sartak.team.name",
+                safe(snapshot.getTeamName()));
+        setMetaStringIfChanged(marker, "sartak.team.color.name",
                 displayTeamColorName(snapshot));
-        marker.setMetaString("sartak.member.color.name",
+        setMetaStringIfChanged(marker, "sartak.member.color.name",
                 safe(snapshot.getMemberColorName()));
-        marker.setMetaString("sartak.member.role", roleName(snapshot));
+        setMetaStringIfChanged(marker, "sartak.member.role",
+                roleName(snapshot));
         marker.setMetaBoolean("archive", false);
         marker.setMetaBoolean("editable", false);
         marker.setMetaBoolean("movable", false);
@@ -234,6 +252,26 @@ public class DittoAtakContactBridge {
             marker.setTrack(snapshot.getHeading(), snapshot.getSpeed());
         else
             marker.setTrack(0.0, 0.0);
+    }
+
+    private void setMetaStringIfChanged(Marker marker, String key,
+            String newValue) {
+        String current = marker.getMetaString(key, "");
+        String comparable = newValue == null ? "" : newValue;
+        if (!comparable.equals(current))
+            marker.setMetaString(key, newValue);
+    }
+
+    private void setTitleIfChanged(Marker marker, String title) {
+        String current = marker.getTitle();
+        if (current == null || !current.equals(title))
+            marker.setTitle(title);
+    }
+
+    private void setTypeIfChanged(Marker marker, String type) {
+        String current = marker.getType();
+        if (current == null || !current.equals(type))
+            marker.setType(type);
     }
 
     private void staleMissingMarkers(Set<String> activeUids) {

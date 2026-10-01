@@ -10,6 +10,7 @@ import com.atakmap.android.cot.detail.CotDetailManager;
 import com.atakmap.android.dropdown.DropDownMapComponent;
 
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
+import com.atakmap.android.plugintemplate.runtime.SartakUncaughtExceptionHandler;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotDetailHandler;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.android.plugintemplate.plugin.R;
@@ -32,6 +33,11 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
         context.setTheme(R.style.ATAKPluginTheme);
         super.onCreate(context, intent, view);
         pluginContext = context;
+
+        // Captures a SARtak-specific crash report alongside whatever crash
+        // handling ATAK already has installed - never replaces it, see
+        // SartakUncaughtExceptionHandler for why.
+        SartakUncaughtExceptionHandler.install(view.getContext());
 
         // Store SARtak runtime data in ATAK's app context. The plugin resource
         // context may not have its own writable databases directory.

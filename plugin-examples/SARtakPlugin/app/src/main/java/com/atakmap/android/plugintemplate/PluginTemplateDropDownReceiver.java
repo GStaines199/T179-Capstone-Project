@@ -42,6 +42,7 @@ import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
 import com.atakmap.android.plugintemplate.runtime.AlertVibrationPolicy;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.ConnectionWarningPolicy;
 import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
 import com.atakmap.android.plugintemplate.runtime.DittoCredentialProfile;
 import com.atakmap.android.plugintemplate.runtime.OperationQrCodeGenerator;
@@ -54,8 +55,10 @@ import com.atakmap.android.dropdown.DropDownReceiver;
 
 import com.atakmap.coremap.log.Log;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
@@ -155,6 +158,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Set<String> handledTeamMessages = new HashSet<>();
     private final Set<String> resolvedTeamMessages = new HashSet<>();
     private final Set<String> handledAlertMessages = new HashSet<>();
+    private final Map<String, SearchTeamMember.ConnectionStatus>
+            lastKnownConnectionStatus = new HashMap<>();
     private final Runnable uiRefreshRunnable = new Runnable() {
         @Override
         public void run() {
@@ -1386,6 +1391,23 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 vibrateForAlert(alert);
                 showTeamAlertDialog(alert);
             }
+        }
+
+        warnOnConnectionDrops();
+    }
+
+    private void warnOnConnectionDrops() {
+        for (SearchTeamMember member : mapController.getTeamMembers()) {
+            SearchTeamMember.ConnectionStatus current = member
+                    .getConnectionStatus();
+            SearchTeamMember.ConnectionStatus previous =
+                    lastKnownConnectionStatus.put(member.getUniqueId(),
+                            current);
+            if (ConnectionWarningPolicy.shouldWarn(previous, current))
+                Toast.makeText(getMapView().getContext(),
+                        ConnectionWarningPolicy.messageFor(
+                                member.getCallsign(), current),
+                        Toast.LENGTH_LONG).show();
         }
     }
 

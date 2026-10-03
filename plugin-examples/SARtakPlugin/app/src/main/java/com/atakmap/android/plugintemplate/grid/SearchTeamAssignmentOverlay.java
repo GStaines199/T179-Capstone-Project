@@ -2,23 +2,23 @@ package com.atakmap.android.plugintemplate.grid;
 
 import android.graphics.Color;
 
-import com.atakmap.android.drawing.mapItems.DrawingShape;
 import com.atakmap.android.maps.MapGroup;
-import com.atakmap.android.maps.MapItem;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.runtime.SearchRoutePlan;
+import com.atakmap.coremap.maps.coords.GeoPoint;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 public class SearchTeamAssignmentOverlay {
 
     private static final String GROUP_NAME = "SARtak Team Assignments";
-    private static final int MAX_ASSIGNMENT_CELLS = 600;
+    private static final int MAX_ASSIGNMENT_BLOCKS = 600;
 
     private final MapView mapView;
     private final GridCoordinateConverter converter;
     private final SearchGridManager gridManager;
+    private final OverlayItemSync itemSync = new OverlayItemSync();
     private MapGroup assignmentGroup;
     private boolean visible;
     private String lastRenderKey = "";
@@ -47,7 +47,7 @@ public class SearchTeamAssignmentOverlay {
         this.visible = visible;
         ensureGroup();
         if (!visible) {
-            assignmentGroup.clearItems();
+            itemSync.clear(assignmentGroup);
             assignmentGroup.setVisible(false);
             lastRenderKey = "";
         } else {
@@ -55,35 +55,66 @@ public class SearchTeamAssignmentOverlay {
         }
     }
 
+    /**
+     * Shades each team's assigned cells. Adjacent cells are merged into
+     * rectangles so a team block of hundreds of cells costs a few map items.
+     */
     public void render(List<SearchRoutePlan> routePlans) {
         if (!visible)
             return;
         ensureGroup();
-        if (routePlans == null) {
-            if (lastRenderKey.length() > 0) {
-                assignmentGroup.clearItems();
-                lastRenderKey = "";
-            }
-            return;
-        }
-        String renderKey = buildRenderKey(routePlans);
+        String renderKey = routePlans == null ? ""
+                : buildRenderKey(routePlans);
         if (renderKey.equals(lastRenderKey))
             return;
-        assignmentGroup.clearItems();
         lastRenderKey = renderKey;
-        int rendered = 0;
-        for (SearchRoutePlan plan : routePlans) {
-            int color = plan.getTeamColorArgb() == 0
-                    ? Color.rgb(138, 143, 152)
-                    : plan.getTeamColorArgb();
-            for (SearchGridCell cell : gridManager.cellsForIds(plan
-                    .getCellIds())) {
-                DrawingShape shape = createCellShape(plan, cell, color);
-                assignmentGroup.addItem(shape);
-                rendered++;
-                if (rendered >= MAX_ASSIGNMENT_CELLS)
-                    return;
+
+        List<OverlayItemSync.Spec> specs = new ArrayList<>();
+        if (routePlans != null) {
+            for (SearchRoutePlan plan : routePlans) {
+                if (specs.size() >= MAX_ASSIGNMENT_BLOCKS)
+                    break;
+                addPlan(specs, plan);
             }
+        }
+        itemSync.apply(assignmentGroup, specs, false);
+    }
+
+    private void addPlan(List<OverlayItemSync.Spec> specs,
+            SearchRoutePlan plan) {
+        int color = plan.getTeamColorArgb() == 0
+                ? Color.rgb(138, 143, 152)
+                : plan.getTeamColorArgb();
+        List<GridCellRuns.Cell> cells = new ArrayList<>();
+        double size = GridCoordinateConverter.BASE_CELL_SIZE_METERS;
+        for (SearchGridCell cell : gridManager.cellsForIds(plan
+                .getCellIds())) {
+            cells.add(new GridCellRuns.Cell(
+                    (int) Math.floor(cell.getWest() / size + 1e-6),
+                    (int) Math.floor(cell.getSouth() / size + 1e-6),
+                    cell.getZoneDescriptor()));
+        }
+        for (GridCellRuns.Rect block : GridCellRuns.merge(cells)) {
+            if (specs.size() >= MAX_ASSIGNMENT_BLOCKS)
+                return;
+            String zone = block.getKey();
+            double west = block.getFirstColumn() * size;
+            double south = block.getFirstRow() * size;
+            double east = (block.getLastColumn() + 1) * size;
+            double north = (block.getLastRow() + 1) * size;
+            specs.add(new OverlayItemSync.Spec("sartak-assignment-"
+                    + plan.getPlanId() + "-" + zone + "-"
+                    + block.getFirstColumn() + "-" + block.getFirstRow() + "-"
+                    + block.getLastColumn() + "-" + block.getLastRow(),
+                    plan.getTeamName() + " assignment", "team-assignment-cell",
+                    new GeoPoint[] {
+                            converter.toGeoPoint(zone, west, south),
+                            converter.toGeoPoint(zone, east, south),
+                            converter.toGeoPoint(zone, east, north),
+                            converter.toGeoPoint(zone, west, north)
+                    }, true, withAlpha(color, 45), withAlpha(color, 220), 2.0)
+                            .meta("sartak.teamId", plan.getTeamId())
+                            .meta("sartak.teamName", plan.getTeamName()));
         }
     }
 
@@ -97,22 +128,6 @@ public class SearchTeamAssignmentOverlay {
         }
         return builder.toString();
     }
-    private DrawingShape createCellShape(SearchRoutePlan plan,
-            SearchGridCell cell, int color) {
-        DrawingShape shape = new DrawingShape(mapView, "sartak-assignment-"
-                + UUID.randomUUID());
-        shape.setTitle(plan.getTeamName() + " assignment");
-        shape.setPoints(cell.toGeoPoints(converter));
-        shape.setClosed(true);
-        shape.setFillColor(withAlpha(color, 45));
-        shape.setStrokeColor(withAlpha(color, 220));
-        shape.setStrokeWeight(2.0);
-        shape.setMetaString("sartak.kind", "team-assignment-cell");
-        shape.setMetaString("sartak.teamId", plan.getTeamId());
-        shape.setMetaString("sartak.teamName", plan.getTeamName());
-        configure(shape);
-        return shape;
-    }
 
     private void ensureGroup() {
         if (assignmentGroup != null)
@@ -123,21 +138,8 @@ public class SearchTeamAssignmentOverlay {
         assignmentGroup.setMetaBoolean("addToObjList", true);
     }
 
-    private void configure(MapItem item) {
-        item.setClickable(false);
-        item.setMetaBoolean("archive", false);
-        item.setMetaBoolean("editable", false);
-        item.setMetaBoolean("movable", false);
-        item.setMetaBoolean("removable", true);
-        item.setMetaString("entry", "sartak");
-        item.setMetaString("callsign", "");
-    }
-
     private int withAlpha(int color, int alpha) {
         return Color.argb(alpha, Color.red(color), Color.green(color),
                 Color.blue(color));
     }
 }
-
-
-

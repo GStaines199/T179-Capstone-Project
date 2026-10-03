@@ -17,6 +17,66 @@ public class SearchGridManager {
         CIRCLE
     }
 
+    /** A UTM rectangle snapped to the 100 m grid. */
+    public static final class GridExtent {
+        public final String zone;
+        public final double west;
+        public final double south;
+        public final double east;
+        public final double north;
+
+        public GridExtent(String zone, double west, double south, double east,
+                double north) {
+            this.zone = zone == null ? "" : zone;
+            this.west = west;
+            this.south = south;
+            this.east = east;
+            this.north = north;
+        }
+
+        public int getColumns() {
+            return Math.max(0, (int) Math.round((east - west)
+                    / GridCoordinateConverter.BASE_CELL_SIZE_METERS));
+        }
+
+        public int getRows() {
+            return Math.max(0, (int) Math.round((north - south)
+                    / GridCoordinateConverter.BASE_CELL_SIZE_METERS));
+        }
+
+        public boolean isEmpty() {
+            return east <= west || north <= south;
+        }
+
+        public String key() {
+            return zone + ":" + Math.round(west) + ":" + Math.round(south)
+                    + ":" + Math.round(east) + ":" + Math.round(north);
+        }
+    }
+
+    /** Stored progress for the cells inside the current search area. */
+    public static final class AreaProgress {
+        public final int complete;
+        public final int partial;
+        public final int inProgress;
+        public final int totalCells;
+
+        AreaProgress(int complete, int partial, int inProgress,
+                int totalCells) {
+            this.complete = complete;
+            this.partial = partial;
+            this.inProgress = inProgress;
+            this.totalCells = totalCells;
+        }
+
+        public SearchGridStatus getAggregateStatus() {
+            if (totalCells > 0 && complete >= totalCells)
+                return SearchGridStatus.COMPLETE;
+            return complete + partial > 0 ? SearchGridStatus.IN_PROGRESS
+                    : SearchGridStatus.NOT_STARTED;
+        }
+    }
+
     private static final int MAX_RENDER_CELLS = 600;
     private static final int MAX_REVIEW_CELLS = 200;
 
@@ -27,6 +87,10 @@ public class SearchGridManager {
     private SearchGridCell pendingReviewCell;
     private final Map<String, SearchGridCell> reviewedCells =
             new LinkedHashMap<>();
+    private List<SearchGridCell> cachedMarkedCells =
+            new ArrayList<SearchGridCell>();
+    private AreaProgress cachedAreaProgress;
+    private String cachedAreaVersion;
 
     private PlannedAreaShape plannedShape = PlannedAreaShape.NONE;
     private String plannedZone = "";
@@ -240,16 +304,6 @@ public class SearchGridManager {
         return true;
     }
 
-    public List<SearchGridCell> getRenderCells(GeoBounds visibleBounds) {
-        if (hasPlannedArea())
-            return cellsForPlannedArea(visibleBounds, MAX_RENDER_CELLS);
-        return getSelectedAggregateCells();
-    }
-
-    public List<SearchGridCell> getRenderCells() {
-        return getRenderCells(null);
-    }
-
     public int getPlannedCellEstimate() {
         if (!hasPlannedArea())
             return 0;
@@ -293,11 +347,6 @@ public class SearchGridManager {
         return "Box " + Math.round(plannedWidthMeters / 100.0) / 10.0
                 + " km x " + Math.round(plannedHeightMeters / 100.0) / 10.0
                 + " km";
-    }
-
-    public List<SearchGridCell> getPlannedAreaCells() {
-        return hasPlannedArea() ? cellsForPlannedArea(null, MAX_RENDER_CELLS)
-                : new ArrayList<SearchGridCell>();
     }
 
     public List<SearchGridCell> getSerpentineRouteCells() {
@@ -500,6 +549,187 @@ public class SearchGridManager {
                 : SearchGridStatus.NOT_STARTED;
     }
 
+    /**
+     * The rectangle SARtak draws a grid for: the planned search area, or the
+     * selected cell's 1 km square when nothing has been planned yet.
+     */
+    public GridExtent getAreaExtent() {
+        if (hasPlannedArea())
+            return new GridExtent(plannedZone, plannedWest, plannedSouth,
+                    plannedEast, plannedNorth);
+        if (selectedCell == null)
+            return null;
+        double west = floorToGrid(selectedCell.getWest(),
+                GridCoordinateConverter.AGGREGATE_GRID_SIZE_METERS);
+        double south = floorToGrid(selectedCell.getSouth(),
+                GridCoordinateConverter.AGGREGATE_GRID_SIZE_METERS);
+        return new GridExtent(selectedCell.getZoneDescriptor(), west, south,
+                west + GridCoordinateConverter.AGGREGATE_GRID_SIZE_METERS,
+                south + GridCoordinateConverter.AGGREGATE_GRID_SIZE_METERS);
+    }
+
+    /**
+     * Intersects {@code area} with the visible map, grown by
+     * {@code padFraction} of the view on every side and snapped outward to
+     * {@code snapMeters}. Returns null when the view does not overlap the
+     * area. When the view is in a different UTM zone the whole area is
+     * returned, since its cells cannot be clipped in the view's zone.
+     */
+    public GridExtent clipToView(GridExtent area, GeoBounds view,
+            double padFraction, double snapMeters) {
+        if (area == null || view == null)
+            return area;
+        double[] eastings = new double[4];
+        double[] northings = new double[4];
+        GeoPoint[] corners = new GeoPoint[] {
+                new GeoPoint(view.getSouth(), view.getWest()),
+                new GeoPoint(view.getSouth(), view.getEast()),
+                new GeoPoint(view.getNorth(), view.getEast()),
+                new GeoPoint(view.getNorth(), view.getWest())
+        };
+        for (int i = 0; i < corners.length; i++) {
+            UTMPoint utm = UTMPoint.fromGeoPoint(corners[i]);
+            if (!area.zone.equals(utm.getZoneDescriptor()))
+                return area;
+            eastings[i] = utm.getEasting();
+            northings[i] = utm.getNorthing();
+        }
+        return clipToUtmView(area, min(eastings), min(northings),
+                max(eastings), max(northings), padFraction, snapMeters);
+    }
+
+    /** ATAK-free core of {@link #clipToView} for unit tests. */
+    static GridExtent clipToUtmView(GridExtent area, double viewWest,
+            double viewSouth, double viewEast, double viewNorth,
+            double padFraction, double snapMeters) {
+        double padX = (viewEast - viewWest) * padFraction;
+        double padY = (viewNorth - viewSouth) * padFraction;
+        double snap = Math.max(GridCoordinateConverter.BASE_CELL_SIZE_METERS,
+                snapMeters);
+        double west = Math.max(area.west, Math.floor((viewWest - padX)
+                / snap) * snap);
+        double south = Math.max(area.south, Math.floor((viewSouth - padY)
+                / snap) * snap);
+        double east = Math.min(area.east, Math.ceil((viewEast + padX)
+                / snap) * snap);
+        double north = Math.min(area.north, Math.ceil((viewNorth + padY)
+                / snap) * snap);
+        GridExtent clipped = new GridExtent(area.zone, west, south, east,
+                north);
+        return clipped.isEmpty() ? null : clipped;
+    }
+
+    /**
+     * Every PARTIAL/COMPLETE cell inside the current area. Built from the
+     * sparse stored statuses, never by enumerating the area's cells, and
+     * cached until a status or the area changes.
+     */
+    public List<SearchGridCell> getMarkedCellsInArea() {
+        refreshAreaCache();
+        return cachedMarkedCells;
+    }
+
+    public AreaProgress getAreaProgress() {
+        refreshAreaCache();
+        return cachedAreaProgress;
+    }
+
+    /** Store revision plus area scope; changes whenever marked cells may. */
+    public String getAreaVersion() {
+        GridExtent area = getAreaExtent();
+        return stateStore.getRevision() + "@" + (area == null ? ""
+                : area.key() + ":" + plannedShape + ":"
+                        + Math.round(plannedRadiusMeters));
+    }
+
+    /** Exact number of 100 m cells whose centre lies inside the area. */
+    public int getAreaCellCount() {
+        GridExtent area = getAreaExtent();
+        if (area == null)
+            return 0;
+        if (!hasPlannedArea() || plannedShape != PlannedAreaShape.CIRCLE)
+            return area.getColumns() * area.getRows();
+        double size = GridCoordinateConverter.BASE_CELL_SIZE_METERS;
+        double radiusSquared = plannedRadiusMeters * plannedRadiusMeters;
+        int count = 0;
+        for (int column = 0; column < area.getColumns(); column++) {
+            double dx = area.west + (column + 0.5) * size
+                    - plannedCenterEasting;
+            double remaining = radiusSquared - dx * dx;
+            if (remaining < 0)
+                continue;
+            double half = Math.sqrt(remaining);
+            // Rows whose centre northing is within +/- half of the centre.
+            int firstRow = (int) Math.ceil((plannedCenterNorthing - half
+                    - area.south) / size - 0.5);
+            int lastRow = (int) Math.floor((plannedCenterNorthing + half
+                    - area.south) / size - 0.5);
+            firstRow = Math.max(0, firstRow);
+            lastRow = Math.min(area.getRows() - 1, lastRow);
+            if (lastRow >= firstRow)
+                count += lastRow - firstRow + 1;
+        }
+        return count;
+    }
+
+    private void refreshAreaCache() {
+        String version = getAreaVersion();
+        if (cachedAreaProgress != null && version.equals(cachedAreaVersion))
+            return;
+        GridExtent area = getAreaExtent();
+        List<SearchGridCell> marked = new ArrayList<>();
+        int complete = 0;
+        int partial = 0;
+        int inProgress = 0;
+        if (area != null) {
+            for (Map.Entry<String, SearchGridStatus> entry : stateStore
+                    .getKnownStatuses().entrySet()) {
+                SearchGridCell cell = converter.parseCell(entry.getKey(),
+                        entry.getValue());
+                if (cell == null || !area.zone.equals(cell
+                        .getZoneDescriptor()) || !isInsideArea(cell, area))
+                    continue;
+                SearchGridStatus status = entry.getValue();
+                if (status == SearchGridStatus.COMPLETE) {
+                    complete++;
+                    marked.add(cell);
+                } else if (status == SearchGridStatus.PARTIAL) {
+                    partial++;
+                    marked.add(cell);
+                } else if (status == SearchGridStatus.IN_PROGRESS) {
+                    inProgress++;
+                }
+            }
+        }
+        cachedMarkedCells = marked;
+        cachedAreaProgress = new AreaProgress(complete, partial, inProgress,
+                getAreaCellCount());
+        cachedAreaVersion = version;
+    }
+
+    private boolean isInsideArea(SearchGridCell cell, GridExtent area) {
+        double centerEasting = (cell.getWest() + cell.getEast()) / 2.0;
+        double centerNorthing = (cell.getSouth() + cell.getNorth()) / 2.0;
+        if (centerEasting < area.west || centerEasting > area.east
+                || centerNorthing < area.south || centerNorthing > area.north)
+            return false;
+        return !hasPlannedArea() || isInsidePlannedArea(cell);
+    }
+
+    private static double min(double[] values) {
+        double result = values[0];
+        for (double value : values)
+            result = Math.min(result, value);
+        return result;
+    }
+
+    private static double max(double[] values) {
+        double result = values[0];
+        for (double value : values)
+            result = Math.max(result, value);
+        return result;
+    }
+
     public GeoPoint[] getPlannedAreaOutlinePoints() {
         if (!hasPlannedArea())
             return new GeoPoint[0];
@@ -595,49 +825,6 @@ public class SearchGridManager {
             if (reviewedCells.size() >= MAX_REVIEW_CELLS)
                 break;
         }
-    }
-
-    private List<SearchGridCell> cellsForPlannedArea(GeoBounds visibleBounds,
-            int maxCells) {
-        List<SearchGridCell> cells = new ArrayList<>();
-        if (!hasPlannedArea())
-            return cells;
-        double west = plannedWest;
-        double east = plannedEast;
-        double south = plannedSouth;
-        double north = plannedNorth;
-        if (visibleBounds != null) {
-            UTMPoint sw = UTMPoint.fromGeoPoint(new GeoPoint(visibleBounds
-                    .getSouth(), visibleBounds.getWest()));
-            UTMPoint ne = UTMPoint.fromGeoPoint(new GeoPoint(visibleBounds
-                    .getNorth(), visibleBounds.getEast()));
-            if (plannedZone.equals(sw.getZoneDescriptor())
-                    && plannedZone.equals(ne.getZoneDescriptor())) {
-                west = Math.max(west, floorToGrid(Math.min(sw.getEasting(),
-                        ne.getEasting()),
-                        GridCoordinateConverter.BASE_CELL_SIZE_METERS));
-                east = Math.min(east, ceilToGrid(Math.max(sw.getEasting(),
-                        ne.getEasting()),
-                        GridCoordinateConverter.BASE_CELL_SIZE_METERS));
-                south = Math.max(south, floorToGrid(Math.min(sw.getNorthing(),
-                        ne.getNorthing()),
-                        GridCoordinateConverter.BASE_CELL_SIZE_METERS));
-                north = Math.min(north, ceilToGrid(Math.max(sw.getNorthing(),
-                        ne.getNorthing()),
-                        GridCoordinateConverter.BASE_CELL_SIZE_METERS));
-            }
-        }
-        for (double y = south; y < north; y += GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
-            for (double x = west; x < east; x += GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
-                SearchGridCell cell = createPlannedCell(x, y);
-                if (cell == null || !isInsidePlannedArea(cell))
-                    continue;
-                cells.add(cell);
-                if (cells.size() >= maxCells)
-                    return cells;
-            }
-        }
-        return cells;
     }
 
     private SearchGridCell createPlannedCell(double west, double south) {

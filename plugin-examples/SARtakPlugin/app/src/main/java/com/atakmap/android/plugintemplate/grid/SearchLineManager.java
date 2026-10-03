@@ -45,6 +45,42 @@ public class SearchLineManager {
         remoteLeaderCallsign = "";
     }
 
+    /**
+     * Brings back a line this device was leading before ATAK was closed,
+     * restarted or killed by Android. Unlike {@link #applyRemote} the line
+     * stays under this device's control.
+     */
+    public boolean restoreLeaderLine(SearchGridCell cell,
+            SearchLineState restoredState, double northing, long startedAt,
+            long pausedAt, SearchLineColorOption color,
+            double toleranceMeters) {
+        if (cell == null || restoredState == null
+                || restoredState == SearchLineState.NOT_STARTED)
+            return false;
+        activeCell = cell;
+        zoneDescriptor = cell.getZoneDescriptor();
+        lineNorthing = clamp(northing, cell.getSouth(), cell.getNorth());
+        state = restoredState;
+        lineStartedAt = startedAt;
+        linePausedAt = pausedAt;
+        if (color != null)
+            colorOption = color;
+        setReturnMarkToleranceMeters(toleranceMeters);
+        remoteControlled = false;
+        remoteLeaderCallsign = "";
+        lastRemoteUpdate = 0L;
+        restartWarning = "Search line restored after ATAK restart";
+        return true;
+    }
+
+    public long getLineStartedAt() {
+        return lineStartedAt;
+    }
+
+    public long getLinePausedAt() {
+        return linePausedAt;
+    }
+
     public void end() {
         activeCell = null;
         zoneDescriptor = null;

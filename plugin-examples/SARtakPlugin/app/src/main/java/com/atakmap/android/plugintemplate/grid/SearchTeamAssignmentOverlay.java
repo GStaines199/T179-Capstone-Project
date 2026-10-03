@@ -34,6 +34,10 @@ public class SearchTeamAssignmentOverlay {
         return visible;
     }
 
+    public MapGroup getMapGroup() {
+        return assignmentGroup;
+    }
+
     public boolean toggleVisible() {
         setVisible(!visible);
         return visible;

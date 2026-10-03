@@ -51,6 +51,10 @@ public class SearchGridOverlay {
         return visible;
     }
 
+    public MapGroup getMapGroup() {
+        return overlayGroup;
+    }
+
     public boolean toggleLabels() {
         showLabels = !showLabels;
         lastRenderKey = "";

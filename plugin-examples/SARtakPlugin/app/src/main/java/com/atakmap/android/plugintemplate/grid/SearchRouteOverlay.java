@@ -43,6 +43,10 @@ public class SearchRouteOverlay {
         return visible;
     }
 
+    public MapGroup getMapGroup() {
+        return routeGroup;
+    }
+
     public boolean toggleVisible() {
         setVisible(!visible);
         return visible;

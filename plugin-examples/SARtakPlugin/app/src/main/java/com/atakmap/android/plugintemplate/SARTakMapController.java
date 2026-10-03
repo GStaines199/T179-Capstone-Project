@@ -6,6 +6,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.atakmap.android.maps.MapEvent;
 import com.atakmap.android.maps.MapEventDispatcher;
@@ -17,6 +18,7 @@ import com.atakmap.android.plugintemplate.database.SearcherRepository;
 import com.atakmap.android.plugintemplate.database.StorageAvailability;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
+import com.atakmap.android.plugintemplate.grid.MapOverlayDiagnostics;
 import com.atakmap.android.plugintemplate.grid.MemberPositionPolicy;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
@@ -66,6 +68,7 @@ import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SharedMapMarkerSyncManager;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
+import com.atakmap.coremap.maps.coords.GeoBounds;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.GeoPointMetaData;
 
@@ -77,6 +80,7 @@ import java.util.Map;
 public class SARTakMapController {
 
     private static final String TAG = "SARTakMapController";
+    private static final String PERF_TAG = "SARtakPerf";
 
     public static final int READINESS_BLOCKED = 0;
     public static final int READINESS_WAITING = 1;
@@ -2135,20 +2139,51 @@ public class SARTakMapController {
     }
 
     private void renderOverlaysOnly() {
+        long started = SystemClock.elapsedRealtimeNanos();
         gridOverlay.render(gridManager);
+        long gridDone = SystemClock.elapsedRealtimeNanos();
         searchLineOverlay.render(searchLineManager);
         if (searchRouteOverlay.isVisible())
             searchRouteOverlay.render(activeRoutePlan,
                     gridManager.cellsForIds(activeRoutePlan == null
                             ? null : activeRoutePlan.getCellIds()), converter);
+        long routeDone = SystemClock.elapsedRealtimeNanos();
         if (assignmentOverlay.isVisible())
             assignmentOverlay.render(dittoSyncManager.getRoutePlans());
+        long assignmentDone = SystemClock.elapsedRealtimeNanos();
         teamMarkerOverlay.render();
+        long markersDone = SystemClock.elapsedRealtimeNanos();
+        if (BuildConfig.DEBUG)
+            logRenderProfile(started, gridDone, routeDone, assignmentDone,
+                    markersDone);
         boolean showLocalTrack = trackManager.isVisible()
                 && !atakTrackBridge.hasAtakTrackTrail();
         trackOverlay.setVisible(showLocalTrack);
         if (showLocalTrack)
             trackOverlay.render(trackManager.getTrackPoints());
+    }
+
+    private void logRenderProfile(long started, long gridDone,
+            long routeDone, long assignmentDone, long markersDone) {
+        GeoBounds view = mapView.getBounds();
+        Log.d(PERF_TAG, "render ms grid=" + millis(started, gridDone)
+                + " route=" + millis(gridDone, routeDone)
+                + " assign=" + millis(routeDone, assignmentDone)
+                + " markers=" + millis(assignmentDone, markersDone)
+                + " total=" + millis(started, markersDone)
+                + " | res=" + Math.round(mapView.getMapResolution()) + "m"
+                + " | " + MapOverlayDiagnostics.describe("gridItems",
+                        gridOverlay.getMapGroup(), view)
+                + " " + MapOverlayDiagnostics.describe("routeItems",
+                        searchRouteOverlay.getMapGroup(), view)
+                + " " + MapOverlayDiagnostics.describe("assignItems",
+                        assignmentOverlay.getMapGroup(), view)
+                + " | " + gridOverlay.getLastDiagnostics());
+    }
+
+    private static String millis(long fromNanos, long toNanos) {
+        return String.format(java.util.Locale.US, "%.1f",
+                (toNanos - fromNanos) / 1000000.0);
     }
 
     private void startBackgroundRefresh() {

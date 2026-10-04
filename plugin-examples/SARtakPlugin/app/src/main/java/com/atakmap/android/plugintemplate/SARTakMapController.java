@@ -1,10 +1,12 @@
 package com.atakmap.android.plugintemplate;
 
 import android.content.Context;
+import android.graphics.PointF;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import com.atakmap.android.maps.MapEvent;
 import com.atakmap.android.maps.MapEventDispatcher;
@@ -16,7 +18,9 @@ import com.atakmap.android.plugintemplate.database.SearcherRepository;
 import com.atakmap.android.plugintemplate.database.StorageAvailability;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
+import com.atakmap.android.plugintemplate.grid.MapOverlayDiagnostics;
 import com.atakmap.android.plugintemplate.grid.MemberPositionPolicy;
+import com.atakmap.android.plugintemplate.grid.OverlayVisibilityStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
@@ -27,8 +31,11 @@ import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchLineManager;
 import com.atakmap.android.plugintemplate.grid.SearchLineOverlay;
+import com.atakmap.android.plugintemplate.grid.SearchLineStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
+import com.atakmap.android.plugintemplate.grid.SearchRouteOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMarkerOverlay;
+import com.atakmap.android.plugintemplate.grid.SearchTeamAssignmentOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.SearchTeamStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
@@ -52,17 +59,21 @@ import com.atakmap.android.plugintemplate.runtime.OperationStateStore;
 import com.atakmap.android.plugintemplate.runtime.PluginHealthManager;
 import com.atakmap.android.plugintemplate.runtime.RawGnssCapture;
 import com.atakmap.android.plugintemplate.runtime.RawGnssCaptureManager;
+import com.atakmap.android.plugintemplate.runtime.SearchAreaAssignment;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchGridCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchAlertMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchLineCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchLineCotWorkflow;
+import com.atakmap.android.plugintemplate.runtime.SearchRoutePlan;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SharedMapMarkerSyncManager;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
+import com.atakmap.coremap.maps.coords.GeoBounds;
 import com.atakmap.coremap.maps.coords.GeoPoint;
+import com.atakmap.coremap.maps.coords.GeoPointMetaData;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -72,6 +83,8 @@ import java.util.Map;
 public class SARTakMapController {
 
     private static final String TAG = "SARTakMapController";
+    private static final String PERF_TAG = "SARtakPerf";
+    private static final String RECOVERY_TAG = "SARtakRecovery";
 
     public static final int READINESS_BLOCKED = 0;
     public static final int READINESS_WAITING = 1;
@@ -80,10 +93,17 @@ public class SARTakMapController {
     private static final double MIN_HEADING_SPEED_METERS_PER_SECOND = 0.4;
     private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
             12.0;
+    private static final double MAX_ROUTE_SELECTION_RESOLUTION_METERS = 150.0;
+    private static final int MAX_ROUTE_RANGE_CELLS = 1200;
+    private static final long MAP_REFRESH_DEBOUNCE_MS = 250L;
+    private static final long BACKGROUND_REFRESH_INTERVAL_MS = 8000L;
+    private static final long DEFERRED_SERVICE_START_MS = 3000L;
 
     private final MapView mapView;
     private final GridCoordinateConverter converter;
     private final SearchGridStateStore gridStateStore;
+    private final SearchLineStateStore searchLineStateStore;
+    private final OverlayVisibilityStore overlayVisibilityStore;
     private final SearchGridManager gridManager;
     private final SearchGridOverlay gridOverlay;
     private final SearchPartyAssignmentManager assignmentManager;
@@ -93,6 +113,8 @@ public class SARTakMapController {
     private final AtakTrackBridge atakTrackBridge;
     private final SearchLineManager searchLineManager;
     private final SearchLineOverlay searchLineOverlay;
+    private final SearchRouteOverlay searchRouteOverlay;
+    private final SearchTeamAssignmentOverlay assignmentOverlay;
     private final PluginHealthManager healthManager;
     private final IdentityManager identityManager;
     private final LocationCaptureManager locationCaptureManager;
@@ -110,7 +132,10 @@ public class SARTakMapController {
     private final DatabaseHelper databaseHelper;
     private final MapEventDispatcher.MapEventDispatchListener mapEventListener;
     private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
+    private final Handler overlayHandler = new Handler(Looper.getMainLooper());
     private final Runnable backgroundRunnable;
+    private final Runnable deferredOverlayRunnable;
+    private final Runnable deferredServiceStartRunnable;
     private final java.util.Map<String, Long> rosterJoinTimes =
             new java.util.HashMap<>();
     private final java.util.Map<String, Long> inactiveMembershipTimes =
@@ -121,6 +146,13 @@ public class SARTakMapController {
     private String atakContactSummary = "ATAK contacts not scanned yet";
     private AtakRoleResolver.Role currentRole = AtakRoleResolver.Role.TEAM_MEMBER;
     private OperationProfile activeOperationProfile;
+    private String lastAppliedAreaAssignmentId = "";
+    private SearchRoutePlan activeRoutePlan;
+    private SearchGridCell routeSelectionAnchor;
+    private String routeSelectionHint = "Route selection off";
+    private SearchLineColorOption gridColorOption = SearchLineColorOption.CYAN;
+    private volatile boolean disposed;
+    private boolean loggedSyncedRecoverySnapshot;
 
     public SARTakMapController(MapView mapView, Context pluginContext) {
         this.mapView = mapView;
@@ -157,6 +189,14 @@ public class SARTakMapController {
         this.trackOverlay = new SearchTrackOverlay(mapView);
         this.atakTrackBridge = new AtakTrackBridge(mapView);
         this.searchLineOverlay = new SearchLineOverlay(mapView);
+        this.searchRouteOverlay = new SearchRouteOverlay(mapView);
+        this.assignmentOverlay = new SearchTeamAssignmentOverlay(mapView,
+                converter, gridManager);
+        this.gridOverlay.setGridColor(gridColorOption.getArgb());
+        this.searchLineStateStore = new SearchLineStateStore(runtimeContext);
+        this.overlayVisibilityStore = new OverlayVisibilityStore(
+                runtimeContext);
+        restoreOverlayVisibility();
         this.healthManager = new PluginHealthManager();
         this.identityManager = new IdentityManager(runtimeContext, mapView,
                 searcherRepository);
@@ -171,7 +211,9 @@ public class SARTakMapController {
         this.dittoAtakContactBridge = new DittoAtakContactBridge(mapView);
         this.sharedMapMarkerSyncManager = new SharedMapMarkerSyncManager(
                 mapView, identityManager, dittoSyncManager);
-        this.dittoSyncManager.useOperationProfile(activeOperationProfile);
+        // Merely restoring an operation must not start Ditto while ATAK is
+        // still constructing plugins on its main thread.
+        this.dittoSyncManager.prepareOperationProfile(activeOperationProfile);
         this.teamCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.gridCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.searchLineCotWorkflow.setDittoSyncManager(dittoSyncManager);
@@ -181,7 +223,7 @@ public class SARTakMapController {
                 new RawGnssCaptureManager.Listener() {
                     @Override
                     public void onRawGnssCaptured(RawGnssCapture capture) {
-                        refreshOverlay();
+                        scheduleOverlayRefresh();
                     }
                 });
         this.locationCaptureManager = new LocationCaptureManager(mapView,
@@ -189,27 +231,76 @@ public class SARTakMapController {
                 new LocationCaptureManager.Listener() {
                     @Override
                     public void onLocationCaptured() {
-                        refreshOverlay();
+                        scheduleOverlayRefresh();
                     }
                 });
         this.mapEventListener = new MapEventDispatcher.MapEventDispatchListener() {
             @Override
             public void onMapEvent(MapEvent event) {
-                refreshOverlay();
+                if (handleRouteSelectionMapEvent(event))
+                    return;
+                scheduleOverlayRefresh();
+            }
+        };
+        this.deferredOverlayRunnable = new Runnable() {
+            @Override
+            public void run() {
+                renderOverlaysOnly();
             }
         };
         this.backgroundRunnable = new Runnable() {
             @Override
             public void run() {
                 runBackgroundTeamRefresh();
-                backgroundHandler.postDelayed(this, 5000L);
+                backgroundHandler.postDelayed(this,
+                        BACKGROUND_REFRESH_INTERVAL_MS);
             }
         };
-        registerMapListeners();
-        initialiseRuntime();
-        startBackgroundRefresh();
-        teamMarkerOverlay.render();
-        trackOverlay.render(trackManager.getTrackPoints());
+        this.deferredServiceStartRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (disposed)
+                    return;
+                Thread worker = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            dittoSyncManager.start();
+                        } catch (Throwable throwable) {
+                            Log.w(TAG, "Deferred SARtak service startup failed",
+                                    throwable);
+                            healthManager.reportNotCapturing(
+                                    "Sync startup failed: " + throwable
+                                            .getClass().getSimpleName());
+                        } finally {
+                            if (!disposed)
+                                backgroundHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (!disposed)
+                                            startBackgroundRefresh();
+                                    }
+                                });
+                        }
+                    }
+                }, "SARtak-Ditto-Startup");
+                worker.setDaemon(true);
+                worker.start();
+            }
+        };
+        try {
+            registerMapListeners();
+            initialiseRuntime();
+            restoreLeaderSearchLine();
+            logRecoverySnapshot("restored");
+            backgroundHandler.postDelayed(deferredServiceStartRunnable,
+                    DEFERRED_SERVICE_START_MS);
+        } catch (Throwable throwable) {
+            Log.w(TAG, "SARtak runtime startup failed", throwable);
+            healthManager.setTrackingActive(false);
+            healthManager.reportNotCapturing("Runtime startup failed: "
+                    + throwable.getClass().getSimpleName());
+        }
     }
 
     public boolean toggleGridOverlay() {
@@ -242,7 +333,55 @@ public class SARTakMapController {
         return cell;
     }
 
+    public void planSearchAreaFromCurrentCell() {
+        if (isOperationArchived())
+            return;
+        SearchGridCell cell = ensureSelectedCell();
+        if (cell == null)
+            return;
+        gridManager.planSelectedAggregateArea();
+        gridOverlay.setVisible(true);
+        refreshOverlay();
+    }
+
+    public void planBoxSearchArea(double widthKm, double heightKm) {
+        if (isOperationArchived())
+            return;
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint == null)
+            return;
+        gridManager.planBoxAt(currentPoint, widthKm, heightKm);
+        searchLineManager.updateLeaderPosition(gridManager.getSelectedCell(),
+                currentPoint);
+        gridOverlay.setVisible(true);
+        arrangeTeamMembers();
+        refreshOverlay();
+    }
+
+    public void planCircleSearchArea(double radiusKm) {
+        if (isOperationArchived())
+            return;
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint == null)
+            return;
+        gridManager.planCircleAt(currentPoint, radiusKm);
+        searchLineManager.updateLeaderPosition(gridManager.getSelectedCell(),
+                currentPoint);
+        gridOverlay.setVisible(true);
+        arrangeTeamMembers();
+        refreshOverlay();
+    }
+
+    public void clearPlannedSearchArea() {
+        if (isOperationArchived())
+            return;
+        gridManager.clearPlannedArea();
+        refreshOverlay();
+    }
+
     public void startSearchLine() {
+        if (isOperationArchived())
+            return;
         SearchGridCell cell = ensureSelectedCell();
         GeoPoint currentPoint = getCurrentUserPoint();
         if (cell == null || currentPoint == null)
@@ -253,18 +392,24 @@ public class SARTakMapController {
     }
 
     public void endSearchLine() {
+        if (isOperationArchived())
+            return;
         searchLineManager.end();
         publishSearchLine(SearchLineCotMessage.ACTION_END);
         refreshOverlay();
     }
 
     public void pauseSearchLine() {
+        if (isOperationArchived())
+            return;
         searchLineManager.pause();
         publishSearchLine(SearchLineCotMessage.ACTION_PAUSE);
         refreshOverlay();
     }
 
     public boolean resumeSearchLine() {
+        if (isOperationArchived())
+            return false;
         boolean resumed = searchLineManager.resume();
         if (resumed)
             publishSearchLine(SearchLineCotMessage.ACTION_RESUME);
@@ -273,12 +418,16 @@ public class SARTakMapController {
     }
 
     public void forceResumeSearchLine() {
+        if (isOperationArchived())
+            return;
         searchLineManager.forceResume();
         publishSearchLine(SearchLineCotMessage.ACTION_RESUME);
         refreshOverlay();
     }
 
     public String cycleSearchLineColor() {
+        if (isOperationArchived())
+            return searchLineManager.getColorOption().getLabel();
         String label = searchLineManager.cycleColor().getLabel();
         publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
@@ -286,12 +435,16 @@ public class SARTakMapController {
     }
 
     public void setSearchLineColor(SearchLineColorOption colorOption) {
+        if (isOperationArchived())
+            return;
         searchLineManager.setColorOption(colorOption);
         publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
     }
 
     public void setSearchLineTolerance(double toleranceMeters) {
+        if (isOperationArchived())
+            return;
         searchLineManager.setReturnMarkToleranceMeters(toleranceMeters);
         publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
@@ -325,7 +478,7 @@ public class SARTakMapController {
     }
 
     public boolean sendTeamAlert(String alertType) {
-        if (!assignmentManager.isTeamCreated())
+        if (isOperationArchived() || !assignmentManager.isTeamCreated())
             return false;
         IdentityManager.Identity identity = identityManager.resolveIdentity();
         if (identity == null || !identity.isResolved())
@@ -458,10 +611,16 @@ public class SARTakMapController {
     public String getAlertAckSummary(SearchAlertMessage alert) {
         if (alert == null)
             return "No alert selected";
+        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        String selfCallsign = identity == null ? "" : identity.getCallsign();
         java.util.Set<String> expected = new java.util.LinkedHashSet<>();
         java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
-            if (member.getUniqueId().equals(alert.getSenderUid()))
+            if (matchesMember(member.getUniqueId(), member.getCallsign(),
+                    alert.getSenderUid(), alert.getSenderCallsign())
+                    || matchesMember(member.getUniqueId(), member.getCallsign(),
+                            selfUid, selfCallsign))
                 continue;
             expected.add(member.getUniqueId());
             names.put(member.getUniqueId(), member.getCallsign());
@@ -500,18 +659,24 @@ public class SARTakMapController {
     }
 
     public void markSelectedPartial() {
+        if (isOperationArchived())
+            return;
         gridManager.setSelectedStatus(SearchGridStatus.PARTIAL);
         publishSelectedGridStatus(SearchGridStatus.PARTIAL);
         refreshOverlay();
     }
 
     public void markSelectedComplete() {
+        if (isOperationArchived())
+            return;
         gridManager.setSelectedStatus(SearchGridStatus.COMPLETE);
         publishSelectedGridStatus(SearchGridStatus.COMPLETE);
         refreshOverlay();
     }
 
     public void clearSelectedStatus() {
+        if (isOperationArchived())
+            return;
         gridManager.setSelectedStatus(SearchGridStatus.NOT_STARTED);
         publishSelectedGridStatus(SearchGridStatus.NOT_STARTED);
         refreshOverlay();
@@ -540,6 +705,304 @@ public class SARTakMapController {
     public String getSelectedCellDisplaySummary() {
         SearchGridCell cell = gridManager.getSelectedCell();
         return SearchGridDisplayFormatter.formatCellSummaryWithStatus(cell);
+    }
+
+    public String getNextCellDisplaySummary() {
+        SearchGridCell cell = gridManager.getNextPlannedCell();
+        if (cell == null)
+            return "Next cell: not planned";
+        return "Next: " + SearchGridDisplayFormatter.formatCellCompact(cell);
+    }
+
+    public String getPlannedSearchAreaSummary() {
+        if (!gridManager.hasPlannedArea())
+            return "No planned search area. Select your current GPS cell, then plan the search area.";
+        SearchGridCell cell = gridManager.getSelectedCell();
+        String utm = cell == null ? "" : " from "
+                + SearchGridDisplayFormatter.formatParentUtm(cell);
+        return gridManager.getPlannedAreaDescription() + utm + "\nApprox "
+                + gridManager.getPlannedCellEstimate()
+                + " x 100 m cells. Visible cells are generated on demand.";
+    }
+
+    public boolean assignPlannedAreaToTeam(SearchTeamCotMessage team) {
+        if (!isHqRole() || team == null || !hasActiveOperation()
+                || isOperationArchived())
+            return false;
+        SearchGridStateStore.PlannedAreaRecord area =
+                gridManager.getPlannedAreaRecord();
+        if (area == null)
+            return false;
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        String assignmentId = "area-" + getActiveOperationId() + "-"
+                + sanitizeId(team.getTeamId());
+        SearchAreaAssignment assignment = new SearchAreaAssignment(
+                assignmentId, getActiveOperationId(), team.getTeamId(),
+                team.getTeamName(), team.getLeaderUid(),
+                team.getLeaderCallsign(),
+                identity == null ? "" : identity.getUid(),
+                identity == null ? "" : identity.getCallsign(),
+                SearchAreaAssignment.STATUS_ASSIGNED,
+                System.currentTimeMillis(), area);
+        dittoSyncManager.publishAreaAssignment(assignment);
+        return true;
+    }
+
+    public boolean canManageRoutePlan() {
+        return isLeaderRole() && hasActiveOperation() && !isOperationArchived()
+                && assignmentManager.isTeamCreated();
+    }
+
+    public boolean addSelectedCellToRoute() {
+        SearchGridCell cell = ensureSelectedCell();
+        return cell != null && addRouteCellById(cell.getId());
+    }
+
+    public boolean addRouteCellById(String cellId) {
+        if (!canManageRoutePlan() || cellId == null
+                || cellId.trim().length() == 0)
+            return false;
+        SearchGridCell cell = gridManager.selectCellById(cellId);
+        if (cell == null)
+            return false;
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        activeRoutePlan = ensureRoutePlan().withAddedCell(cell.getId(),
+                identity == null ? "" : identity.getUid(),
+                identity == null ? "" : identity.getCallsign());
+        publishRoutePlan();
+        searchRouteOverlay.setVisible(true);
+        refreshOverlay();
+        return true;
+    }
+
+    public boolean generateSerpentineRouteFromPlannedArea() {
+        if (!canManageRoutePlan() || !gridManager.hasPlannedArea())
+            return false;
+        List<SearchGridCell> routeCells = gridManager.getSerpentineRouteCells();
+        if (routeCells.isEmpty())
+            return false;
+        List<String> cellIds = new ArrayList<>();
+        for (SearchGridCell cell : routeCells)
+            cellIds.add(cell.getId());
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        activeRoutePlan = ensureRoutePlan().withCells(cellIds,
+                identity == null ? "" : identity.getUid(),
+                identity == null ? "" : identity.getCallsign());
+        publishRoutePlan();
+        searchRouteOverlay.setVisible(true);
+        refreshOverlay();
+        return true;
+    }
+
+    public void clearRoutePlan() {
+        if (!canManageRoutePlan())
+            return;
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        activeRoutePlan = ensureRoutePlan().withCells(new ArrayList<String>(),
+                identity == null ? "" : identity.getUid(),
+                identity == null ? "" : identity.getCallsign());
+        routeSelectionAnchor = null;
+        gridOverlay.setRouteSelectionAnchor(null);
+        routeSelectionHint = gridOverlay.isSelectionMode()
+                ? "Tap a start cell, then tap an end cell to select a lane or box."
+                : "Route selection off";
+        publishRoutePlan();
+        refreshOverlay();
+    }
+
+    public boolean toggleRouteOverlay() {
+        boolean visible = searchRouteOverlay.toggleVisible();
+        refreshOverlay();
+        return visible;
+    }
+
+    public boolean isRouteOverlayVisible() {
+        return searchRouteOverlay.isVisible();
+    }
+
+    public boolean toggleRouteSelectionMode() {
+        boolean active = !gridOverlay.isSelectionMode();
+        gridOverlay.setSelectionMode(active);
+        routeSelectionAnchor = null;
+        gridOverlay.setRouteSelectionAnchor(null);
+        routeSelectionHint = active
+                ? "Tap a start cell, then tap an end cell to select a lane or box."
+                : "Route selection off";
+        if (active)
+            gridOverlay.setVisible(true);
+        refreshOverlay();
+        return active;
+    }
+
+    public boolean isRouteSelectionMode() {
+        return gridOverlay.isSelectionMode();
+    }
+
+    public boolean toggleAssignmentOverlay() {
+        boolean visible = assignmentOverlay.toggleVisible();
+        refreshOverlay();
+        return visible;
+    }
+
+    public boolean isAssignmentOverlayVisible() {
+        return assignmentOverlay.isVisible();
+    }
+
+    public String cycleGridColor() {
+        if (isOperationArchived())
+            return gridColorOption.getLabel();
+        gridColorOption = gridColorOption.next();
+        gridOverlay.setGridColor(gridColorOption.getArgb());
+        refreshOverlay();
+        return gridColorOption.getLabel();
+    }
+
+    public String getGridColorLabel() {
+        return gridColorOption.getLabel();
+    }
+
+    public String getRoutePlanSummary() {
+        applyRemoteRoutePlanIfAvailable();
+        if (activeRoutePlan == null || activeRoutePlan.isEmpty())
+            return gridOverlay.isSelectionMode()
+                    ? "No route planned. " + routeSelectionHint
+                    : "No route planned. Use Select Route Cells or generate a serpentine route from the planned area.";
+        List<SearchGridCell> cells = gridManager.cellsForIds(activeRoutePlan
+                .getCellIds());
+        StringBuilder builder = new StringBuilder();
+        builder.append("Route: ").append(activeRoutePlan.size())
+                .append(" cells");
+        if (!cells.isEmpty()) {
+            builder.append("\nStart: ")
+                    .append(SearchGridDisplayFormatter.formatCellCompact(
+                            cells.get(0)));
+            builder.append("\nEnd: ")
+                    .append(SearchGridDisplayFormatter.formatCellCompact(
+                            cells.get(cells.size() - 1)));
+        }
+        builder.append("\nGuide line: ")
+                .append(searchRouteOverlay.isVisible() ? "shown" : "hidden");
+        builder.append(" | Selection: ")
+                .append(gridOverlay.isSelectionMode() ? routeSelectionHint
+                        : "off");
+        builder.append("\nTeam assignment overlay: ")
+                .append(assignmentOverlay.isVisible() ? "shown" : "hidden");
+        return builder.toString();
+    }
+
+    public List<SearchAreaAssignment> getAreaAssignments() {
+        return dittoSyncManager.getAreaAssignments();
+    }
+
+    public SearchAreaAssignment getAssignedAreaForMyTeam() {
+        if (!assignmentManager.isTeamCreated())
+            return null;
+        SearchAreaAssignment latest = null;
+        String teamId = assignmentManager.getTeamId();
+        for (SearchAreaAssignment assignment
+                : dittoSyncManager.getAreaAssignments()) {
+            if (!teamId.equals(assignment.getTeamId()))
+                continue;
+            if (latest == null || assignment.getUpdatedAt() > latest
+                    .getUpdatedAt())
+                latest = assignment;
+        }
+        return latest;
+    }
+
+    public String getSearchAreaAssignmentSummary() {
+        if (isHqRole()) {
+            List<SearchAreaAssignment> assignments =
+                    dittoSyncManager.getAreaAssignments();
+            if (assignments.isEmpty())
+                return "No team search areas assigned yet.";
+            StringBuilder builder = new StringBuilder("Assigned areas:\n");
+            int count = 0;
+            for (SearchAreaAssignment assignment : assignments) {
+                if (count > 0)
+                    builder.append('\n');
+                builder.append("- ").append(assignment.getTeamName())
+                        .append(": ").append(assignment.areaSummary())
+                        .append(" (").append(assignment.getStatus())
+                        .append(")");
+                count++;
+                if (count >= 6)
+                    break;
+            }
+            return builder.toString();
+        }
+        SearchAreaAssignment assignment = getAssignedAreaForMyTeam();
+        return assignment == null
+                ? "No HQ search area assigned to this team yet."
+                : "HQ assigned area:\n" + assignment.getDisplaySummary();
+    }
+
+    public List<SearchGridCell> getGridReviewCells() {
+        return gridManager.getReviewCells();
+    }
+
+    public void selectGridCell(String cellId) {
+        SearchGridCell cell = gridManager.selectCellById(cellId);
+        if (cell == null)
+            return;
+        GeoPoint currentPoint = getCurrentUserPoint();
+        if (currentPoint != null)
+            searchLineManager.updateLeaderPosition(cell, currentPoint);
+        arrangeTeamMembers();
+        refreshOverlay();
+    }
+
+    public void focusGridCell(String cellId) {
+        SearchGridCell cell = gridManager.selectCellById(cellId);
+        if (cell == null)
+            return;
+        GeoPoint center = converter.toGeoPoint(cell.getZoneDescriptor(),
+                (cell.getWest() + cell.getEast()) / 2.0,
+                (cell.getSouth() + cell.getNorth()) / 2.0);
+        mapView.getMapController().panTo(center, true);
+        refreshOverlay();
+    }
+
+    public String getPendingGridReviewCellId() {
+        SearchGridCell cell = gridManager.getPendingReviewCell();
+        return cell == null ? "" : cell.getId();
+    }
+
+    public String getPendingGridReviewCellSummary() {
+        SearchGridCell cell = gridManager.getPendingReviewCell();
+        return cell == null ? ""
+                : SearchGridDisplayFormatter.formatCellCompact(cell);
+    }
+
+    public void markGridCellPartial(String cellId) {
+        if (isOperationArchived())
+            return;
+        gridManager.setCellStatus(cellId, SearchGridStatus.PARTIAL);
+        publishGridStatusForCell(cellId, SearchGridStatus.PARTIAL);
+        gridManager.clearPendingReviewCell(cellId);
+        refreshOverlay();
+    }
+
+    public void markGridCellComplete(String cellId) {
+        if (isOperationArchived())
+            return;
+        gridManager.setCellStatus(cellId, SearchGridStatus.COMPLETE);
+        publishGridStatusForCell(cellId, SearchGridStatus.COMPLETE);
+        gridManager.clearPendingReviewCell(cellId);
+        refreshOverlay();
+    }
+
+    public void clearGridCellStatus(String cellId) {
+        if (isOperationArchived())
+            return;
+        gridManager.setCellStatus(cellId, SearchGridStatus.NOT_STARTED);
+        publishGridStatusForCell(cellId, SearchGridStatus.NOT_STARTED);
+        gridManager.clearPendingReviewCell(cellId);
+        refreshOverlay();
+    }
+
+    public void deferGridCellReview(String cellId) {
+        gridManager.clearPendingReviewCell(cellId);
     }
 
     public String getSelectedCellStatus() {
@@ -596,12 +1059,17 @@ public class SARTakMapController {
                 && activeOperationProfile.getOperationId().length() > 0;
     }
 
+    public boolean isOperationArchived() {
+        return activeOperationProfile != null
+                && activeOperationProfile.isArchived();
+    }
+
     public boolean canCreateOperationFromLocalDittoConfig() {
         return getOperationCredentialProfile() != null;
     }
 
     public boolean canCreateOperation() {
-        return isLeaderRole() && canCreateOperationFromLocalDittoConfig();
+        return canManageOperation() && canCreateOperationFromLocalDittoConfig();
     }
 
     public String getDittoCredentialSummary() {
@@ -628,13 +1096,16 @@ public class SARTakMapController {
         boolean identityReady = identity != null && identity.isResolved();
         boolean gpsReady = healthManager.isLocationActive();
         boolean storageReady = healthManager.isStorageReady();
-        boolean operationReady = hasActiveOperation();
+        boolean operationReady = hasActiveOperation()
+                && !isOperationArchived();
+        boolean operationSelected = hasActiveOperation();
         boolean dittoProfileReady = operationReady
                 ? activeOperationProfile.hasDittoCredentials()
                 : canCreateOperationFromLocalDittoConfig();
         boolean dittoRunning = dittoSyncManager.isConfigured()
                 && dittoSyncManager.isStarted();
         boolean teamReady = assignmentManager.isTeamCreated();
+        boolean hqRole = isHqRole();
         boolean trackReady = healthManager.isTrackingActive()
                 && trackManager.getActiveSessionId() != null
                 && trackManager.getActiveSessionId().length() > 0;
@@ -661,19 +1132,23 @@ public class SARTakMapController {
         appendReadinessLine(builder,
                 operationReady ? READINESS_READY : READINESS_WAITING,
                 "Operation",
-                operationReady ? activeOperationProfile.getOperationName()
+                operationSelected ? activeOperationProfile.getOperationName()
+                        + (isOperationArchived() ? " (archived)" : "")
                         : "Create or join an operation");
         appendReadinessLine(builder, dittoState, "Ditto sync",
                 dittoSyncManager.getSummary());
         appendReadinessLine(builder,
-                teamReady ? READINESS_READY : READINESS_WAITING, "SAR team",
-                teamReady ? assignmentManager.getTeamName()
-                        : "Create or join a SARtak team");
+                hqRole || teamReady ? READINESS_READY : READINESS_WAITING,
+                "SAR team",
+                hqRole ? "HQ controls operation teams"
+                        : teamReady ? assignmentManager.getTeamName()
+                                : "Create or join a SARtak team");
         appendReadinessLine(builder,
-                trackReady ? READINESS_READY : READINESS_WAITING,
+                hqRole || trackReady ? READINESS_READY : READINESS_WAITING,
                 "Track recording",
-                trackReady ? trackManager.getStatusSummary()
-                        : "Waiting for active operation track");
+                hqRole ? "HQ device not assigned to search tracks"
+                        : trackReady ? trackManager.getStatusSummary()
+                                : "Waiting for active operation track");
         return builder.toString();
     }
 
@@ -684,11 +1159,13 @@ public class SARTakMapController {
         boolean identityReady = identity != null && identity.isResolved();
         boolean gpsReady = healthManager.isLocationActive();
         boolean storageReady = healthManager.isStorageReady();
-        boolean operationReady = hasActiveOperation();
+        boolean operationReady = hasActiveOperation()
+                && !isOperationArchived();
         boolean dittoProfileReady = operationReady
                 ? activeOperationProfile.hasDittoCredentials()
                 : canCreateOperationFromLocalDittoConfig();
         boolean teamReady = assignmentManager.isTeamCreated();
+        boolean hqRole = isHqRole();
         boolean trackReady = healthManager.isTrackingActive()
                 && trackManager.getActiveSessionId() != null
                 && trackManager.getActiveSessionId().length() > 0;
@@ -699,8 +1176,8 @@ public class SARTakMapController {
                 || dittoState == READINESS_BLOCKED)
             return READINESS_BLOCKED;
         if (!identityReady || !operationReady || !dittoProfileReady
-                || dittoState == READINESS_WAITING || !teamReady
-                || !trackReady)
+                || dittoState == READINESS_WAITING
+                || (!hqRole && (!teamReady || !trackReady)))
             return READINESS_WAITING;
         return READINESS_READY;
     }
@@ -712,10 +1189,11 @@ public class SARTakMapController {
                 && healthManager.isLocationActive()
                 && healthManager.isStorageReady()
                 && hasActiveOperation()
+                && !isOperationArchived()
                 && dittoSyncManager.isConfigured()
                 && dittoSyncManager.isStarted()
-                && assignmentManager.isTeamCreated()
-                && healthManager.isTrackingActive();
+                && (isHqRole() || (assignmentManager.isTeamCreated()
+                        && healthManager.isTrackingActive()));
     }
 
     public List<DittoCredentialProfile> getDittoCredentialProfiles() {
@@ -769,6 +1247,82 @@ public class SARTakMapController {
                 : activeOperationProfile.getSummary();
     }
 
+    public String getOperationHeadline() {
+        if (!hasActiveOperation())
+            return "No active operation selected";
+        return activeOperationProfile.getOperationName()
+                + (activeOperationProfile.isArchived() ? " (archived)" : "");
+    }
+
+    public String getOperationDashboardSummary() {
+        if (activeOperationProfile == null)
+            return "No active operation selected";
+
+        List<SearchTeamCotMessage> teams = getActiveTeamAdvertisements();
+        List<DeviceConnectivitySnapshot> devices = getVisibleDevices();
+        int leaders = 0;
+        int searchers = 0;
+        int unassigned = 0;
+        for (DeviceConnectivitySnapshot device : devices) {
+            String role = device.getRole() == null ? ""
+                    : device.getRole().toLowerCase(java.util.Locale.US);
+            String teamSummary = device.getTeamSummary() == null ? ""
+                    : device.getTeamSummary().toLowerCase(
+                            java.util.Locale.US);
+            boolean assigned = teamSummary.length() > 0
+                    && !teamSummary.contains("unassigned")
+                    && !teamSummary.contains("none");
+            if (role.contains("lead") || role.contains("leader")
+                    || role.contains("hq"))
+                leaders++;
+            else
+                searchers++;
+            if (!assigned)
+                unassigned++;
+        }
+        leaders = Math.max(leaders, teams.size());
+
+        java.util.Map<SearchGridStatus, Integer> statusCounts =
+                gridManager.getKnownStatusCounts();
+        int complete = value(statusCounts, SearchGridStatus.COMPLETE);
+        int partial = value(statusCounts, SearchGridStatus.PARTIAL);
+        int inProgress = value(statusCounts, SearchGridStatus.IN_PROGRESS);
+        int planned = gridManager.getPlannedCellEstimate();
+        int touched = complete + partial + inProgress;
+        int unsearched = planned > 0 ? Math.max(0, planned - touched) : 0;
+
+        int activeAlerts = getActiveTeamAlerts().size();
+        int evidenceMarkers = dittoSyncManager.getSharedMapMarkers().size();
+        int assignments = getAreaAssignments().size();
+
+        StringBuilder builder = new StringBuilder();
+        builder.append(activeOperationProfile.getSummary()).append("\n\n");
+        builder.append("Operational picture\n");
+        builder.append("Teams visible: ").append(teams.size()).append('\n');
+        builder.append("Leaders/HQ visible: ").append(leaders).append('\n');
+        builder.append("Searchers visible: ").append(searchers).append('\n');
+        builder.append("Unassigned devices: ").append(unassigned)
+                .append('\n');
+        builder.append("Search area: ").append(gridManager
+                .getPlannedAreaDescription()).append('\n');
+        builder.append("Planned cells: ").append(planned).append('\n');
+        builder.append("Completed: ").append(complete).append(" cells / ")
+                .append(formatAreaKm2(complete)).append('\n');
+        builder.append("Partial: ").append(partial).append(" cells / ")
+                .append(formatAreaKm2(partial)).append('\n');
+        builder.append("In progress: ").append(inProgress)
+                .append(" cells\n");
+        builder.append("Unsearched estimate: ").append(unsearched)
+                .append(" cells / ").append(formatAreaKm2(unsearched))
+                .append('\n');
+        builder.append("Area assignments: ").append(assignments).append('\n');
+        builder.append("Evidence/shared markers: ").append(evidenceMarkers)
+                .append('\n');
+        builder.append("Active alerts: ").append(activeAlerts).append('\n');
+        builder.append("Sync: ").append(dittoSyncManager.getSummary());
+        return builder.toString();
+    }
+
     public String getOperationJoinCode() {
         if (activeOperationProfile == null)
             return "";
@@ -780,16 +1334,25 @@ public class SARTakMapController {
     }
 
     public boolean createOperation(String operationName) {
-        if (!isLeaderRole())
+        return createOperation(operationName, "", "", "", "Normal", "", 0L);
+    }
+
+    public boolean createOperation(String operationName, String incidentNumber,
+            String searchType, String stagingArea, String priority,
+            String briefingNotes, long plannedEndAt) {
+        if (!canManageOperation())
             return false;
         DittoCredentialProfile credentials = getOperationCredentialProfile();
         if (credentials == null)
             return false;
         IdentityManager.Identity identity = identityManager.resolveIdentity();
         OperationProfile profile = OperationProfile.create(operationName,
-                identity, credentials.getDatabaseId(), credentials.getAuthUrl(),
+                incidentNumber, searchType, stagingArea, priority,
+                briefingNotes, plannedEndAt, identity, credentials
+                        .getDatabaseId(), credentials.getAuthUrl(),
                 credentials.getDevelopmentToken());
         activateOperation(profile, true);
+        dittoSyncManager.publishOperationStatus(profile.getStatus());
         return true;
     }
 
@@ -815,8 +1378,25 @@ public class SARTakMapController {
         refreshOverlay();
     }
 
+    public boolean archiveOperation() {
+        if (!canManageOperation() || activeOperationProfile == null
+                || activeOperationProfile.isArchived())
+            return false;
+        activeOperationProfile = activeOperationProfile.archivedCopy(
+                System.currentTimeMillis());
+        operationStateStore.save(activeOperationProfile);
+        searchLineManager.end();
+        dittoSyncManager.publishOperationStatus(activeOperationProfile
+                .getStatus());
+        if (assignmentManager.isTeamCreated())
+            publishTeamPresence();
+        publishDittoDeviceStateNow();
+        refreshOverlay();
+        return true;
+    }
+
     public void createTeam(String teamName) {
-        if (!hasActiveOperation())
+        if (!hasActiveOperation() || isOperationArchived() || !isLeaderRole())
             return;
         inactiveMembershipTimes.clear();
         assignmentManager.createTeam(teamName, getFixedLeaderTeamId());
@@ -871,15 +1451,17 @@ public class SARTakMapController {
         if (assignmentManager.isTeamCreated())
             teamCotWorkflow.publishPresence("", "", "", "",
                     "", 0, "", 0, "");
+        activeRoutePlan = null;
         assignmentManager.clearTeam();
         teamStateStore.clear();
+        searchLineStateStore.clear();
         publishDittoDeviceStateNow();
         refreshTeamContactsInternal();
         refreshOverlay();
     }
 
     public void requestJoinTeam(SearchTeamCotMessage team) {
-        if (!hasActiveOperation())
+        if (!hasActiveOperation() || isOperationArchived())
             return;
         teamCotWorkflow.requestJoin(team);
     }
@@ -889,7 +1471,8 @@ public class SARTakMapController {
     }
 
     public void inviteTeamMember(String uniqueId) {
-        if (!hasActiveOperation() || !assignmentManager.isTeamCreated())
+        if (!hasActiveOperation() || isOperationArchived()
+                || !assignmentManager.isTeamCreated())
             return;
         AtakTeamContactDataSource.ContactSnapshot contact = findContact(uniqueId);
         if (contact == null)
@@ -905,6 +1488,8 @@ public class SARTakMapController {
 
     public void respondToJoinRequest(SearchTeamCotMessage request,
             boolean accepted) {
+        if (isOperationArchived())
+            return;
         teamCotWorkflow.respondToJoin(request, accepted);
         if (accepted) {
             forgetInactiveMembership(request.getTeamId(),
@@ -953,6 +1538,8 @@ public class SARTakMapController {
 
     public void respondToInvite(SearchTeamCotMessage invite,
             boolean accepted) {
+        if (isOperationArchived())
+            return;
         teamCotWorkflow.respondToInvite(invite, accepted);
         if (accepted) {
             forgetInactiveMembership(invite.getTeamId(),
@@ -1303,9 +1890,10 @@ public class SARTakMapController {
             builder.ditto = true;
             builder.teamName = snapshot.getTeamName();
             builder.teamId = snapshot.getTeamId();
-            if (builder.role.length() == 0)
-                builder.role = AtakTeamContactDataSource.ContactSnapshot
-                        .fromDitto(snapshot).getRole();
+            String dittoRole = AtakTeamContactDataSource.ContactSnapshot
+                    .fromDitto(snapshot).getRole();
+            if (dittoRole != null && dittoRole.trim().length() > 0)
+                builder.role = dittoRole.trim();
             builder.lastDittoUpdate = snapshot.getUpdatedAt();
             if (builder.atakGroupName.length() == 0)
                 builder.atakGroupName = AtakTeamContactDataSource
@@ -1317,6 +1905,13 @@ public class SARTakMapController {
         for (DeviceBuilder builder : devices.values()) {
             boolean isSelf = matchesMember(selfUid, selfCallsign,
                     builder.uid, builder.callsign);
+            if (isSelf) {
+                builder.role = getRoleLabel();
+                if (isHqRole()) {
+                    builder.teamName = "";
+                    builder.teamId = "";
+                }
+            }
             snapshots.add(builder.build(isSelf));
         }
         java.util.Collections.sort(snapshots,
@@ -1345,6 +1940,19 @@ public class SARTakMapController {
     public boolean isLeaderRole() {
         currentRole = AtakRoleResolver.resolve(mapView);
         return currentRole == AtakRoleResolver.Role.TEAM_LEADER;
+    }
+
+    public boolean isHqRole() {
+        currentRole = AtakRoleResolver.resolve(mapView);
+        return currentRole == AtakRoleResolver.Role.HQ;
+    }
+
+    public boolean canManageOperation() {
+        return isHqRole();
+    }
+
+    public boolean canManageSearchArea() {
+        return isHqRole();
     }
 
     public String getRoleLabel() {
@@ -1421,24 +2029,23 @@ public class SARTakMapController {
     }
 
     public String getGridProgressSummary() {
-        List<SearchGridCell> cells = gridManager.getSelectedAggregateCells();
-        if (cells.isEmpty())
-            return "Select the current GPS cell to show grid progress.";
-        int partial = 0;
-        int complete = 0;
-        int inProgress = 0;
-        for (SearchGridCell cell : cells) {
-            if (cell.getStatus() == SearchGridStatus.PARTIAL)
-                partial++;
-            else if (cell.getStatus() == SearchGridStatus.COMPLETE)
-                complete++;
-            else if (cell.getStatus() == SearchGridStatus.IN_PROGRESS)
-                inProgress++;
-        }
+        SearchGridManager.GridExtent area = gridManager.getAreaExtent();
+        if (area == null)
+            return "Select the current GPS cell to show grid progress.\n"
+                    + gridOverlay.getLastDiagnostics();
+        // Counted from the stored statuses rather than by walking the area,
+        // so the totals cover the whole planned area however large it is.
+        SearchGridManager.AreaProgress progress = gridManager
+                .getAreaProgress();
+        SearchGridCell firstCell = converter.cellForUtmPoint(area.zone,
+                area.west, area.south, gridStateStore);
         return "UTM: " + SearchGridDisplayFormatter.formatParentUtm(
-                cells.get(0)) + "\n1 km area: " + complete + " complete, " + partial
-                + " partial, " + inProgress + " in progress, "
-                + cells.size() + " cells total";
+                firstCell) + "\nPlanned area: " + progress.complete
+                + " complete, " + progress.partial + " partial, "
+                + progress.inProgress + " in progress, "
+                + progress.totalCells + " cells total\n"
+                + getNextCellDisplaySummary() + "\n"
+                + gridOverlay.getLastDiagnostics();
     }
 
     public SearchTeamMember selectTeamMember(String uniqueId) {
@@ -1469,9 +2076,11 @@ public class SARTakMapController {
     public boolean toggleTrackVisibility() {
         boolean visible = trackManager.toggleVisible();
         atakTrackBridge.setVisible(visible);
-        trackOverlay.setVisible(visible
-                && !atakTrackBridge.hasAtakTrackTrail());
-        trackOverlay.render(trackManager.getTrackPoints());
+        boolean showLocalTrack = visible
+                && !atakTrackBridge.hasAtakTrackTrail();
+        trackOverlay.setVisible(showLocalTrack);
+        if (showLocalTrack)
+            trackOverlay.render(trackManager.getTrackPoints());
         return visible;
     }
 
@@ -1529,6 +2138,8 @@ public class SARTakMapController {
     }
 
     public void dispose() {
+        logRecoverySnapshot("disposing");
+        disposed = true;
         locationCaptureManager.stop();
         rawGnssCaptureManager.stop();
         healthManager.stop();
@@ -1538,53 +2149,246 @@ public class SARTakMapController {
         gridCotWorkflow.dispose();
         searchLineCotWorkflow.dispose();
         backgroundHandler.removeCallbacks(backgroundRunnable);
+        backgroundHandler.removeCallbacks(deferredServiceStartRunnable);
+        overlayHandler.removeCallbacks(deferredOverlayRunnable);
         unregisterMapListeners();
         gridOverlay.setVisible(false);
         teamMarkerOverlay.setVisible(false);
         trackOverlay.setVisible(false);
         searchLineOverlay.setVisible(false);
+        searchRouteOverlay.setVisible(false);
+        assignmentOverlay.setVisible(false);
     }
 
     private void refreshOverlay() {
         applyRemoteGridStatusMessages();
         applyRemoteSearchLineIfAvailable();
+        applyRemoteRoutePlanIfAvailable();
+        applyRemoteAreaAssignmentIfAvailable();
         GeoPoint currentPoint = getCurrentUserPoint();
         if (currentPoint != null && isLeaderRole()
+                && searchLineManager.isStarted()
                 && !searchLineManager.isRemoteControlled())
             searchLineManager.updateLeaderPosition(gridManager
                     .getSelectedCell(), currentPoint);
         arrangeTeamMembers();
-        gridOverlay.render(gridManager);
-        searchLineOverlay.render(searchLineManager);
-        teamMarkerOverlay.render();
-        trackOverlay.setVisible(trackManager.isVisible()
-                && !atakTrackBridge.hasAtakTrackTrail());
-        trackOverlay.render(trackManager.getTrackPoints());
+        renderOverlaysOnly();
         publishSearchLineUpdateIfDue();
+    }
+
+    private void renderOverlaysOnly() {
+        long started = SystemClock.elapsedRealtimeNanos();
+        gridOverlay.render(gridManager);
+        long gridDone = SystemClock.elapsedRealtimeNanos();
+        searchLineOverlay.render(searchLineManager);
+        if (searchRouteOverlay.isVisible())
+            searchRouteOverlay.render(activeRoutePlan, gridManager,
+                    converter);
+        long routeDone = SystemClock.elapsedRealtimeNanos();
+        if (assignmentOverlay.isVisible())
+            assignmentOverlay.render(dittoSyncManager.getRoutePlans());
+        long assignmentDone = SystemClock.elapsedRealtimeNanos();
+        teamMarkerOverlay.render();
+        long markersDone = SystemClock.elapsedRealtimeNanos();
+        overlayVisibilityStore.saveIfChanged(gridOverlay.isVisible(),
+                gridOverlay.isShowingLabels(), searchRouteOverlay.isVisible(),
+                assignmentOverlay.isVisible());
+        if (BuildConfig.DEBUG)
+            logRenderProfile(started, gridDone, routeDone, assignmentDone,
+                    markersDone);
+        boolean showLocalTrack = trackManager.isVisible()
+                && !atakTrackBridge.hasAtakTrackTrail();
+        trackOverlay.setVisible(showLocalTrack);
+        if (showLocalTrack)
+            trackOverlay.render(trackManager.getTrackPoints());
+    }
+
+    private void logRenderProfile(long started, long gridDone,
+            long routeDone, long assignmentDone, long markersDone) {
+        GeoBounds view = mapView.getBounds();
+        Log.d(PERF_TAG, "render ms grid=" + millis(started, gridDone)
+                + " route=" + millis(gridDone, routeDone)
+                + " assign=" + millis(routeDone, assignmentDone)
+                + " markers=" + millis(assignmentDone, markersDone)
+                + " total=" + millis(started, markersDone)
+                + " | res=" + Math.round(mapView.getMapResolution()) + "m"
+                + " | " + MapOverlayDiagnostics.describe("gridItems",
+                        gridOverlay.getMapGroup(), view)
+                + " " + MapOverlayDiagnostics.describe("routeItems",
+                        searchRouteOverlay.getMapGroup(), view)
+                + " " + MapOverlayDiagnostics.describe("assignItems",
+                        assignmentOverlay.getMapGroup(), view)
+                + " | " + gridOverlay.getLastDiagnostics());
+    }
+
+    private void restoreOverlayVisibility() {
+        if (overlayVisibilityStore.isGridVisible())
+            gridOverlay.setVisible(true);
+        if (overlayVisibilityStore.isGridLabelsVisible()
+                && !gridOverlay.isShowingLabels())
+            gridOverlay.toggleLabels();
+        searchRouteOverlay.setVisible(overlayVisibilityStore.isRouteVisible());
+        if (overlayVisibilityStore.isTeamAreasVisible())
+            assignmentOverlay.setVisible(true);
+    }
+
+    /**
+     * A leader's search line only lives in memory and in sync messages that
+     * expire after 30 s, so without this a leader whose ATAK restarts loses
+     * the line while the team is still searching on it.
+     */
+    private void restoreLeaderSearchLine() {
+        SearchLineStateStore.Record record = searchLineStateStore.load();
+        if (record == null)
+            return;
+        if (!isLeaderRole() || !assignmentManager.isTeamCreated()
+                || !hasActiveOperation() || isOperationArchived()
+                || !record.operationId.equals(getActiveOperationId())
+                || !record.teamId.equals(assignmentManager.getTeamId())) {
+            searchLineStateStore.clear();
+            return;
+        }
+        SearchGridCell cell = converter.cellForId(record.cellId,
+                gridStateStore);
+        if (!searchLineManager.restoreLeaderLine(cell, record.state,
+                record.direction, record.lineOffset, record.startedAt,
+                record.pausedAt, record.color, record.toleranceMeters))
+            searchLineStateStore.clear();
+    }
+
+    private void persistLeaderSearchLine() {
+        if (!isLeaderRole() || !assignmentManager.isTeamCreated()
+                || searchLineManager.isRemoteControlled())
+            return;
+        SearchGridCell cell = searchLineManager.getActiveCell();
+        if (!searchLineManager.isStarted() || cell == null) {
+            searchLineStateStore.clear();
+            return;
+        }
+        searchLineStateStore.save(new SearchLineStateStore.Record(
+                getActiveOperationId(), assignmentManager.getTeamId(),
+                searchLineManager.getState(), cell.getId(),
+                searchLineManager.getDirection(),
+                searchLineManager.getLineOffset(),
+                searchLineManager.getLineStartedAt(),
+                searchLineManager.getLinePausedAt(),
+                searchLineManager.getColorOption(),
+                searchLineManager.getReturnMarkToleranceMeters()));
+    }
+
+    /**
+     * Debug-only one-line summary of everything SARtak should bring back
+     * after ATAK is closed, restarted or killed by Android.
+     */
+    private void logRecoverySnapshot(String phase) {
+        if (!BuildConfig.DEBUG)
+            return;
+        try {
+            SearchGridManager.AreaProgress progress = gridManager
+                    .getAreaProgress();
+            Log.d(RECOVERY_TAG, phase
+                    + " | operation=" + (activeOperationProfile == null
+                            ? "none"
+                            : activeOperationProfile.getOperationId() + "/"
+                                    + activeOperationProfile.getOperationName()
+                                    + "/" + activeOperationProfile.getStatus())
+                    + " | role=" + getRoleLabel()
+                    + " | team=" + (assignmentManager.isTeamCreated()
+                            ? assignmentManager.getTeamId() + "/"
+                                    + assignmentManager.getTeamName()
+                                    + "/members=" + assignmentManager
+                                            .getVisibleMemberCount()
+                            : "none")
+                    + " | area=" + gridManager.getPlannedAreaDescription()
+                    + " | cells complete=" + progress.complete
+                    + " partial=" + progress.partial
+                    + " inProgress=" + progress.inProgress
+                    + " | selected=" + getSelectedCellId()
+                    + " | route=" + (activeRoutePlan == null ? "none"
+                            : activeRoutePlan.getCellIds().size() + " cells")
+                    + " | line=" + searchLineManager.getState()
+                    + (searchLineManager.isStarted() ? "/"
+                            + searchLineManager.getDirection() : "")
+                    + (searchLineManager.isRemoteControlled() ? "(remote)"
+                            : "")
+                    + " | overlays grid=" + gridOverlay.isVisible()
+                    + " route=" + searchRouteOverlay.isVisible()
+                    + " areas=" + assignmentOverlay.isVisible()
+                    + " | track=" + (trackManager.isRecording() ? "recording"
+                            : "stopped"));
+        } catch (RuntimeException exception) {
+            Log.d(RECOVERY_TAG, phase + " | snapshot failed: " + exception);
+        }
+    }
+
+    private static String millis(long fromNanos, long toNanos) {
+        return String.format(java.util.Locale.US, "%.1f",
+                (toNanos - fromNanos) / 1000000.0);
     }
 
     private void startBackgroundRefresh() {
         backgroundHandler.removeCallbacks(backgroundRunnable);
-        backgroundHandler.postDelayed(backgroundRunnable, 5000L);
+        backgroundHandler.postDelayed(backgroundRunnable,
+                BACKGROUND_REFRESH_INTERVAL_MS);
+    }
+
+    private void scheduleOverlayRefresh() {
+        overlayHandler.removeCallbacks(deferredOverlayRunnable);
+        overlayHandler.postDelayed(deferredOverlayRunnable,
+                MAP_REFRESH_DEBOUNCE_MS);
     }
 
     private void runBackgroundTeamRefresh() {
+        if (!loggedSyncedRecoverySnapshot) {
+            loggedSyncedRecoverySnapshot = true;
+            applyRemoteRoutePlanIfAvailable();
+            logRecoverySnapshot("synced");
+        }
         dittoSyncManager.maintainConnection();
         advertiseTeamIfDue();
         applyTeamLifecycleMessages();
         applyDittoMembershipSnapshots();
-        syncDittoDevicesToAtakMarkers();
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
         applyRemoteSearchLineIfAvailable();
+        applyRemoteRoutePlanIfAvailable();
         applyRemoteGridStatusMessages();
+        applyRemoteAreaAssignmentIfAvailable();
+        applyRemoteOperationStatusIfAvailable();
         applyAlertSearchLineSideEffects();
         refreshLocationAvailability();
         syncSelfTeamMemberFromAtak();
+        updateCurrentGridCellFromLocation();
         publishDittoDeviceStateIfDue();
         applyDittoDeviceSnapshots();
-        refreshOverlay();
+        arrangeTeamMembers();
+        renderOverlaysOnly();
+        publishSearchLineUpdateIfDue();
+    }
+
+    private void updateCurrentGridCellFromLocation() {
+        GeoPoint point = getCurrentUserPoint();
+        if (point == null)
+            return;
+        SearchGridCell before = gridManager.getSelectedCell();
+        String previousId = before == null ? "" : before.getId();
+        boolean shouldAutoMarkPreviousPartial = isLeaderRole()
+                && assignmentManager.isTeamCreated()
+                && searchLineManager.isStarted()
+                && !searchLineManager.isPaused()
+                && !searchLineManager.isRemoteControlled();
+        SearchGridCell current = gridManager.updateCurrentCellAt(point,
+                shouldAutoMarkPreviousPartial);
+        if (current == null || previousId.equals(current.getId()))
+            return;
+
+        if (shouldAutoMarkPreviousPartial) {
+            SearchGridCell pending = gridManager.getPendingReviewCell();
+            if (pending != null)
+                publishGridStatusForCell(pending.getId(), pending.getStatus());
+            publishGridStatusForCell(current.getId(), current.getStatus());
+        }
     }
 
     private void applyAlertSearchLineSideEffects() {
@@ -1660,13 +2464,22 @@ public class SARTakMapController {
     }
 
     private void publishSelectedGridStatus(SearchGridStatus status) {
-        if (!isLeaderRole() || !assignmentManager.isTeamCreated())
-            return;
         SearchGridCell cell = gridManager.getSelectedCell();
         if (cell == null)
             return;
-        gridCotWorkflow.publishStatus(assignmentManager.getTeamId(),
-                cell.getId(), status);
+        publishGridStatusForCell(cell.getId(), status);
+    }
+
+    private void publishGridStatusForCell(String cellId,
+            SearchGridStatus status) {
+        boolean leaderCanPublish = isLeaderRole()
+                && assignmentManager.isTeamCreated();
+        boolean hqCanPublish = isHqRole() && hasActiveOperation();
+        if ((!leaderCanPublish && !hqCanPublish) || cellId == null
+                || cellId.length() == 0 || status == null)
+            return;
+        String teamId = leaderCanPublish ? assignmentManager.getTeamId() : "";
+        gridCotWorkflow.publishStatus(teamId, cellId, status);
     }
 
     private void applyRemoteGridStatusMessages() {
@@ -1689,6 +2502,7 @@ public class SARTakMapController {
             action = SearchLineCotMessage.ACTION_PAUSE;
         searchLineCotWorkflow.publishNow(action, assignmentManager.getTeamId(),
                 searchLineManager);
+        persistLeaderSearchLine();
     }
 
     private void publishSearchLineUpdateIfDue() {
@@ -1698,6 +2512,7 @@ public class SARTakMapController {
             return;
         searchLineCotWorkflow.publishUpdateIfDue(assignmentManager.getTeamId(),
                 searchLineManager);
+        persistLeaderSearchLine();
     }
 
     private void applyRemoteSearchLineIfAvailable() {
@@ -1708,6 +2523,39 @@ public class SARTakMapController {
         if (message == null)
             return;
         searchLineManager.applyRemote(message);
+    }
+
+    private void applyRemoteRoutePlanIfAvailable() {
+        if (!assignmentManager.isTeamCreated())
+            return;
+        SearchRoutePlan plan = dittoSyncManager.getRoutePlan(assignmentManager
+                .getTeamId());
+        if (plan == null)
+            return;
+        if (activeRoutePlan == null || plan.getUpdatedAt()
+                > activeRoutePlan.getUpdatedAt())
+            activeRoutePlan = plan;
+    }
+
+    private SearchRoutePlan ensureRoutePlan() {
+        if (activeRoutePlan != null
+                && assignmentManager.getTeamId().equals(activeRoutePlan
+                        .getTeamId()))
+            return activeRoutePlan;
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        activeRoutePlan = SearchRoutePlan.empty(getActiveOperationId(),
+                assignmentManager.getTeamId(), assignmentManager.getTeamName(),
+                assignmentManager.getTeamColorName(),
+                assignmentManager.getTeamColorArgb(),
+                identity == null ? "" : identity.getUid(),
+                identity == null ? "" : identity.getCallsign());
+        return activeRoutePlan;
+    }
+
+    private void publishRoutePlan() {
+        if (activeRoutePlan == null || !assignmentManager.isTeamCreated())
+            return;
+        dittoSyncManager.publishSearchRoutePlan(activeRoutePlan);
     }
 
     private void arrangeTeamMembers() {
@@ -1781,7 +2629,6 @@ public class SARTakMapController {
             healthManager.setTrackingActive(false);
         }
         locationCaptureManager.start();
-        dittoSyncManager.start();
         rawGnssCaptureManager.start();
     }
 
@@ -1790,6 +2637,12 @@ public class SARTakMapController {
         if (clearExistingTeam && assignmentManager.isTeamCreated())
             clearLocalTeam(true);
         activeOperationProfile = profile;
+        searchLineStateStore.clear();
+        activeRoutePlan = null;
+        routeSelectionAnchor = null;
+        gridOverlay.setRouteSelectionAnchor(null);
+        routeSelectionHint = "Route selection off";
+        searchRouteOverlay.setVisible(true);
         inactiveMembershipTimes.clear();
         localTeamJoinTime = 0L;
         operationStateStore.save(profile);
@@ -1815,7 +2668,7 @@ public class SARTakMapController {
         gridStateStore.setOperationId(operationId);
         teamStateStore.setOperationId(operationId);
         trackManager.setOperationId(operationId);
-        gridManager.refreshSelectedCellStatus();
+        gridManager.loadOperationState();
     }
 
     private void applyOperationIdToWorkflows() {
@@ -1961,6 +2814,37 @@ public class SARTakMapController {
                 converter);
         if (changed)
             teamStateStore.save(assignmentManager);
+    }
+
+    private void applyRemoteAreaAssignmentIfAvailable() {
+        if (isHqRole() || !assignmentManager.isTeamCreated())
+            return;
+        SearchAreaAssignment assignment = getAssignedAreaForMyTeam();
+        if (assignment == null || assignment.getArea() == null)
+            return;
+        String applyKey = assignment.getAssignmentId() + "@"
+                + assignment.getUpdatedAt();
+        if (applyKey.equals(lastAppliedAreaAssignmentId))
+            return;
+        if (gridManager.restorePlannedArea(assignment.getArea())) {
+            lastAppliedAreaAssignmentId = applyKey;
+            gridOverlay.setVisible(true);
+        }
+    }
+
+    private void applyRemoteOperationStatusIfAvailable() {
+        if (activeOperationProfile == null || activeOperationProfile
+                .isArchived())
+            return;
+        String status = dittoSyncManager.getRemoteOperationStatus(
+                activeOperationProfile.getOperationId());
+        if (!OperationProfile.STATUS_ARCHIVED.equals(status))
+            return;
+        activeOperationProfile = activeOperationProfile.archivedCopy(
+                System.currentTimeMillis());
+        operationStateStore.save(activeOperationProfile);
+        searchLineManager.end();
+        refreshOverlay();
     }
 
     private void syncDittoDevicesToAtakMarkers() {
@@ -2193,8 +3077,7 @@ public class SARTakMapController {
 
         if (!assignmentManager.getTeamId().equals(membership.getTeamId()))
             return false;
-        if (membership.isLeftOrRemoved()
-                && membership.getUpdatedAt() >= localTeamJoinTime) {
+        if (membership.isLeftOrRemoved()) {
             rememberInactiveMembership(membership.getTeamId(),
                     membership.getMemberUid(), membership.getMemberCallsign(),
                     membership.getUpdatedAt());
@@ -2429,6 +3312,23 @@ public class SARTakMapController {
                 java.util.Locale.US);
     }
 
+    private String sanitizeId(String value) {
+        if (value == null)
+            return "";
+        return value.trim().replaceAll("[^A-Za-z0-9_.-]", "_");
+    }
+
+    private int value(java.util.Map<SearchGridStatus, Integer> counts,
+            SearchGridStatus status) {
+        Integer value = counts == null ? null : counts.get(status);
+        return value == null ? 0 : value;
+    }
+
+    private String formatAreaKm2(int cellCount) {
+        double km2 = Math.max(0, cellCount) * 0.01;
+        return String.format(java.util.Locale.US, "%.2f km2", km2);
+    }
+
     private double sanitizeSpeed(double speedMetersPerSecond) {
         if (Double.isNaN(speedMetersPerSecond)
                 || Double.isInfinite(speedMetersPerSecond)
@@ -2443,8 +3343,9 @@ public class SARTakMapController {
             String secondUid, String secondCallsign) {
         String leftUid = firstUid == null ? "" : firstUid.trim();
         String rightUid = secondUid == null ? "" : secondUid.trim();
-        if (leftUid.length() > 0 && leftUid.equals(rightUid))
-            return true;
+        if (leftUid.length() > 0 || rightUid.length() > 0)
+            return leftUid.length() > 0 && rightUid.length() > 0
+                    && leftUid.equals(rightUid);
         String leftCallsign = firstCallsign == null ? ""
                 : firstCallsign.trim();
         String rightCallsign = secondCallsign == null ? ""
@@ -2526,11 +3427,81 @@ public class SARTakMapController {
         return null;
     }
 
+    private boolean handleRouteSelectionMapEvent(MapEvent event) {
+        if (!gridOverlay.isSelectionMode() || !canManageRoutePlan()
+                || event == null || !MapEvent.MAP_CLICK.equals(event.getType()))
+            return false;
+        if (mapView.getMapResolution() > MAX_ROUTE_SELECTION_RESOLUTION_METERS) {
+            routeSelectionHint = "Zoom in to select 100 m route cells.";
+            refreshOverlay();
+            return true;
+        }
+        PointF point = event.getPointF();
+        if (point == null)
+            return true;
+        GeoPointMetaData metaData = mapView.inverseWithElevation(point.x,
+                point.y);
+        GeoPoint tappedPoint = metaData == null ? null : metaData.get();
+        SearchGridCell tappedCell = gridManager.cellAt(tappedPoint);
+        if (tappedCell == null) {
+            routeSelectionHint = "Tap did not resolve to a grid cell.";
+            refreshOverlay();
+            return true;
+        }
+        if (routeSelectionAnchor == null) {
+            routeSelectionAnchor = tappedCell;
+            gridOverlay.setRouteSelectionAnchor(tappedCell);
+            routeSelectionHint = "Start: "
+                    + SearchGridDisplayFormatter.formatCellCompact(tappedCell)
+                    + ". Tap an end cell.";
+            refreshOverlay();
+            return true;
+        }
+        addRouteRange(routeSelectionAnchor, tappedCell);
+        routeSelectionAnchor = null;
+        gridOverlay.setRouteSelectionAnchor(null);
+        refreshOverlay();
+        return true;
+    }
+    private boolean addRouteRange(SearchGridCell anchor, SearchGridCell end) {
+        List<SearchGridCell> range = gridManager.cellsBetween(anchor, end,
+                MAX_ROUTE_RANGE_CELLS);
+        if (range.isEmpty()) {
+            routeSelectionHint = "No cells selected. Use cells in the same UTM zone and inside the operation area.";
+            return false;
+        }
+        List<String> cellIds = new ArrayList<>();
+        if (activeRoutePlan != null)
+            cellIds.addAll(activeRoutePlan.getCellIds());
+        for (SearchGridCell cell : range) {
+            if (!cellIds.contains(cell.getId()))
+                cellIds.add(cell.getId());
+        }
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        activeRoutePlan = ensureRoutePlan().withCells(cellIds,
+                identity == null ? "" : identity.getUid(),
+                identity == null ? "" : identity.getCallsign());
+        publishRoutePlan();
+        searchRouteOverlay.setVisible(true);
+        boolean limited = range.size() >= MAX_ROUTE_RANGE_CELLS;
+        routeSelectionHint = (isLane(anchor, end) ? "Lane" : "Box")
+                + " added: " + range.size() + " cells"
+                + (limited ? " (selection limit reached)" : "")
+                + ". Tap another start cell or stop selecting.";
+        return true;
+    }
+
+    private boolean isLane(SearchGridCell anchor, SearchGridCell end) {
+        return anchor != null && end != null
+                && (Math.abs(anchor.getWest() - end.getWest()) < 0.1
+                        || Math.abs(anchor.getSouth() - end.getSouth()) < 0.1);
+    }
     private void registerMapListeners() {
         MapEventDispatcher dispatcher = mapView.getMapEventDispatcher();
         dispatcher.addMapEventListener(MapEvent.MAP_ZOOM, mapEventListener);
         dispatcher.addMapEventListener(MapEvent.MAP_SCALE, mapEventListener);
         dispatcher.addMapEventListener(MapEvent.MAP_MOVED, mapEventListener);
+        dispatcher.addMapEventListener(MapEvent.MAP_CLICK, mapEventListener);
     }
 
     private void unregisterMapListeners() {
@@ -2538,6 +3509,7 @@ public class SARTakMapController {
         dispatcher.removeMapEventListener(MapEvent.MAP_ZOOM, mapEventListener);
         dispatcher.removeMapEventListener(MapEvent.MAP_SCALE, mapEventListener);
         dispatcher.removeMapEventListener(MapEvent.MAP_MOVED, mapEventListener);
+        dispatcher.removeMapEventListener(MapEvent.MAP_CLICK, mapEventListener);
     }
 
     private class DeviceBuilder {
@@ -2611,3 +3583,8 @@ public class SARTakMapController {
         }
     }
 }
+
+
+
+
+

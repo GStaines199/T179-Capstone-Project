@@ -33,6 +33,7 @@ public class SharedMapMarkerSyncManager {
 
     private String operationId = "";
     private long lastScanTime;
+    private boolean localBaselineEstablished;
 
     public SharedMapMarkerSyncManager(MapView mapView,
             IdentityManager identityManager, DittoSyncManager dittoSyncManager) {
@@ -45,6 +46,8 @@ public class SharedMapMarkerSyncManager {
         this.operationId = safe(operationId);
         publishedSignatures.clear();
         appliedRemoteUpdates.clear();
+        localBaselineEstablished = false;
+        lastScanTime = 0L;
     }
 
     public void sync(String teamId) {
@@ -71,6 +74,7 @@ public class SharedMapMarkerSyncManager {
         if (items == null)
             return;
 
+        boolean establishingBaseline = !localBaselineEstablished;
         for (MapItem item : items) {
             if (!(item instanceof Marker) || !isShareableMarker(item))
                 continue;
@@ -80,6 +84,10 @@ public class SharedMapMarkerSyncManager {
                 continue;
             String uid = safe(marker.getUID());
             String signature = signatureFor(marker, point);
+            if (establishingBaseline) {
+                publishedSignatures.put(uid, signature);
+                continue;
+            }
             if (signature.equals(publishedSignatures.get(uid)))
                 continue;
             boolean published = dittoSyncManager.publishSharedMapMarker(
@@ -93,6 +101,7 @@ public class SharedMapMarkerSyncManager {
             if (published)
                 publishedSignatures.put(uid, signature);
         }
+        localBaselineEstablished = true;
     }
 
     private void applyRemoteMarkers() {
@@ -181,6 +190,12 @@ public class SharedMapMarkerSyncManager {
                         "sartak.ditto.contact", "")))
                 || "true".equals(safe(item.getMetaString(
                         "sartak.shared.marker", ""))))
+            return false;
+        // ATAK uses non-archived markers for transient UI, routes, overlays,
+        // contacts and generated helpers. Only persisted user map items are
+        // eligible evidence; otherwise every ATAK restart can create a fresh
+        // set of transient UIDs and publish them as new operation markers.
+        if (!item.getMetaBoolean("archive", false))
             return false;
         String type = item instanceof Marker ? safe(((Marker) item).getType())
                 : "";

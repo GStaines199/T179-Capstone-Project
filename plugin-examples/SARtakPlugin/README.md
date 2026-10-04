@@ -84,6 +84,10 @@ Create `local.properties` from `local.properties.example` and set:
 - `takdev.plugin`
 - optional Ditto values for operation creation
 
+The default ATAK plugin API target is `5.6.0`, which is compatible with ATAK
+`5.6.0.x` devices. Developers testing against ATAK 5.8 can override this with
+`atak.version=5.8.0` in `local.properties`.
+
 Then build:
 
 ```powershell

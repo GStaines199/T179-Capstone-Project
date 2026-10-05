@@ -65,6 +65,10 @@ public class SearchLineMemberStatus {
         return positionKnown && distanceFromLineMeters > thresholdMeters;
     }
 
+    public boolean isTooFarBehind(double thresholdMeters) {
+        return positionKnown && distanceFromLineMeters < -thresholdMeters;
+    }
+
     public boolean isOffReturnMark(double toleranceMeters) {
         return positionKnown
                 && distanceFromReturnMarkMeters > toleranceMeters;

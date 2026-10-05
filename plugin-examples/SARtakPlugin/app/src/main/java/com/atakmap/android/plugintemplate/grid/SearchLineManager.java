@@ -288,6 +288,8 @@ public class SearchLineManager {
                     .append(formatPace(status.getPaceMetersPerMinute()));
             if (status.isTooFarAhead(SLOW_DOWN_THRESHOLD_METERS))
                 builder.append(" | Slow down");
+            else if (status.isTooFarBehind(SLOW_DOWN_THRESHOLD_METERS))
+                builder.append(" | Catch up");
             // Math.round turns NaN into 0, so an unmeasured member would
             // otherwise be reported as standing exactly on their return mark.
             if (state == SearchLineState.PAUSED && status.hasKnownPosition())
@@ -311,6 +313,8 @@ public class SearchLineManager {
                         + formatPace(status.getPaceMetersPerMinute());
                 if (status.isTooFarAhead(SLOW_DOWN_THRESHOLD_METERS))
                     summary += " | Slow down";
+                else if (status.isTooFarBehind(SLOW_DOWN_THRESHOLD_METERS))
+                    summary += " | Catch up";
                 return summary;
             }
         }
@@ -330,6 +334,13 @@ public class SearchLineManager {
                         .append(Math.round(status
                                 .getDistanceFromLineMeters()))
                         .append(" m ahead of the line.\n");
+            } else if (status.isTooFarBehind(SLOW_DOWN_THRESHOLD_METERS)) {
+                builder.append("CATCH UP: ")
+                        .append(status.getMember().getCallsign())
+                        .append(" is ")
+                        .append(Math.round(Math.abs(status
+                                .getDistanceFromLineMeters())))
+                        .append(" m behind the line.\n");
             }
         }
         if (state == SearchLineState.PAUSED)

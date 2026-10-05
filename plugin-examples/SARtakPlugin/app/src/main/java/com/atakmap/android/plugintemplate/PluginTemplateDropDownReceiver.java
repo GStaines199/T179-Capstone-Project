@@ -43,6 +43,7 @@ import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
 import com.atakmap.android.plugintemplate.runtime.DittoCredentialProfile;
 import com.atakmap.android.plugintemplate.runtime.OperationQrCodeGenerator;
 import com.atakmap.android.plugintemplate.runtime.OperationQrScanResultStore;
+import com.atakmap.android.plugintemplate.runtime.OperationProfile;
 import com.atakmap.android.plugintemplate.runtime.SearchAreaAssignment;
 import com.atakmap.android.plugintemplate.runtime.SearchAlertMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
@@ -187,6 +188,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private boolean suppressToleranceUpdate;
     private boolean suppressSwitchUpdate;
     private boolean consumingPendingQrScan;
+    private AlertDialog pasteOperationJoinDialog;
     private String activeGridReviewPromptCellId = "";
 
     /**************************** CONSTRUCTOR *****************************/
@@ -530,7 +532,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         } else if (id == R.id.archive_operation_button) {
             showArchiveOperationDialog();
         } else if (id == R.id.join_operation_button) {
-            showJoinOperationDialog();
+            if (mapController.hasActiveOperation())
+                showSwitchOperationDialog();
+            else
+                showJoinOperationDialog();
         } else if (id == R.id.leave_operation_button) {
             showLeaveOperationDialog();
         } else if (id == R.id.manage_ditto_button) {
@@ -678,8 +683,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         boolean canManageSearchArea = mapController.canManageSearchArea();
         createOperationButton.setVisibility(!hasOperation && canManageOperation
                 ? View.VISIBLE : View.GONE);
-        joinOperationButton.setVisibility(hasOperation || canManageOperation
+        joinOperationButton.setVisibility(canManageOperation
                 ? View.GONE : View.VISIBLE);
+        joinOperationButton.setText(hasOperation ? "Switch Operation"
+                : "Join Operation With Code");
         showOperationJoinCodeButton.setVisibility(hasOperation
                 && canManageOperation && !archivedOperation
                 ? View.VISIBLE : View.GONE);
@@ -1549,6 +1556,57 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .show();
     }
 
+    private void showSwitchOperationDialog() {
+        final java.util.List<OperationProfile> available =
+                new java.util.ArrayList<>();
+        final java.util.List<String> labels = new java.util.ArrayList<>();
+        String activeId = mapController.hasActiveOperation()
+                ? mapController.getActiveOperationIdForDisplay() : "";
+        for (OperationProfile profile : mapController.getSavedOperations()) {
+            if (profile.getOperationId().equals(activeId))
+                continue;
+            available.add(profile);
+            labels.add(profile.getOperationName()
+                    + (profile.isArchived() ? " (archived)" : "")
+                    + "\n" + profile.getOperationId());
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(
+                getMapView().getContext())
+                .setTitle("Switch Operation")
+                .setNeutralButton("Join Another",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                showJoinOperationDialog();
+                            }
+                        })
+                .setNegativeButton("Cancel", null);
+        if (available.isEmpty()) {
+            builder.setMessage("No other saved operations are available on this device. Join another operation using its HQ QR or join code.");
+        } else {
+            builder.setItems(labels.toArray(new String[0]),
+                    new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            OperationProfile selected = available.get(which);
+                            boolean switched = mapController.switchOperation(
+                                    selected.getOperationId());
+                            Toast.makeText(getMapView().getContext(),
+                                    switched ? "Switched to "
+                                            + selected.getOperationName()
+                                            : "Operation could not be opened",
+                                    Toast.LENGTH_LONG).show();
+                            handledTeamMessages.clear();
+                            resolvedTeamMessages.clear();
+                            handledAlertMessages.clear();
+                            refreshGridUi();
+                        }
+                    });
+        }
+        builder.show();
+    }
+
     private void showPasteOperationJoinCodeDialog() {
         final EditText input = new EditText(getMapView().getContext());
         input.setSingleLine(false);
@@ -1562,6 +1620,14 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .setPositiveButton("Join", null)
                 .setNegativeButton("Cancel", null)
                 .create();
+        pasteOperationJoinDialog = dialog;
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface ignored) {
+                if (pasteOperationJoinDialog == dialog)
+                    pasteOperationJoinDialog = null;
+            }
+        });
         dialog.setOnShowListener(new DialogInterface.OnShowListener() {
             @Override
             public void onShow(DialogInterface ignored) {
@@ -1608,6 +1674,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
     private void joinOperationFromScannedCode(String joinCode) {
         boolean joined = mapController.joinOperationFromCode(joinCode);
+        if (joined && pasteOperationJoinDialog != null
+                && pasteOperationJoinDialog.isShowing())
+            pasteOperationJoinDialog.dismiss();
         Toast.makeText(getMapView().getContext(),
                 joined ? "Operation joined from QR"
                         : "Invalid SARtak operation QR",

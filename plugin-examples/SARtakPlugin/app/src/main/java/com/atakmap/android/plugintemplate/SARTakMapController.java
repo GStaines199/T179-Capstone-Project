@@ -1015,6 +1015,10 @@ public class SARTakMapController {
                 && activeOperationProfile.getOperationId().length() > 0;
     }
 
+    public String getActiveOperationIdForDisplay() {
+        return getActiveOperationId();
+    }
+
     public boolean isOperationArchived() {
         return activeOperationProfile != null
                 && activeOperationProfile.isArchived();
@@ -1316,12 +1320,33 @@ public class SARTakMapController {
         try {
             OperationProfile profile = OperationProfile.fromJoinCode(joinCode);
             saveCredentialsFromOperationProfile(profile);
-            activateOperation(profile, true);
+            activateOperation(profile, false);
             return true;
         } catch (Exception exception) {
             Log.w(TAG, "Operation join code rejected", exception);
             return false;
         }
+    }
+
+    public List<OperationProfile> getSavedOperations() {
+        return operationStateStore.loadSavedProfiles();
+    }
+
+    public boolean switchOperation(String operationId) {
+        if (operationId == null || operationId.trim().length() == 0)
+            return false;
+        for (OperationProfile profile : operationStateStore
+                .loadSavedProfiles()) {
+            if (!operationId.trim().equals(profile.getOperationId()))
+                continue;
+            if (activeOperationProfile != null && profile.getOperationId()
+                    .equals(activeOperationProfile.getOperationId()))
+                return true;
+            saveCredentialsFromOperationProfile(profile);
+            activateOperation(profile, false);
+            return true;
+        }
+        return false;
     }
 
     public void leaveOperation() {
@@ -2437,9 +2462,19 @@ public class SARTakMapController {
                 assignmentManager.clearTeam();
                 teamStateStore.clear();
             }
-            if (assignmentManager.isTeamCreated())
-                assignmentManager.setTeamDetails(assignmentManager
-                        .getTeamName(), getFixedLeaderTeamId());
+            if (assignmentManager.isTeamCreated()) {
+                if (isLeaderRole()) {
+                    assignmentManager.setTeamDetails(assignmentManager
+                            .getTeamName(), getFixedLeaderTeamId());
+                    assignmentManager.setSelfRole(true);
+                } else {
+                    // A member must retain the leader-owned team id restored
+                    // from the operation-scoped state store. Replacing it with
+                    // TEAM-<self uid> splits the team after every restart.
+                    assignmentManager.setSelfRole(false);
+                }
+                teamStateStore.save(assignmentManager);
+            }
             trackManager.startOrResume(identity.getUid(),
                     identity.getCallsign());
             healthManager.setTrackingActive(trackManager.isRecording());
@@ -2454,6 +2489,9 @@ public class SARTakMapController {
             boolean clearExistingTeam) {
         if (clearExistingTeam && assignmentManager.isTeamCreated())
             clearLocalTeam(true);
+        else if (activeOperationProfile != null && !activeOperationProfile
+                .getOperationId().equals(profile.getOperationId()))
+            suspendCurrentOperation();
         activeOperationProfile = profile;
         activeRoutePlan = null;
         routeSelectionAnchor = null;
@@ -2473,6 +2511,18 @@ public class SARTakMapController {
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
         refreshTeamContactsInternal();
         refreshOverlay();
+    }
+
+    private void suspendCurrentOperation() {
+        if (assignmentManager.isTeamCreated())
+            teamCotWorkflow.publishPresence("", "", "", "", "", 0,
+                    "", 0, "");
+        assignmentManager.clearTeam();
+        activeRoutePlan = null;
+        searchLineManager.end();
+        teamCotWorkflow.clearLocalState();
+        gridCotWorkflow.clearLocalMessages();
+        searchLineCotWorkflow.clearLocalMessages();
     }
 
     private String getActiveOperationId() {
@@ -2553,6 +2603,12 @@ public class SARTakMapController {
     }
 
     private void syncSelfTeamMemberFromAtak() {
+        IdentityManager.Identity identity = identityManager.resolveIdentity();
+        if (identity != null && identity.isResolved())
+            assignmentManager.setSelfIdentity(identity.getUid(),
+                    identity.getCallsign());
+        if (assignmentManager.isTeamCreated())
+            assignmentManager.setSelfRole(isLeaderRole());
         AtakLocationStatus.Snapshot snapshot = AtakLocationStatus.from(mapView);
         assignmentManager.updateSelfFromAtak(snapshot,
                 gridManager.getSelectedCell());

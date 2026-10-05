@@ -200,6 +200,13 @@ public class SearchPartyAssignmentManager {
         applyTeamStyle();
     }
 
+    public void setSelfRole(boolean teamLeader) {
+        SearchTeamMember self = findMemberById(selfMemberId);
+        if (self != null)
+            self.setRole(teamLeader ? SearchTeamMember.TeamRole.TEAM_LEADER
+                    : SearchTeamMember.TeamRole.SEARCHER);
+    }
+
     public void clearTeam() {
         teamId = "";
         teamName = "";

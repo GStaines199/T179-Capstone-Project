@@ -97,6 +97,9 @@ public class TrackLoggingPersistenceTest {
         locations = new LocationRepository(dbHelper);
         sessions = new TrackSessionRepository(dbHelper);
         tracks = new SearchTrackManager(sessions, locations);
+        // Track logging is operation-scoped: startOrResume() and
+        // recordFix() do nothing until an operation id is set.
+        tracks.setOperationId("op-1");
     }
 
     /**

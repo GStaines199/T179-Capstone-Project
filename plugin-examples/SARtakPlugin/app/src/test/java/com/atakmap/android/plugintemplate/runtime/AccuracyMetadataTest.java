@@ -45,10 +45,12 @@ import static org.junit.Assert.assertTrue;
  * rather than going through {@code getPointsForSession}, so these tests pin
  * the stored row itself and stay independent of how any reader presents it.
  *
- * <p>Drives the real write path -- {@link LocationCaptureManager#captureWith}
- * through {@link SearchTrackManager} into a real SQLite database.
- * {@code mapView} and {@code identityManager} are null because that path never
- * touches them.
+ * <p>Writes through {@link SearchTrackManager} into a real SQLite database.
+ * What is pinned here is the stored row, so the assertions are made against
+ * the manager rather than through a capture source: {@code
+ * LocationCaptureManager} no longer writes track points at all, and the raw
+ * GNSS writer's own metadata round trip is covered end to end in {@code
+ * RawGnssCaptureManagerTest}.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 26, manifest = Config.NONE)
@@ -62,7 +64,6 @@ public class AccuracyMetadataTest {
 
     private DatabaseHelper dbHelper;
     private SearchTrackManager trackManager;
-    private LocationCaptureManager captureManager;
 
     @Before
     public void setUp() {
@@ -71,12 +72,9 @@ public class AccuracyMetadataTest {
         trackManager = new SearchTrackManager(
                 new TrackSessionRepository(dbHelper),
                 new LocationRepository(dbHelper));
-        PluginHealthManager healthManager = new PluginHealthManager();
-        healthManager.start();
-        healthManager.setStorageReady(true, "Local storage ready");
-        healthManager.setTrackingActive(true);
-        captureManager = new LocationCaptureManager(null, null, trackManager,
-                healthManager, null);
+        // Track logging is operation-scoped: startOrResume() and recordFix()
+        // do nothing until an operation id is set.
+        trackManager.setOperationId("op-1");
         trackManager.startOrResume(UID, CALLSIGN);
     }
 
@@ -88,18 +86,10 @@ public class AccuracyMetadataTest {
     // ---- helpers ---------------------------------------------------------
 
     private void capture(Double altitude, Double bearing, Double speed) {
-        // Null means the receiver reported nothing; LocationFix carries that
-        // as NaN, which SearchTrackManager resolves back to a NULL column.
-        captureManager.captureWith(
-                new IdentityManager.Identity(UID, CALLSIGN,
-                        "Identity: " + CALLSIGN, true),
-                LocationCaptureManager.LocationFix.available(LAT, LON,
-                        notReportedAsNaN(altitude), ACCURACY, 1000L, "GPS",
-                        notReportedAsNaN(bearing), notReportedAsNaN(speed)));
-    }
-
-    private static double notReportedAsNaN(Double value) {
-        return value == null ? Double.NaN : value;
+        // Null means the receiver reported nothing, which recordFix stores as
+        // a NULL column rather than as a substituted zero.
+        trackManager.recordFix(UID, CALLSIGN, LAT, LON, altitude, ACCURACY,
+                bearing, speed, 1000L);
     }
 
     /** True where the column is SQL NULL, in insertion order. */

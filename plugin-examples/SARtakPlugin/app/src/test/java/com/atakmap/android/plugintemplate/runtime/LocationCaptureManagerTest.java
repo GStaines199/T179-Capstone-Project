@@ -136,14 +136,20 @@ public class LocationCaptureManagerTest {
 
     // -------------------------------------------------------------------------
     // Successful capture
+    //
+    // The self-marker fix reaches health and status reporting only. It has
+    // already been through ATAK's location fusion, so writing it to the track
+    // would put a processed position in a log required to hold unmodified
+    // device fixes; RawGnssCaptureManager is the only writer.
     // -------------------------------------------------------------------------
 
     @Test
-    public void captureWith_success_recordsTrackAndHealth() {
+    public void captureWith_success_reportsHealthAndWritesNoTrackPoint() {
         manager.captureWith(resolvedIdentity(), fix);
 
-        verify(trackManager).recordLocation(UID, CALLSIGN, -27.4705, 153.0260,
-                42.0, 7.5, 90.0, 1.2, now);
+        verify(trackManager, never()).recordLocation(anyString(),
+                anyString(), anyDouble(), anyDouble(), anyDouble(),
+                anyDouble(), anyDouble(), anyDouble(), anyLong());
         verify(trackManager).isRecording();
         assertEquals("GPS active | Source GPS | Accuracy 8 m",
                 healthManager.getLocationMessage());
@@ -165,9 +171,9 @@ public class LocationCaptureManagerTest {
 
         noListener.captureWith(resolvedIdentity(), fix);
 
-        verify(trackManager).recordLocation(eq(UID), eq(CALLSIGN), anyDouble(),
-                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                anyDouble(), anyLong());
+        verify(trackManager, never()).recordLocation(anyString(),
+                anyString(), anyDouble(), anyDouble(), anyDouble(),
+                anyDouble(), anyDouble(), anyDouble(), anyLong());
     }
 
     // -------------------------------------------------------------------------
@@ -181,9 +187,9 @@ public class LocationCaptureManagerTest {
         manager.captureNow();
 
         verify(identityManager).resolveIdentity();
-        verify(trackManager).recordLocation(eq(UID), eq(CALLSIGN),
-                eq(-27.4705), eq(153.0260), eq(42.0), eq(7.5), eq(90.0),
-                eq(1.2), eq(now));
+        verify(trackManager, never()).recordLocation(anyString(),
+                anyString(), anyDouble(), anyDouble(), anyDouble(),
+                anyDouble(), anyDouble(), anyDouble(), anyLong());
         assertEquals(1, listenerCalls);
     }
 

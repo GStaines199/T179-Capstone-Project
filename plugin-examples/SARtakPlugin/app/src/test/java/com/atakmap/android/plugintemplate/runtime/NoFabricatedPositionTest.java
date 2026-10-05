@@ -62,6 +62,9 @@ public class NoFabricatedPositionTest {
                         listenerCalls++;
                     }
                 });
+        // Track logging is operation-scoped: startOrResume() does nothing
+        // until an operation id is set.
+        trackManager.setOperationId("op-1");
         trackManager.startOrResume(UID, CALLSIGN);
     }
 
@@ -106,59 +109,46 @@ public class NoFabricatedPositionTest {
         assertEquals(PluginHealthState.DEGRADED, healthManager.getState());
     }
 
-    // --- a real fix is written exactly as given ---------------------------
+    // --- the fused source never reaches the track -------------------------
 
+    /**
+     * The regression guard for the duplicate-writer bug. This path reads
+     * ATAK's self marker, whose position has already been through ATAK's
+     * location fusion, so a point written here would be a second,
+     * differently-sourced writer inside a track required to hold raw device
+     * fixes. It has been reintroduced once already, by a merge resolved in
+     * favour of the branch that still had the write.
+     */
     @Test
-    public void anAvailableFix_writesThePointItWasGiven() {
-        capture(fixAt(-27.4698, 153.0251, 1000L));
+    public void anAvailableFix_writesNoPointBecauseItIsNotRawGnss() {
+        // The timestamp has to be current: health measures the fix against
+        // a 30 second staleness window, so the fixed 1000L used elsewhere
+        // in this class would read as GPS_LOST however good the fix is.
+        capture(fixAt(-27.4698, 153.0251, System.currentTimeMillis()));
 
-        List<double[]> points = trackManager.getTrackPoints();
-        assertEquals(1, points.size());
-        assertEquals(-27.4698, points.get(0)[0], 0.000001);
-        assertEquals(153.0251, points.get(0)[1], 0.000001);
-        assertEquals(1000L, (long) points.get(0)[2]);
+        assertEquals(0, trackManager.getTrackPoints().size());
+        // The other half of the split: this path still reports health, it
+        // just no longer writes.
+        assertEquals(PluginHealthState.ACTIVE, healthManager.getState());
     }
 
     // --- losing signal never fills in a position --------------------------
 
+    /**
+     * Nothing is written whether the signal is present or lost, so an outage
+     * cannot leave a filled-in point behind either. Gap honesty on the raw
+     * writer is structural rather than asserted here: it writes only when
+     * Android delivers a fix, so no fix means no row. The sequence itself is
+     * pinned in {@code RawGnssCaptureManagerTest}.
+     */
     @Test
-    public void losingSignalAfterAFix_addsNoFurtherPoints() {
-        capture(fixAt(-27.4698, 153.0251, 1000L));
-        assertEquals(1, trackManager.getTrackPoints().size());
-
-        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
-        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
-        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
-
-        assertEquals(1, trackManager.getTrackPoints().size());
-    }
-
-    @Test
-    public void losingSignalAfterAFix_leavesTheStoredPointUntouched() {
-        capture(fixAt(-27.4698, 153.0251, 1000L));
-
-        capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
-
-        List<double[]> points = trackManager.getTrackPoints();
-        assertEquals(1, points.size());
-        assertEquals(-27.4698, points.get(0)[0], 0.000001);
-        assertEquals(153.0251, points.get(0)[1], 0.000001);
-    }
-
-    @Test
-    public void aGapInSignal_isNotInterpolatedAcrossOnRecovery() {
-        // Two real fixes either side of a two-cycle outage. An implementation
-        // that filled the gap in would leave more than the two points it was
-        // actually given.
+    public void aSignalOutage_leavesTheTrackEmptyThroughout() {
         capture(fixAt(-27.4698, 153.0251, 1000L));
         capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
         capture(LocationCaptureManager.LocationFix.unavailable("No GPS Signal"));
         capture(fixAt(-27.4800, 153.0400, 40000L));
 
-        List<double[]> points = trackManager.getTrackPoints();
-        assertEquals(2, points.size());
-        assertEquals(-27.4698, points.get(0)[0], 0.000001);
-        assertEquals(-27.4800, points.get(1)[0], 0.000001);
+        assertEquals(0, trackManager.getTrackPoints().size());
     }
 
     @Test

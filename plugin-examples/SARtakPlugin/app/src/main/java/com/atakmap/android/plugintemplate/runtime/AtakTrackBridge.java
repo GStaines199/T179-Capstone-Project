@@ -1,106 +1,74 @@
 package com.atakmap.android.plugintemplate.runtime;
 
-import com.atakmap.android.maps.CrumbTrail;
-import com.atakmap.android.maps.MapView;
-import com.atakmap.android.maps.Marker;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
-import com.atakmap.android.track.crumb.CrumbDatabase;
-import com.atakmap.android.track.maps.TrackPolyline;
 
+import java.util.Locale;
+
+/**
+ * Controls and reports the track ATAK draws for this device.
+ *
+ * <p>This used to bridge to the crumb trail ATAK attaches to its own self
+ * marker. That trail is fed from ATAK's fused location engine, so whenever it
+ * was showing anything it was showing the processed source the raw capture
+ * requirement moves away from -- and because a self-marker trail exists on a
+ * stock install whether or not it holds any crumbs, it also suppressed
+ * SARtak's own display outright.
+ *
+ * <p>It now drives {@link RawGnssTrackTrail} instead, so the same native crumb
+ * rendering, visibility control and track database are fed from unmodified
+ * device fixes.
+ */
 public class AtakTrackBridge {
 
-    private final MapView mapView;
+    private final RawGnssTrackTrail rawTrail;
 
-    public AtakTrackBridge(MapView mapView) {
-        this.mapView = mapView;
+    public AtakTrackBridge(RawGnssTrackTrail rawTrail) {
+        this.rawTrail = rawTrail;
     }
 
+    /** True once raw GNSS crumbs are actually drawn, not merely enabled. */
     public boolean hasAtakTrackTrail() {
-        Marker self = getSelf();
-        return self != null && self.getCrumbTrail() != null;
+        return rawTrail.isReady() && rawTrail.getCrumbCount() > 0;
     }
 
     public void setVisible(boolean visible) {
-        Marker self = getSelf();
-        if (self == null)
-            return;
-
-        CrumbTrail crumbTrail = self.getCrumbTrail();
-        if (crumbTrail != null)
-            crumbTrail.setVisible(visible);
-
+        rawTrail.setVisible(visible);
     }
 
     public void setTracking(boolean tracking) {
-        Marker self = getSelf();
-        if (self == null)
-            return;
-
-        CrumbTrail crumbTrail = self.getCrumbTrail();
-        if (crumbTrail != null)
-            crumbTrail.setTracking(tracking);
+        rawTrail.setRecording(tracking);
     }
 
     public void clearVisibleTrack() {
-        Marker self = getSelf();
-        if (self == null)
-            return;
-
-        CrumbTrail crumbTrail = self.getCrumbTrail();
-        if (crumbTrail != null)
-            crumbTrail.clearAllCrumbs();
-
+        rawTrail.clear();
     }
 
-    public String getStatusSummary(SearchTrackManager fallbackTrackManager) {
-        if (hasAtakTrackTrail()) {
-            return "Using ATAK Track History\nSARtak controls mirror the ATAK self trail where available";
-        }
-        return "ATAK Track History unavailable\n"
-                + fallbackTrackManager.getStatusSummary();
+    public String getStatusSummary(SearchTrackManager trackManager) {
+        if (!rawTrail.isReady())
+            return "ATAK track history: waiting for first raw GNSS fix\n"
+                    + trackManager.getStatusSummary();
+
+        return String.format(Locale.US,
+                "ATAK track history from raw GNSS\n%s - %d crumbs drawn",
+                rawTrail.isRecording() ? "Recording" : "Paused",
+                rawTrail.getCrumbCount());
     }
 
-    public String getDetailsSummary(SearchTrackManager fallbackTrackManager) {
-        StringBuilder builder = new StringBuilder();
-        builder.append(getAtakDetails());
-        if (!hasAtakTrackTrail()) {
-            builder.append("\n\nSARtak local track\n");
-            builder.append(fallbackTrackManager.getDetailsSummary());
-        }
-        return builder.toString();
-    }
-
-    private String getAtakDetails() {
-        Marker self = getSelf();
-        if (self == null)
-            return "ATAK Track History: self marker unavailable";
-
-        StringBuilder builder = new StringBuilder("ATAK Track History");
-        CrumbTrail crumbTrail = self.getCrumbTrail();
-
-        if (crumbTrail == null) {
-            builder.append(": no active ATAK trail found");
+    public String getDetailsSummary(SearchTrackManager trackManager) {
+        StringBuilder builder = new StringBuilder("ATAK track history");
+        if (!rawTrail.isReady()) {
+            builder.append(": no raw GNSS fix received yet");
         } else {
-            builder.append(": trail attached to self marker");
-            if (crumbTrail != null)
-                builder.append("\nVisible crumbs: ").append(crumbTrail.size);
+            builder.append(String.format(Locale.US,
+                    "\nCrumbs drawn: %d\nTrail: %s",
+                    rawTrail.getCrumbCount(),
+                    rawTrail.isVisible() ? "Shown on map"
+                            : "Hidden from map"));
+            builder.append("\nCrumbs are thinned by ATAK's distance "
+                    + "threshold; the log below holds every fix.");
         }
-
-        try {
-            TrackPolyline recentTrack = CrumbDatabase.instance()
-                    .getMostRecentTrack(self.getUID());
-            if (recentTrack != null) {
-                builder.append("\nMost recent ATAK track points: ")
-                        .append(recentTrack.getNumPoints());
-            }
-        } catch (Throwable ignored) {
-            builder.append("\nATAK track database summary unavailable");
-        }
-
+        builder.append("\n\nSARtak raw GNSS log\n");
+        builder.append(trackManager.getDetailsSummary());
         return builder.toString();
-    }
-
-    private Marker getSelf() {
-        return mapView == null ? null : mapView.getSelfMarker();
     }
 }

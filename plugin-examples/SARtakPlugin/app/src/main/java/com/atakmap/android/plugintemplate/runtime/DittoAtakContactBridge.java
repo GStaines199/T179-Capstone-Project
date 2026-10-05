@@ -188,7 +188,8 @@ public class DittoAtakContactBridge {
         MapItem item = mapView.getRootGroup().deepFindUID(snapshot.getUid());
         if (!(item instanceof Marker))
             return;
-        configureMarker((Marker) item, snapshot, markerVisible, showCallsigns);
+        configureMarker((Marker) item, snapshot, markerVisible, showCallsigns,
+                true);
     }
 
     private void upsertFallbackMarker(DittoDeviceSnapshot snapshot,
@@ -202,11 +203,11 @@ public class DittoAtakContactBridge {
                             .getAltitude())), snapshot.getUid());
             group.addItem(marker);
         }
-        configureMarker(marker, snapshot, markerVisible, showCallsigns);
+        configureMarker(marker, snapshot, markerVisible, showCallsigns, false);
     }
 
     private void configureMarker(Marker marker, DittoDeviceSnapshot snapshot,
-            boolean markerVisible, boolean showCallsigns) {
+            boolean markerVisible, boolean showCallsigns, boolean imported) {
         marker.setPoint(new GeoPoint(snapshot.getLatitude(),
                 snapshot.getLongitude(), safeAltitude(snapshot.getAltitude())));
         marker.setTitle(showCallsigns ? displayCallsign(snapshot) : "");
@@ -224,11 +225,12 @@ public class DittoAtakContactBridge {
         marker.setMetaString("sartak.member.color.name",
                 safe(snapshot.getMemberColorName()));
         marker.setMetaString("sartak.member.role", roleName(snapshot));
+        marker.setMetaBoolean("sartak.ditto.fallback", !imported);
         marker.setMetaBoolean("archive", false);
         marker.setMetaBoolean("editable", false);
         marker.setMetaBoolean("movable", false);
         marker.setMetaBoolean("removable", false);
-        marker.setMetaBoolean("adapt_marker_icon", true);
+        marker.setMetaBoolean("adapt_marker_icon", imported);
         marker.setVisible(markerVisible);
         if (snapshot.isHeadingReliable())
             marker.setTrack(snapshot.getHeading(), snapshot.getSpeed());
@@ -260,7 +262,8 @@ public class DittoAtakContactBridge {
                 && "true".equals(item.getMetaString(
                         "sartak.ditto.contact", ""))
                 && item instanceof Marker)
-            configureMarker((Marker) item, snapshot, visible, showCallsigns);
+            configureMarker((Marker) item, snapshot, visible, showCallsigns,
+                    !item.getMetaBoolean("sartak.ditto.fallback", false));
     }
 
     private MapGroup ensureFallbackGroup() {

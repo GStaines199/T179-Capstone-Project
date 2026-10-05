@@ -33,9 +33,7 @@ public class SearchTrackManagerRuntimeTest {
         dbHelper = new DatabaseHelper(context);
         manager = new SearchTrackManager(new TrackSessionRepository(dbHelper),
                 new LocationRepository(dbHelper));
-        // Track logging is operation-scoped: startOrResume() and
-        // recordFix() do nothing until an operation id is set.
-        manager.setOperationId("op-1");
+        manager.setOperationId("operation-runtime-test");
     }
 
     @After
@@ -132,7 +130,8 @@ public class SearchTrackManagerRuntimeTest {
         String summary = manager.getDetailsSummary();
 
         assertTrue(summary.contains("Track points: 1"));
-        assertTrue(summary.contains("Session: track-op-1-uid1-"));
+        assertTrue(summary.contains(
+                "Session: track-operation-runtime-test-uid1-"));
         assertTrue(summary.contains("Visibility: Shown on map"));
     }
 

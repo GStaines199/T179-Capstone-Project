@@ -41,6 +41,7 @@ public class SearchTrackSessionUidTest {
     private static final String CALLSIGN = "ALPHA";
     private static final String OTHER_UID = "ANDROID-fedcba0987654321";
     private static final String OTHER_CALLSIGN = "BRAVO";
+    private static final String OPERATION_ID = "operation-session-test";
 
     private DatabaseHelper dbHelper;
     private TrackSessionRepository sessions;
@@ -53,9 +54,7 @@ public class SearchTrackSessionUidTest {
         sessions = new TrackSessionRepository(dbHelper);
         manager = new SearchTrackManager(sessions,
                 new LocationRepository(dbHelper));
-        // Track logging is operation-scoped: startOrResume() and
-        // recordFix() do nothing until an operation id is set.
-        manager.setOperationId("op-1");
+        manager.setOperationId(OPERATION_ID);
     }
 
     @After
@@ -146,7 +145,7 @@ public class SearchTrackSessionUidTest {
      * scope became part of the prefix with operation-scoped tracking.
      */
     private static void assertSessionUid(String expectedUid, String sessionId) {
-        String prefix = "track-op-1-" + expectedUid + "-";
+        String prefix = "track-" + OPERATION_ID + "-" + expectedUid + "-";
         assertTrue("unexpected session id: " + sessionId,
                 sessionId.startsWith(prefix));
 

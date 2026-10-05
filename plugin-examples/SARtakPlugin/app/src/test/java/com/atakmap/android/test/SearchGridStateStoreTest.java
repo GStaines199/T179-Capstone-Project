@@ -21,11 +21,9 @@ import static org.mockito.Mockito.when;
 public class SearchGridStateStoreTest {
 
     private static final String CELL_ID = "cell_42";
-    private static final String OPERATION = "op-1";
-    // Grid state is operation-scoped: the key carries the operation id,
-    // and every accessor is a no-op until one is set.
-    private static final String PREF_KEY =
-            "cell." + OPERATION + "." + CELL_ID;
+    private static final String OPERATION_ID = "operation-grid-test";
+    private static final String PREF_KEY = "cell." + OPERATION_ID + "."
+            + CELL_ID;
 
     @Mock
     private Context mockContext;
@@ -57,7 +55,7 @@ public class SearchGridStateStoreTest {
                 .thenReturn(mockPreferences);
 
         store = new SearchGridStateStore(mockContext);
-        store.setOperationId(OPERATION);
+        store.setOperationId(OPERATION_ID);
     }
 
     @Test

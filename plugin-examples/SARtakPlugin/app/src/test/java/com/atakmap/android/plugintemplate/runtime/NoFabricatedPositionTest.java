@@ -49,6 +49,7 @@ public class NoFabricatedPositionTest {
         trackManager = new SearchTrackManager(
                 new TrackSessionRepository(dbHelper),
                 new LocationRepository(dbHelper));
+        trackManager.setOperationId("operation-position-test");
         healthManager = new PluginHealthManager();
         healthManager.start();
         healthManager.setStorageReady(true, "Local storage ready");

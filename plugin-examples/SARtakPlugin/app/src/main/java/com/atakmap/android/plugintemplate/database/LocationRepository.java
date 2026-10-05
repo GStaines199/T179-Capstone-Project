@@ -11,6 +11,8 @@ import java.util.List;
 
 public class LocationRepository {
 
+    private static final int DEFAULT_DISPLAY_POINT_LIMIT = 1500;
+
     public static final String CREATE_TABLE =
             "CREATE TABLE IF NOT EXISTS location_points (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -157,12 +159,22 @@ public class LocationRepository {
      * measurement. {@link ReportedMeasurement#of(double)} does exactly that.
      */
     public List<double[]> getPointsForSession(String sessionId) {
+        return getRecentPointsForSession(sessionId,
+                DEFAULT_DISPLAY_POINT_LIMIT);
+    }
+
+    public List<double[]> getRecentPointsForSession(String sessionId,
+            int limit) {
         List<double[]> points = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor cursor = db.query("location_points",
-                new String[]{"latitude", "longitude", "timestamp", "accuracy_meters"},
-                "session_id = ?", new String[]{sessionId},
-                null, null, "timestamp ASC");
+        int safeLimit = Math.max(2, limit);
+        Cursor cursor = db.rawQuery(
+                "SELECT latitude, longitude, timestamp, accuracy_meters "
+                        + "FROM (SELECT latitude, longitude, timestamp, "
+                        + "accuracy_meters FROM location_points "
+                        + "WHERE session_id = ? ORDER BY timestamp DESC "
+                        + "LIMIT ?) ORDER BY timestamp ASC",
+                new String[] {sessionId, String.valueOf(safeLimit)});
         while (cursor.moveToNext()) {
             points.add(new double[]{
                     cursor.getDouble(0),

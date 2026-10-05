@@ -60,6 +60,7 @@ import com.atakmap.android.plugintemplate.runtime.SearchLineCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SharedMapMarkerSyncManager;
+import com.atakmap.android.plugintemplate.runtime.SharedPhotoSyncManager;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.coords.GeoPoint;
@@ -106,6 +107,7 @@ public class SARTakMapController {
     private final DittoCredentialStore dittoCredentialStore;
     private final DittoAtakContactBridge dittoAtakContactBridge;
     private final SharedMapMarkerSyncManager sharedMapMarkerSyncManager;
+    private final SharedPhotoSyncManager sharedPhotoSyncManager;
     private final SearchTeamStateStore teamStateStore;
     private final OperationStateStore operationStateStore;
     private final DatabaseHelper databaseHelper;
@@ -173,6 +175,8 @@ public class SARTakMapController {
         this.dittoAtakContactBridge = new DittoAtakContactBridge(mapView);
         this.sharedMapMarkerSyncManager = new SharedMapMarkerSyncManager(
                 mapView, identityManager, dittoSyncManager);
+        this.sharedPhotoSyncManager = new SharedPhotoSyncManager(mapView,
+                identityManager, dittoSyncManager);
         this.dittoSyncManager.useOperationProfile(activeOperationProfile);
         this.teamCotWorkflow.setDittoSyncManager(dittoSyncManager);
         this.gridCotWorkflow.setDittoSyncManager(dittoSyncManager);
@@ -1511,6 +1515,7 @@ public class SARTakMapController {
         locationCaptureManager.stop();
         rawGnssCaptureManager.stop();
         healthManager.stop();
+        sharedPhotoSyncManager.dispose();
         dittoSyncManager.stop();
         dittoAtakContactBridge.clear();
         teamCotWorkflow.dispose();
@@ -1552,6 +1557,7 @@ public class SARTakMapController {
         applyDittoMembershipSnapshots();
         syncDittoDevicesToAtakMarkers();
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
+        sharedPhotoSyncManager.sync(assignmentManager.getTeamId());
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
         applyRemoteSearchLineIfAvailable();
@@ -1780,6 +1786,7 @@ public class SARTakMapController {
         publishDittoDeviceStateNow();
         syncDittoDevicesToAtakMarkers();
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
+        sharedPhotoSyncManager.sync(assignmentManager.getTeamId());
         refreshTeamContactsInternal();
         refreshOverlay();
     }
@@ -1803,6 +1810,7 @@ public class SARTakMapController {
         gridCotWorkflow.setOperationId(operationId);
         searchLineCotWorkflow.setOperationId(operationId);
         sharedMapMarkerSyncManager.setOperationId(operationId);
+        sharedPhotoSyncManager.setOperationId(operationId);
     }
 
     private void appendReadinessLine(StringBuilder builder, int state,

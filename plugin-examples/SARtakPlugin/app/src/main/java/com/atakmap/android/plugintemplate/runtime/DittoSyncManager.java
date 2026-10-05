@@ -285,6 +285,14 @@ public class DittoSyncManager {
         return operationProfile;
     }
 
+    /**
+     * The running Ditto instance, or null when sync is stopped. Used by
+     * features that manage their own collection, such as shared photos.
+     */
+    public Ditto getActiveDitto() {
+        return started ? ditto : null;
+    }
+
     public boolean isStarted() {
         return started;
     }

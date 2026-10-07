@@ -271,10 +271,26 @@ public class DittoSyncManager {
             else
                 updateReadyStatus();
         } catch (Throwable throwable) {
-            status = "Ditto: unavailable - " + describeFailure(throwable);
+            String failure = describeFailure(throwable);
+            if (isNativePluginReloadFailure(throwable))
+                status = "Ditto: restart ATAK required after plugin reload";
+            else
+                status = "Ditto: unavailable - " + failure;
             cleanupDittoResources();
             Log.w(TAG, "Ditto startup failed", throwable);
         }
+    }
+
+    private boolean isNativePluginReloadFailure(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (current instanceof UnsatisfiedLinkError
+                    || (message != null && message.contains("already opened by ClassLoader")))
+                return true;
+            current = current.getCause();
+        }
+        return false;
     }
 
     public void stop() {

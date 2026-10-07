@@ -11,6 +11,7 @@ import com.atakmap.android.dropdown.DropDownMapComponent;
 
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotDetailHandler;
+import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.android.plugintemplate.plugin.R;
 import com.atakmap.android.plugintemplate.SARTakMapController;
@@ -52,6 +53,18 @@ public class PluginTemplateMapComponent extends DropDownMapComponent {
         qrScanSystemFilter = new DocumentedIntentFilter();
         qrScanSystemFilter.addAction(OperationQrScanActivity.ACTION_SCAN_RESULT);
         qrScanSystemFilter.addAction(PluginTemplateDropDownReceiver.SHOW_PLUGIN);
+        if (BuildConfig.DEBUG) {
+            qrScanSystemFilter.addAction(
+                    PluginTemplateDropDownReceiver.DEBUG_OPEN_TAB);
+            qrScanSystemFilter.addAction(
+                    PluginTemplateDropDownReceiver.DEBUG_SET_ROLE);
+            qrScanSystemFilter.addAction(
+                    PluginTemplateDropDownReceiver.DEBUG_SET_CALLSIGN);
+            qrScanSystemFilter.addAction(
+                    PluginTemplateDropDownReceiver.DEBUG_REFRESH);
+            qrScanSystemFilter.addAction(
+                    PluginTemplateDropDownReceiver.DEBUG_RESET_FIXTURE);
+        }
         com.atakmap.android.ipc.AtakBroadcast.getInstance()
                 .registerSystemReceiver(ddr, qrScanSystemFilter);
     }

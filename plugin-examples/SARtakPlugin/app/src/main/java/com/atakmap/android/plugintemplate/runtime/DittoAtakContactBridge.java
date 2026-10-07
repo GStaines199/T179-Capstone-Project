@@ -1,6 +1,12 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.os.Bundle;
+import android.util.Base64;
 
 import com.atakmap.android.importexport.ImporterManager;
 import com.atakmap.android.maps.MapGroup;
@@ -13,9 +19,11 @@ import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
 import com.atakmap.coremap.cot.event.CotPoint;
 import com.atakmap.coremap.log.Log;
+import com.atakmap.coremap.maps.assets.Icon;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,13 +38,17 @@ import java.util.Set;
  * ATAK's CoT importer using the remote device UID and standard contact detail
  * so the marker behaves like an ATAK contact instead of a SARtak-only overlay
  * icon. SARtak team/member colours are deliberately kept in SARtak metadata
- * keys so they do not fight ATAK's native team colour.
+ * keys. The bridge replaces ATAK's affiliation rectangle with SARtak's
+ * compact personal-colour marker and team-colour outline.
  */
 public class DittoAtakContactBridge {
 
     private static final String TAG = "SARtakDittoAtakBridge";
     private static final long MIN_IMPORT_INTERVAL_MS = 2000L;
-    private static final long STALE_AFTER_MS = 90 * 1000L;
+    private static final long STALE_AFTER_MS = 30 * 1000L;
+    private static final int ICON_SIZE = 36;
+    private static final int ICON_CENTER = ICON_SIZE / 2;
+    private static final int UNASSIGNED_COLOR = Color.rgb(138, 143, 152);
 
     private final MapView mapView;
     private final Map<String, Long> importedSnapshotTimes = new HashMap<>();
@@ -78,6 +90,17 @@ public class DittoAtakContactBridge {
     }
 
     public void clear() {
+        if (mapView != null) {
+            for (String uid : new HashSet<>(managedUids)) {
+                MapItem item = mapView.getRootGroup().deepFindUID(uid);
+                if (item != null && "true".equals(item.getMetaString(
+                        "sartak.ditto.contact", ""))) {
+                    MapGroup group = item.getGroup();
+                    if (group != null)
+                        group.removeItem(item);
+                }
+            }
+        }
         importedSnapshotTimes.clear();
         managedUids.clear();
     }
@@ -89,11 +112,15 @@ public class DittoAtakContactBridge {
             return false;
         if (selfUid != null && selfUid.equals(snapshot.getUid()))
             return false;
-        if (safe(activeOperationId).length() > 0
-                && !safe(activeOperationId).equals(safe(snapshot
-                        .getOperationId())))
+        String operationId = safe(activeOperationId);
+        if (operationId.length() == 0
+                || !operationId.equals(safe(snapshot.getOperationId())))
             return false;
         if (!snapshot.hasLocation())
+            return false;
+        if (snapshot.getUpdatedAt() <= 0L
+                || System.currentTimeMillis() - snapshot.getUpdatedAt()
+                        > STALE_AFTER_MS)
             return false;
         if (!isValidCoordinate(snapshot.getLatitude(),
                 snapshot.getLongitude()))
@@ -174,7 +201,8 @@ public class DittoAtakContactBridge {
         event.setType(isLeader(snapshot) ? "a-f-G-U-C" : "a-f-G-U-C-I");
         event.setTime(eventTime);
         event.setStart(eventTime);
-        event.setStale(new CoordinatedTime().addSeconds(90));
+        event.setStale(new CoordinatedTime().addSeconds(
+                (int) (STALE_AFTER_MS / 1000L)));
         event.setHow(CotEvent.HOW_MACHINE_GENERATED);
         event.setPoint(new CotPoint(snapshot.getLatitude(),
                 snapshot.getLongitude(), safeAltitude(snapshot.getAltitude()),
@@ -230,12 +258,67 @@ public class DittoAtakContactBridge {
         marker.setMetaBoolean("editable", false);
         marker.setMetaBoolean("movable", false);
         marker.setMetaBoolean("removable", false);
-        marker.setMetaBoolean("adapt_marker_icon", imported);
+        marker.setMetaBoolean("adapt_marker_icon", false);
+        marker.setIcon(createIcon(snapshot));
         marker.setVisible(markerVisible);
         if (snapshot.isHeadingReliable())
             marker.setTrack(snapshot.getHeading(), snapshot.getSpeed());
         else
             marker.setTrack(0.0, 0.0);
+    }
+
+    private Icon createIcon(DittoDeviceSnapshot snapshot) {
+        Bitmap bitmap = Bitmap.createBitmap(ICON_SIZE, ICON_SIZE,
+                Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        int fillColor = validColor(snapshot.getMemberColorArgb(),
+                UNASSIGNED_COLOR);
+        int outlineColor = validColor(snapshot.getTeamColorArgb(),
+                UNASSIGNED_COLOR);
+
+        if (snapshot.isHeadingReliable() && snapshot.getSpeed() > 0.4) {
+            canvas.save();
+            canvas.rotate((float) snapshot.getHeading(), ICON_CENTER,
+                    ICON_CENTER);
+            Path arrow = new Path();
+            arrow.moveTo(ICON_CENTER, 3);
+            arrow.lineTo(ICON_SIZE - 4, ICON_SIZE - 3);
+            arrow.lineTo(ICON_CENTER, ICON_SIZE - 10);
+            arrow.lineTo(4, ICON_SIZE - 3);
+            arrow.close();
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(fillColor);
+            canvas.drawPath(arrow, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(3);
+            paint.setColor(outlineColor);
+            canvas.drawPath(arrow, paint);
+            canvas.restore();
+        } else {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(fillColor);
+            canvas.drawCircle(ICON_CENTER, ICON_CENTER, 10, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(3);
+            paint.setColor(outlineColor);
+            canvas.drawCircle(ICON_CENTER, ICON_CENTER, 11, paint);
+        }
+
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+        bitmap.recycle();
+        String encoded = "base64://" + Base64.encodeToString(
+                stream.toByteArray(), Base64.NO_WRAP | Base64.URL_SAFE);
+        return new Icon.Builder()
+                .setAnchor(ICON_CENTER, ICON_CENTER)
+                .setSize(ICON_SIZE, ICON_SIZE)
+                .setImageUri(0, encoded)
+                .build();
+    }
+
+    private int validColor(int color, int fallback) {
+        return color == 0 ? fallback : color;
     }
 
     private void staleMissingMarkers(Set<String> activeUids) {

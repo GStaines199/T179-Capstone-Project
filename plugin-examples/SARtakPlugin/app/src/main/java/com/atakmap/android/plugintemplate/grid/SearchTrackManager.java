@@ -15,6 +15,8 @@ import java.util.UUID;
 public class SearchTrackManager {
 
     private static final int MAX_DISPLAY_TRACK_POINTS = 1500;
+    private static final int MAX_SESSION_POINTS = 10000;
+    private static final long MAX_SESSION_AGE_MS = 12L * 60L * 60L * 1000L;
 
     private final TrackSessionRepository trackSessionRepository;
     private final LocationRepository locationRepository;
@@ -45,6 +47,20 @@ public class SearchTrackManager {
         }
         String existingSession = trackSessionRepository.getActiveSessionId(uid,
                 sessionPrefix(uid));
+        if (existingSession != null) {
+            long startedAt = trackSessionRepository
+                    .getSessionStartTimestamp(existingSession);
+            boolean expired = startedAt <= 0L
+                    || System.currentTimeMillis() - startedAt
+                            > MAX_SESSION_AGE_MS;
+            boolean oversized = locationRepository.countPointsInSession(
+                    existingSession) >= MAX_SESSION_POINTS;
+            if (expired || oversized) {
+                trackSessionRepository.closeSession(existingSession,
+                        System.currentTimeMillis());
+                existingSession = null;
+            }
+        }
         if (existingSession == null) {
             existingSession = sessionPrefix(uid) + UUID.randomUUID();
             sessionStartedAt = System.currentTimeMillis();

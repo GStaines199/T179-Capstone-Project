@@ -1,0 +1,11 @@
+10-06 13:05:33.750  8916  8916 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-06 13:05:33.752  8916  8916 I AndroidRuntime: Using default boot image
+10-06 13:05:33.753  8916  8916 I AndroidRuntime: Leaving lock profiling enabled
+10-06 13:05:33.876  8916  8916 D AndroidRuntime: Calling main entry com.android.commands.monkey.Monkey
+10-06 13:05:33.932  8916  8916 I AndroidRuntime: VM exiting with result code 0.
+10-06 13:05:56.398  1627  4468 I MediaProvider: Begin Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130555.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:05:56.439  1627  4468 W ModernMediaScanner: Failed to visit /sdcard/sartak-20261006-130555.png: java.nio.file.AccessDeniedException: /sdcard/sartak-20261006-130555.png
+10-06 13:05:56.472  1627  4468 I MediaProvider: End Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130555.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:06:47.801  1627  4468 I MediaProvider: Begin Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130649.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:06:47.802  1627  4468 W ModernMediaScanner: Failed to visit /sdcard/sartak-20261006-130649.png: java.nio.file.AccessDeniedException: /sdcard/sartak-20261006-130649.png
+10-06 13:06:47.805  1627  4468 I MediaProvider: End Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130649.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }

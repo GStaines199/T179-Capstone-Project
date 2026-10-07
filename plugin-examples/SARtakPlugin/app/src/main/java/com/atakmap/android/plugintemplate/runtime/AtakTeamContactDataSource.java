@@ -131,7 +131,7 @@ public class AtakTeamContactDataSource {
                             || role.equals("team leader")
                             || role.equals("leader")))
                 return "Team Lead";
-            return "Searcher";
+            return "Team Member";
         }
 
         private static String dittoGroupName(DittoDeviceSnapshot snapshot) {

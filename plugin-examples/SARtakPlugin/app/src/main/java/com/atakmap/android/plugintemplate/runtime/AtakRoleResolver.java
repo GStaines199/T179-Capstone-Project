@@ -60,7 +60,7 @@ public class AtakRoleResolver {
     public static String label(Role role) {
         if (role == Role.HQ)
             return "HQ";
-        return role == Role.TEAM_LEADER ? "Team Leader" : "Team Member";
+        return role == Role.TEAM_LEADER ? "Team Lead" : "Team Member";
     }
 
     private static String firstNonEmpty(String... values) {

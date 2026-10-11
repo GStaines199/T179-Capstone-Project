@@ -3,6 +3,7 @@ package com.atakmap.android.plugintemplate.runtime;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.android.plugintemplate.runtime.SharedMarkerImagePlanner.LocalFile;
 import com.atakmap.android.plugintemplate.runtime.SharedMarkerImagePlanner.Plan;
 import com.atakmap.android.util.AttachmentManager;
@@ -99,7 +100,12 @@ public class SharedMarkerImageSync {
         Map<String, List<LocalFile>> localFiles = new LinkedHashMap<>();
         for (String uid : uids) {
             List<LocalFile> files = new ArrayList<>();
-            List<File> attachments = AttachmentManager.getAttachments(uid);
+            // List the folder ourselves: AttachmentManager.getAttachments()
+            // caches per UID until ATAK's own change notification, so it can
+            // miss a file that arrived some other way.
+            String folderPath = AttachmentManager.getFolderPath(uid, false);
+            File[] attachments = folderPath == null ? null
+                    : new File(folderPath).listFiles();
             if (attachments != null) {
                 for (File file : attachments) {
                     if (file != null && file.isFile())
@@ -110,9 +116,13 @@ public class SharedMarkerImageSync {
             localFiles.put(uid, files);
         }
         long now = System.currentTimeMillis();
-        Plan plan = SharedMarkerImagePlanner.plan(localFiles,
-                dittoSyncManager.getMarkerImages(), selfUid, op, done,
-                failedAt, now);
+        List<SharedMarkerImage> documents = dittoSyncManager.getMarkerImages();
+        Plan plan = SharedMarkerImagePlanner.plan(localFiles, documents,
+                selfUid, op, done, failedAt, now);
+        if (BuildConfig.DEBUG)
+            Log.d(TAG, "run markers=" + uids.size() + " docs="
+                    + documents.size() + " uploads=" + plan.uploads.size()
+                    + " downloads=" + plan.downloads.size());
         for (LocalFile file : plan.uploads) {
             if (runGeneration != generation)
                 return;

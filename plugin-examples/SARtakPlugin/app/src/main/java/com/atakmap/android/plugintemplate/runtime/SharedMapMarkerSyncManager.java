@@ -130,12 +130,14 @@ public class SharedMapMarkerSyncManager {
             new SharedMapMarkerReconciler.Publisher() {
                 @Override
                 public boolean publish(SharedMapMarkerMessage message) {
+                    debug("publish", message);
                     return dittoSyncManager.publishSharedMapMarker(message);
                 }
 
                 @Override
                 public boolean publishDeletion(
                         SharedMapMarkerMessage tombstone) {
+                    debug("publish-delete", tombstone);
                     return dittoSyncManager
                             .publishSharedMapMarkerDeletion(tombstone);
                 }
@@ -177,6 +179,8 @@ public class SharedMapMarkerSyncManager {
             MapItem item = findItem(markerUid);
             if (item == null)
                 return;
+            if (BuildConfig.DEBUG)
+                Log.d(TAG, "remove deleted marker uid=" + markerUid);
             try {
                 item.removeFromGroup();
             } catch (Exception exception) {
@@ -187,9 +191,27 @@ public class SharedMapMarkerSyncManager {
 
         @Override
         public SharedMapMarkerMessage apply(SharedMapMarkerMessage message) {
+            debug("apply", message);
             Marker marker = upsertRemoteMarker(message);
             return marker == null ? null : snapshot(marker);
         }
+    }
+
+    private static void debug(String action, SharedMapMarkerMessage message) {
+        if (!BuildConfig.DEBUG)
+            return;
+        Log.d(TAG, action + " uid=" + message.getMarkerUid() + " title="
+                + message.getTitle() + " type=" + message.getMarkerType()
+                + " pos=" + message.getLatitude() + "," + message.getLongitude()
+                + " creator=" + message.getCreatorCallsign() + "/"
+                + message.getCreatorUid() + " created="
+                + message.getCreatedAt() + " editor="
+                + message.getSenderCallsign() + " remarks="
+                + message.getRemarks().length() + "ch color="
+                + (message.hasColor() ? Integer.toHexString(message.getColor())
+                        : "-") + " icon=" + message.getIconsetPath()
+                + (message.isDeleted() ? " DELETED by "
+                        + message.getDeletedByCallsign() : ""));
     }
 
     private MapItem findItem(String markerUid) {

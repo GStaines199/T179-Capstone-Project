@@ -69,6 +69,11 @@ public class DittoSyncManager {
             "sartak_shared_markers";
     private static final String SHARED_MARKER_QUERY = "SELECT * FROM "
             + SHARED_MARKER_COLLECTION;
+    private static final String MARKER_IMAGE_COLLECTION =
+            "sartak_shared_marker_images";
+    private static final String MARKER_IMAGE_QUERY = "SELECT * FROM COLLECTION "
+            + MARKER_IMAGE_COLLECTION + " (" + SharedMarkerImage.ATTACHMENT_FIELD
+            + " ATTACHMENT)";
     private static final String ALERT_COLLECTION = "sartak_alerts";
     private static final String ALERT_QUERY = "SELECT * FROM "
             + ALERT_COLLECTION;
@@ -100,6 +105,9 @@ public class DittoSyncManager {
     private final Map<String, SharedMapMarkerMessage> sharedMapMarkers =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SharedMapMarkerMessage>());
+    private final Map<String, SharedMarkerImage> markerImages =
+            Collections.synchronizedMap(new LinkedHashMap<String,
+                    SharedMarkerImage>());
     private final Map<String, SearchAlertMessage> alerts =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SearchAlertMessage>());
@@ -126,6 +134,8 @@ public class DittoSyncManager {
     private DittoSyncSubscription searchLineSubscription;
     private DittoSyncSubscription routePlanSubscription;
     private DittoSyncSubscription sharedMarkerSubscription;
+    private DittoSyncSubscription markerImageSubscription;
+    private DittoStoreObserver markerImageObserver;
     private DittoSyncSubscription alertSubscription;
     private DittoSyncSubscription areaAssignmentSubscription;
     private DittoStoreObserver deviceObserver;
@@ -268,6 +278,7 @@ public class DittoSyncManager {
                             updateSharedMapMarkers(jsonDocuments);
                         }
                     });
+            registerMarkerImageSync();
             alertSubscription = DittoSdkBridge.registerSubscription(ditto,
                     ALERT_QUERY);
             alertObserver = DittoSdkBridge.registerJsonObserver(ditto,
@@ -362,6 +373,10 @@ public class DittoSyncManager {
         DittoSdkBridge.closeObserver(routePlanObserver);
         DittoSdkBridge.closeObserver(sharedMarkerObserver);
         sharedMarkerSnapshotLoaded = false;
+        DittoSdkBridge.closeObserver(markerImageObserver);
+        DittoSdkBridge.closeSubscription(markerImageSubscription);
+        markerImageObserver = null;
+        markerImageSubscription = null;
         DittoSdkBridge.closeObserver(alertObserver);
         DittoSdkBridge.closeObserver(areaAssignmentObserver);
         DittoSdkBridge.closeSubscription(operationStatusSubscription);
@@ -773,6 +788,9 @@ public class DittoSyncManager {
         synchronized (sharedMapMarkers) {
             sharedMapMarkers.clear();
         }
+        synchronized (markerImages) {
+            markerImages.clear();
+        }
         synchronized (alerts) {
             alerts.clear();
         }
@@ -878,6 +896,95 @@ public class DittoSyncManager {
         return queueInsert(SHARED_MARKER_COLLECTION, "marker",
                 tombstone.toDeletionDocument(getOperationId()),
                 "marker delete", null);
+    }
+
+    /**
+     * Marker photos are optional: if the attachment query is rejected the
+     * rest of the operation sync must still start.
+     */
+    private void registerMarkerImageSync() {
+        try {
+            markerImageSubscription = DittoSdkBridge.registerSubscription(
+                    ditto, MARKER_IMAGE_QUERY);
+            markerImageObserver = DittoSdkBridge.registerJsonObserver(ditto,
+                    MARKER_IMAGE_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateMarkerImages(jsonDocuments);
+                        }
+                    });
+        } catch (Throwable throwable) {
+            Log.w(TAG, "Ditto marker image sync unavailable", throwable);
+        }
+    }
+
+    private void updateMarkerImages(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        LinkedHashMap<String, SharedMarkerImage> next = new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                if (!isCurrentOperation(json))
+                    continue;
+                SharedMarkerImage image = SharedMarkerImage.fromJson(
+                        new JSONObject(json));
+                if (image.getMarkerUid().length() == 0
+                        || image.getFileName().length() == 0)
+                    continue;
+                next.put(image.key(), image);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto marker image document",
+                        exception);
+            }
+        }
+        synchronized (markerImages) {
+            markerImages.clear();
+            markerImages.putAll(next);
+        }
+    }
+
+    public List<SharedMarkerImage> getMarkerImages() {
+        synchronized (markerImages) {
+            return new ArrayList<>(markerImages.values());
+        }
+    }
+
+    /**
+     * Copies a photo into Ditto and publishes its document. Blocking (file
+     * copy and write): call only from a background thread.
+     */
+    public boolean publishMarkerImageBlocking(SharedMarkerImage image,
+            String filePath) {
+        Ditto target = ditto;
+        if (!started || target == null || image == null)
+            return false;
+        try {
+            Map<String, String> metadata = new HashMap<>();
+            metadata.put("name", image.getFileName());
+            metadata.put("markerUid", image.getMarkerUid());
+            DittoSdkBridge.insertWithAttachment(target,
+                    MARKER_IMAGE_COLLECTION, SharedMarkerImage.ATTACHMENT_FIELD,
+                    filePath, metadata, image.toDocument());
+            return true;
+        } catch (Throwable throwable) {
+            Log.w(TAG, "Ditto marker image publish failed", throwable);
+            return false;
+        }
+    }
+
+    /**
+     * Downloads a photo to {@code destinationPath}. Blocking: call only from
+     * a background thread. Returns "" on success.
+     */
+    public String fetchMarkerImageBlocking(SharedMarkerImage image,
+            String destinationPath) {
+        Ditto target = ditto;
+        if (!started || target == null || image == null
+                || image.getToken() == null)
+            return "not available";
+        return DittoSdkBridge.fetchAttachmentToFile(target, image.getToken(),
+                destinationPath, 60_000L);
     }
 
     public boolean publishAlert(SearchAlertMessage message) {

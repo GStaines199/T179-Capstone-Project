@@ -49,6 +49,7 @@ public class SharedMapMarkerSyncManager {
     private final SharedMapMarkerReconciler reconciler =
             new SharedMapMarkerReconciler();
     private final AtakLocalMap localMap = new AtakLocalMap();
+    private final SharedMarkerImageSync imageSync;
 
     private String operationId = "";
     private long lastScanTime;
@@ -58,6 +59,8 @@ public class SharedMapMarkerSyncManager {
         this.mapView = mapView;
         this.identityManager = identityManager;
         this.dittoSyncManager = dittoSyncManager;
+        this.imageSync = dittoSyncManager == null ? null
+                : new SharedMarkerImageSync(dittoSyncManager);
     }
 
     public void setOperationId(String operationId) {
@@ -67,6 +70,8 @@ public class SharedMapMarkerSyncManager {
             return;
         this.operationId = next;
         reconciler.reset(next, System.currentTimeMillis());
+        if (imageSync != null)
+            imageSync.setOperationId(next);
         lastScanTime = 0L;
     }
 
@@ -97,6 +102,8 @@ public class SharedMapMarkerSyncManager {
         } else {
             result = reconciler.applyRemote(documents, localMap, selfUid);
         }
+        if (scanDue && imageSync != null)
+            imageSync.sync(localLiveMarkerUids(), selfUid, now);
         long elapsed = SystemClock.elapsedRealtime() - started;
         if (result.changedAnything())
             Log.i(TAG, "shared markers " + result + " docs="
@@ -104,6 +111,15 @@ public class SharedMapMarkerSyncManager {
         if (BuildConfig.DEBUG && (scanDue || elapsed >= 16L))
             Log.d(PERF_TAG, "shared markers ms=" + elapsed + " scan="
                     + scanDue + " docs=" + documents.size() + " " + result);
+    }
+
+    private List<String> localLiveMarkerUids() {
+        List<String> uids = new ArrayList<>();
+        for (SharedMapMarkerMessage marker : getLiveMarkers()) {
+            if (findItem(marker.getMarkerUid()) != null)
+                uids.add(marker.getMarkerUid());
+        }
+        return uids;
     }
 
     /** Live shared markers of this operation, newest edit first. */

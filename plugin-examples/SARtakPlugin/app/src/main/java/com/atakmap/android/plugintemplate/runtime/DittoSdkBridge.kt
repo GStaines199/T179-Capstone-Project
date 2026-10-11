@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.startup.AppInitializer
 import com.atakmap.android.plugintemplate.plugin.BuildConfig
 import com.ditto.kotlin.Ditto
+import com.ditto.kotlin.DittoAttachmentFetchResult
 import com.ditto.kotlin.DittoAuthenticationProvider
 import com.ditto.kotlin.DittoConfig
 import com.ditto.kotlin.DittoException
@@ -15,6 +16,7 @@ import com.ditto.kotlin.DittoInitializer
 import com.ditto.kotlin.DittoStoreObserver
 import com.ditto.kotlin.DittoSyncSubscription
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.security.MessageDigest
 import java.util.function.Consumer
@@ -202,6 +204,79 @@ object DittoSdkBridge {
     private fun shortLabel(label: String): String {
         val match = Regex("INSERT INTO (\\w+)").find(label)
         return match?.groupValues?.get(1) ?: label.take(40)
+    }
+
+    /**
+     * Copies [filePath] into Ditto's blob store and upserts [document] with
+     * the attachment in [attachmentField]. Blocking (file copy plus write):
+     * never call it on the main thread.
+     */
+    @JvmStatic
+    @Throws(DittoException::class)
+    fun insertWithAttachment(
+        ditto: Ditto,
+        collection: String,
+        attachmentField: String,
+        filePath: String,
+        metadata: Map<String, String>,
+        document: Map<String, Any?>
+    ) {
+        val query = "INSERT INTO COLLECTION $collection ($attachmentField ATTACHMENT) " +
+            "DOCUMENTS (:doc) ON ID CONFLICT DO UPDATE"
+        val attachment = ditto.store.newAttachment(filePath, metadata)
+        try {
+            val withAttachment = HashMap<String, Any?>(document)
+            withAttachment[attachmentField] = attachment
+            timedWrite(query) {
+                runBlocking {
+                    ditto.store.execute(query, mapOf("doc" to withAttachment))
+                }
+            }
+        } finally {
+            try {
+                attachment.close()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    /**
+     * Fetches an attachment (downloading it from peers if needed) and copies
+     * it to [destinationPath]. Blocking: never call it on the main thread.
+     * Returns "" on success, otherwise a short failure description.
+     */
+    @JvmStatic
+    fun fetchAttachmentToFile(
+        ditto: Ditto,
+        token: Map<String, Any?>,
+        destinationPath: String,
+        timeoutMillis: Long
+    ): String {
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            val result = runBlocking {
+                withTimeoutOrNull(timeoutMillis) {
+                    ditto.store.fetchAttachment(token as Map<String, Any>) { _, _ -> }
+                }
+            } ?: return "timed out"
+            when (result) {
+                is DittoAttachmentFetchResult.Completed -> {
+                    val attachment = result.attachment
+                    try {
+                        attachment.copyToPath(destinationPath)
+                    } finally {
+                        try {
+                            attachment.close()
+                        } catch (_: Throwable) {
+                        }
+                    }
+                    ""
+                }
+                else -> "attachment deleted"
+            }
+        } catch (throwable: Throwable) {
+            describeFailure(throwable)
+        }
     }
 
     @JvmStatic

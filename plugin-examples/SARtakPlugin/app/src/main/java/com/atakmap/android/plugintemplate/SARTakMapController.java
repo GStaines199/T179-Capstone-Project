@@ -2615,6 +2615,7 @@ public class SARTakMapController {
     }
 
     private void runBackgroundTeamRefresh() {
+        long started = SystemClock.elapsedRealtimeNanos();
         if (!loggedSyncedRecoverySnapshot) {
             loggedSyncedRecoverySnapshot = true;
             applyRemoteRoutePlanIfAvailable();
@@ -2622,10 +2623,14 @@ public class SARTakMapController {
         }
         dittoSyncManager.maintainConnection();
         publishPersistedAreaIfNeeded();
+        long advertiseStarted = SystemClock.elapsedRealtimeNanos();
         advertiseTeamIfDue();
+        long advertiseDone = SystemClock.elapsedRealtimeNanos();
         applyTeamLifecycleMessages();
         applyDittoMembershipSnapshots();
+        long markersStarted = SystemClock.elapsedRealtimeNanos();
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
+        long markersDone = SystemClock.elapsedRealtimeNanos();
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
         applyRemoteSearchLineIfAvailable();
@@ -2637,11 +2642,22 @@ public class SARTakMapController {
         refreshLocationAvailability();
         syncSelfTeamMemberFromAtak();
         updateCurrentGridCellFromLocation();
+        long deviceStarted = SystemClock.elapsedRealtimeNanos();
         publishDittoDeviceStateIfDue();
+        long deviceDone = SystemClock.elapsedRealtimeNanos();
         applyDittoDeviceSnapshots();
         arrangeTeamMembers();
         scheduleOverlayRefresh();
+        long lineStarted = SystemClock.elapsedRealtimeNanos();
         publishSearchLineUpdateIfDue();
+        long done = SystemClock.elapsedRealtimeNanos();
+        if (BuildConfig.DEBUG)
+            Log.d(PERF_TAG, "background refresh ms=" + millis(started, done)
+                    + " advertise=" + millis(advertiseStarted, advertiseDone)
+                    + " markers=" + millis(markersStarted, markersDone)
+                    + " device=" + millis(deviceStarted, deviceDone)
+                    + " line=" + millis(lineStarted, done)
+                    + " " + dittoSyncManager.getWriteQueueSummary());
     }
 
     private void updateCurrentGridCellFromLocation() {

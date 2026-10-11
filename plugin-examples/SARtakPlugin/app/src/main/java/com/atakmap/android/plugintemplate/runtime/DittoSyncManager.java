@@ -919,6 +919,10 @@ public class DittoSyncManager {
         }
     }
 
+    public String getWriteQueueSummary() {
+        return "writes=inline";
+    }
+
     public String getDiagnosticsSummary() {
         return getSummary()
                 + "\nOperation: " + getOperationSummary()

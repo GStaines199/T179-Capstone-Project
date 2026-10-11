@@ -1523,7 +1523,8 @@ public class SARTakMapController {
         int unsearched = planned > 0 ? Math.max(0, planned - touched) : 0;
 
         int activeAlerts = getActiveTeamAlerts().size();
-        int evidenceMarkers = dittoSyncManager.getSharedMapMarkers().size();
+        int evidenceMarkers = sharedMapMarkerSyncManager.getLiveMarkers()
+                .size();
         int assignments = getAreaAssignments().size();
 
         StringBuilder builder = new StringBuilder();
@@ -1549,6 +1550,8 @@ public class SARTakMapController {
         builder.append("Area assignments: ").append(assignments).append('\n');
         builder.append("Evidence/shared markers: ").append(evidenceMarkers)
                 .append('\n');
+        for (String line : sharedMapMarkerSyncManager.describeLiveMarkers(5))
+            builder.append("  ").append(line).append('\n');
         builder.append("Active alerts: ").append(activeAlerts).append('\n');
         builder.append("Sync: ").append(dittoSyncManager.getSummary());
         return builder.toString();

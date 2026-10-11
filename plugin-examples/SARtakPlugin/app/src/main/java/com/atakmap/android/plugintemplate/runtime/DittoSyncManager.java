@@ -139,6 +139,7 @@ public class DittoSyncManager {
     private DittoStoreObserver alertObserver;
     private DittoStoreObserver areaAssignmentObserver;
     private volatile boolean started;
+    private volatile boolean sharedMarkerSnapshotLoaded;
     private volatile boolean configured;
     private volatile boolean authAttemptInFlight;
     private volatile String status = "Ditto: not started";
@@ -360,6 +361,7 @@ public class DittoSyncManager {
         DittoSdkBridge.closeObserver(searchLineObserver);
         DittoSdkBridge.closeObserver(routePlanObserver);
         DittoSdkBridge.closeObserver(sharedMarkerObserver);
+        sharedMarkerSnapshotLoaded = false;
         DittoSdkBridge.closeObserver(alertObserver);
         DittoSdkBridge.closeObserver(areaAssignmentObserver);
         DittoSdkBridge.closeSubscription(operationStatusSubscription);
@@ -410,6 +412,7 @@ public class DittoSyncManager {
             stop();
         operationProfile = profile;
         clearLocalCaches();
+        sharedMarkerSnapshotLoaded = false;
         if (shouldStart)
             start();
     }
@@ -430,6 +433,7 @@ public class DittoSyncManager {
         operationProfile = profile;
         configured = hasDittoCredentials();
         clearLocalCaches();
+        sharedMarkerSnapshotLoaded = false;
         status = profile == null ? "Ditto: no operation selected"
                 : configured ? "Ditto: waiting to start"
                         : "Ditto: not configured ("
@@ -513,6 +517,14 @@ public class DittoSyncManager {
             return routePlans.get(SearchRoutePlan.routePlanId(
                     getOperationId(), teamId));
         }
+    }
+
+    /**
+     * True once the shared marker observer has delivered the local store at
+     * least once since Ditto started for this operation.
+     */
+    public boolean hasSharedMapMarkerSnapshot() {
+        return started && sharedMarkerSnapshotLoaded;
     }
 
     public List<SharedMapMarkerMessage> getSharedMapMarkers() {
@@ -848,24 +860,24 @@ public class DittoSyncManager {
     public boolean publishSharedMapMarker(SharedMapMarkerMessage message) {
         if (!started || ditto == null || message == null)
             return false;
-        Map<String, Object> document = new HashMap<>();
-        document.put("_id", "shared-marker-" + getOperationId() + "-"
-                + safe(message.getMarkerUid()));
-        document.put("operationId", getOperationId());
-        document.put("uid", safe(message.getUid()));
-        document.put("markerUid", safe(message.getMarkerUid()));
-        document.put("markerType", safe(message.getMarkerType()));
-        document.put("title", safe(message.getTitle()));
-        document.put("latitude", message.getLatitude());
-        document.put("longitude", message.getLongitude());
-        document.put("altitude", message.getAltitude());
-        document.put("senderUid", safe(message.getSenderUid()));
-        document.put("senderCallsign", safe(message.getSenderCallsign()));
-        document.put("teamId", safe(message.getTeamId()));
-        document.put("updatedAt", message.getUpdatedAt());
+        return queueInsert(SHARED_MARKER_COLLECTION, "marker",
+                message.toDocument(getOperationId()), "marker publish", null);
+    }
 
-        return queueInsert(SHARED_MARKER_COLLECTION, "marker", document,
-                "marker publish", null);
+    /**
+     * Writes only the tombstone fields. Ditto merges per field, so later
+     * ordinary updates (which never write {@code deleted}) cannot undo it.
+     * If an update of the same marker is still queued, the queue replaces
+     * it with this tombstone, which is the outcome we want anyway.
+     */
+    public boolean publishSharedMapMarkerDeletion(
+            SharedMapMarkerMessage tombstone) {
+        if (!started || ditto == null || tombstone == null
+                || tombstone.getMarkerUid().length() == 0)
+            return false;
+        return queueInsert(SHARED_MARKER_COLLECTION, "marker",
+                tombstone.toDeletionDocument(getOperationId()),
+                "marker delete", null);
     }
 
     public boolean publishAlert(SearchAlertMessage message) {
@@ -1420,8 +1432,11 @@ public class DittoSyncManager {
             sharedMapMarkers.clear();
             sharedMapMarkers.putAll(next);
         }
+        sharedMarkerSnapshotLoaded = true;
         for (SharedMapMarkerMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
+            String sender = message.isDeleted() ? message.getDeletedByUid()
+                    : message.getSenderUid();
+            if (!sender.equals(selfUid)) {
                 lastReceiveTime = System.currentTimeMillis();
                 break;
             }
@@ -1430,20 +1445,7 @@ public class DittoSyncManager {
 
     private SharedMapMarkerMessage sharedMapMarkerFromJson(String json)
             throws JSONException {
-        JSONObject object = new JSONObject(json);
-        return new SharedMapMarkerMessage(
-                object.optString("uid", ""),
-                object.optString("markerUid", ""),
-                object.optString("markerType", ""),
-                object.optString("title", ""),
-                object.optDouble("latitude", Double.NaN),
-                object.optDouble("longitude", Double.NaN),
-                object.optDouble("altitude", 0.0),
-                object.optString("senderUid", ""),
-                object.optString("senderCallsign", ""),
-                object.optString("teamId", ""),
-                object.optString("operationId", ""),
-                object.optLong("updatedAt", 0L));
+        return SharedMapMarkerMessage.fromJson(new JSONObject(json));
     }
 
     private void updateAlerts(List<String> jsonDocuments) {

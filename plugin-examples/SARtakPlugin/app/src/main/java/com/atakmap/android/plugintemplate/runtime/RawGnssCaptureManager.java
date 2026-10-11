@@ -19,8 +19,13 @@ public class RawGnssCaptureManager {
         void onRawGnssCaptured(RawGnssCapture capture);
     }
 
-    public static final long MIN_UPDATE_INTERVAL_MS = 1000L;
-    public static final float MIN_UPDATE_DISTANCE_M = 0f;
+    /**
+     * Field state is synchronized on a five-to-ten second cadence. Capturing a
+     * fix every second caused a synchronous SQLite write, ATAK crumb write and
+     * map refresh on the main looper even while a device was stationary.
+     */
+    public static final long MIN_UPDATE_INTERVAL_MS = 5000L;
+    public static final float MIN_UPDATE_DISTANCE_M = 2f;
 
     private final Context context;
     private final LocationManager locationManager;

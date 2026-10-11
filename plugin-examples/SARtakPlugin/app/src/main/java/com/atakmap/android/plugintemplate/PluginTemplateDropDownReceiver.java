@@ -7,12 +7,14 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -34,6 +36,7 @@ import android.widget.Toast;
 
 import com.atak.plugins.impl.PluginLayoutInflater;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.maps.Marker;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
@@ -44,10 +47,12 @@ import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
 import com.atakmap.android.plugintemplate.runtime.DittoCredentialProfile;
 import com.atakmap.android.plugintemplate.runtime.OperationQrCodeGenerator;
 import com.atakmap.android.plugintemplate.runtime.OperationQrScanResultStore;
+import com.atakmap.android.plugintemplate.runtime.OperationProfile;
 import com.atakmap.android.plugintemplate.runtime.SearchAreaAssignment;
 import com.atakmap.android.plugintemplate.runtime.SearchAlertMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.plugin.R;
+import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.android.dropdown.DropDown.OnStateListener;
 import com.atakmap.android.dropdown.DropDownReceiver;
 
@@ -55,6 +60,7 @@ import com.atakmap.coremap.log.Log;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
@@ -64,6 +70,19 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             .getSimpleName();
 
     public static final String SHOW_PLUGIN = "com.atakmap.android.plugintemplate.SHOW_PLUGIN";
+    public static final String DEBUG_OPEN_TAB =
+            "com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB";
+    public static final String DEBUG_SET_ROLE =
+            "com.atakmap.android.plugintemplate.DEBUG_SET_ROLE";
+    public static final String DEBUG_SET_CALLSIGN =
+            "com.atakmap.android.plugintemplate.DEBUG_SET_CALLSIGN";
+    public static final String DEBUG_REFRESH =
+            "com.atakmap.android.plugintemplate.DEBUG_REFRESH";
+    public static final String DEBUG_RESET_FIXTURE =
+            "com.atakmap.android.plugintemplate.DEBUG_RESET_FIXTURE";
+    public static final String DEBUG_EXTRA_TAB = "tab";
+    public static final String DEBUG_EXTRA_ROLE = "role";
+    public static final String DEBUG_EXTRA_CALLSIGN = "callsign";
     private static final int TAB_HOME = 0;
     private static final int TAB_GRID = 1;
     private static final int TAB_TEAM = 2;
@@ -189,6 +208,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private boolean suppressToleranceUpdate;
     private boolean suppressSwitchUpdate;
     private boolean consumingPendingQrScan;
+    private AlertDialog pasteOperationJoinDialog;
     private String activeGridReviewPromptCellId = "";
 
     /**************************** CONSTRUCTOR *****************************/
@@ -537,7 +557,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         } else if (id == R.id.archive_operation_button) {
             showArchiveOperationDialog();
         } else if (id == R.id.join_operation_button) {
-            showJoinOperationDialog();
+            if (mapController.hasActiveOperation())
+                showSwitchOperationDialog();
+            else
+                showJoinOperationDialog();
         } else if (id == R.id.leave_operation_button) {
             showLeaveOperationDialog();
         } else if (id == R.id.manage_ditto_button) {
@@ -685,8 +708,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         boolean canManageSearchArea = mapController.canManageSearchArea();
         createOperationButton.setVisibility(!hasOperation && canManageOperation
                 ? View.VISIBLE : View.GONE);
-        joinOperationButton.setVisibility(hasOperation || canManageOperation
+        joinOperationButton.setVisibility(canManageOperation
                 ? View.GONE : View.VISIBLE);
+        joinOperationButton.setText(hasOperation ? "Switch Operation"
+                : "Join Operation With Code");
         showOperationJoinCodeButton.setVisibility(hasOperation
                 && canManageOperation && !archivedOperation
                 ? View.VISIBLE : View.GONE);
@@ -1600,6 +1625,57 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .show();
     }
 
+    private void showSwitchOperationDialog() {
+        final java.util.List<OperationProfile> available =
+                new java.util.ArrayList<>();
+        final java.util.List<String> labels = new java.util.ArrayList<>();
+        String activeId = mapController.hasActiveOperation()
+                ? mapController.getActiveOperationIdForDisplay() : "";
+        for (OperationProfile profile : mapController.getSavedOperations()) {
+            if (profile.getOperationId().equals(activeId))
+                continue;
+            available.add(profile);
+            labels.add(profile.getOperationName()
+                    + (profile.isArchived() ? " (archived)" : "")
+                    + "\n" + profile.getOperationId());
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(
+                getMapView().getContext())
+                .setTitle("Switch Operation")
+                .setNeutralButton("Join Another",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog,
+                                    int which) {
+                                showJoinOperationDialog();
+                            }
+                        })
+                .setNegativeButton("Cancel", null);
+        if (available.isEmpty()) {
+            builder.setMessage("No other saved operations are available on this device. Join another operation using its HQ QR or join code.");
+        } else {
+            builder.setItems(labels.toArray(new String[0]),
+                    new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            OperationProfile selected = available.get(which);
+                            boolean switched = mapController.switchOperation(
+                                    selected.getOperationId());
+                            Toast.makeText(getMapView().getContext(),
+                                    switched ? "Switched to "
+                                            + selected.getOperationName()
+                                            : "Operation could not be opened",
+                                    Toast.LENGTH_LONG).show();
+                            handledTeamMessages.clear();
+                            resolvedTeamMessages.clear();
+                            handledAlertMessages.clear();
+                            refreshGridUi();
+                        }
+                    });
+        }
+        builder.show();
+    }
+
     private void showPasteOperationJoinCodeDialog() {
         final EditText input = new EditText(getMapView().getContext());
         input.setSingleLine(false);
@@ -1613,6 +1689,14 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .setPositiveButton("Join", null)
                 .setNegativeButton("Cancel", null)
                 .create();
+        pasteOperationJoinDialog = dialog;
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface ignored) {
+                if (pasteOperationJoinDialog == dialog)
+                    pasteOperationJoinDialog = null;
+            }
+        });
         dialog.setOnShowListener(new DialogInterface.OnShowListener() {
             @Override
             public void onShow(DialogInterface ignored) {
@@ -1659,6 +1743,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
     private void joinOperationFromScannedCode(String joinCode) {
         boolean joined = mapController.joinOperationFromCode(joinCode);
+        if (joined && pasteOperationJoinDialog != null
+                && pasteOperationJoinDialog.isShowing())
+            pasteOperationJoinDialog.dismiss();
         Toast.makeText(getMapView().getContext(),
                 joined ? "Operation joined from QR"
                         : "Invalid SARtak operation QR",
@@ -2620,7 +2707,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + " | SARtak team colour: " + member.getTeamColorName()
                 + " | Personal: " + member.getColorName()
                 + " | " + member.getLaneLabel(), 13, false));
-        card.addView(createCardText("Native ATAK team: "
+        card.addView(createCardText("SARtak map group: "
                 + member.getAtakGroupName(), 13, false));
         card.addView(createCardText("GPS: " + member.getGpsCoordinates()
                 + " | Alt: " + member.getAltitude(), 13, false));
@@ -2658,7 +2745,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 13, false));
         card.addView(createCardText("SARtak team: "
                 + device.getTeamSummary(), 13, false));
-        card.addView(createCardText("Native ATAK team: "
+        card.addView(createCardText("SARtak map group: "
                 + device.getAtakGroupName(), 13, false));
         card.addView(createCardText("Role: " + device.getRole(),
                 13, false));
@@ -2955,6 +3042,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         if (action == null)
             return;
 
+        if (BuildConfig.DEBUG && handleDebugAction(action, intent))
+            return;
+
         if (action.equals(OperationQrScanActivity.ACTION_SCAN_RESULT)) {
             String joinCode = intent.getStringExtra(
                     OperationQrScanActivity.EXTRA_JOIN_CODE);
@@ -2989,6 +3079,103 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                         Toast.LENGTH_LONG).show();
             }
         }
+    }
+
+    private boolean handleDebugAction(String action, Intent intent) {
+        if (DEBUG_OPEN_TAB.equals(action)) {
+            openForDebug();
+            showTab(tabFromName(intent.getStringExtra(DEBUG_EXTRA_TAB)));
+            return true;
+        }
+        if (DEBUG_SET_ROLE.equals(action)) {
+            applyDebugRole(intent.getStringExtra(DEBUG_EXTRA_ROLE));
+            refreshGridUi();
+            return true;
+        }
+        if (DEBUG_SET_CALLSIGN.equals(action)) {
+            applyDebugCallsign(intent.getStringExtra(DEBUG_EXTRA_CALLSIGN));
+            refreshGridUi();
+            return true;
+        }
+        if (DEBUG_REFRESH.equals(action)) {
+            refreshGridUi();
+            return true;
+        }
+        if (DEBUG_RESET_FIXTURE.equals(action)) {
+            mapController.resetDebugFixture();
+            handledTeamMessages.clear();
+            resolvedTeamMessages.clear();
+            handledAlertMessages.clear();
+            refreshGridUi();
+            return true;
+        }
+        return false;
+    }
+
+    private void openForDebug() {
+        refreshGridUi();
+        showDropDown(templateView, HALF_WIDTH, FULL_HEIGHT, FULL_WIDTH,
+                HALF_HEIGHT, false, this);
+        startUiRefresh();
+    }
+
+    private int tabFromName(String name) {
+        String normalized = name == null ? ""
+                : name.trim().toUpperCase(Locale.US);
+        if ("GRID".equals(normalized))
+            return TAB_GRID;
+        if ("TEAM".equals(normalized) || "OPERATION".equals(normalized))
+            return TAB_TEAM;
+        if ("ALERTS".equals(normalized))
+            return TAB_ALERTS;
+        if ("DEVICES".equals(normalized))
+            return TAB_DEVICES;
+        if ("TRACK".equals(normalized))
+            return TAB_TRACK;
+        return TAB_HOME;
+    }
+
+    private void applyDebugRole(String requestedRole) {
+        String normalized = requestedRole == null ? ""
+                : requestedRole.trim().toUpperCase(Locale.US);
+        String role = "TEAM_LEAD".equals(normalized)
+                || "TEAM_LEADER".equals(normalized) ? "Team Lead"
+                        : "HQ".equals(normalized) ? "HQ" : "Team Member";
+        SharedPreferences preferences = PreferenceManager
+                .getDefaultSharedPreferences(getMapView().getContext());
+        preferences.edit().putString("atakRoleType", role)
+                .putString("atakRole", role).putString("role", role)
+                .putString("teamRole", role).apply();
+        Marker self = getMapView().getSelfMarker();
+        if (self != null) {
+            self.setMetaString("atakRoleType", role);
+            self.setMetaString("atakRole", role);
+            self.setMetaString("role", role);
+            self.setMetaString("teamRole", role);
+        }
+        getMapView().getMapData().setMetaString("atakRoleType", role);
+        getMapView().getMapData().setMetaString("atakRole", role);
+        getMapView().getMapData().setMetaString("role", role);
+        getMapView().getMapData().setMetaString("teamRole", role);
+        Log.d(TAG, "Debug role set to " + role);
+    }
+
+    private void applyDebugCallsign(String requestedCallsign) {
+        String callsign = requestedCallsign == null ? ""
+                : requestedCallsign.trim();
+        if (callsign.length() == 0)
+            return;
+        SharedPreferences preferences = PreferenceManager
+                .getDefaultSharedPreferences(getMapView().getContext());
+        preferences.edit().putString("locationCallsign", callsign)
+                .putString("callsign", callsign).apply();
+        Marker self = getMapView().getSelfMarker();
+        if (self != null) {
+            self.setTitle(callsign);
+            self.setMetaString("callsign", callsign);
+        }
+        getMapView().getMapData().setMetaString("callsign", callsign);
+        Log.d(TAG, "Debug callsign set to " + callsign);
     }
 
     @Override

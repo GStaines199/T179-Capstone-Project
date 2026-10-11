@@ -20,12 +20,11 @@ public class LocationCaptureManager {
      * plumbing that produces it lives in {@link MapViewLocationFixSource}.
      * <p>
      * The measurement fields are primitive, so "not reported" travels as
-     * {@code Double.NaN} rather than as null. Nothing downstream treats NaN as
-     * a measurement: {@link SearchTrackManager#recordLocation} routes through
-     * {@code recordFix}, which resolves NaN to a NULL column. Producers must
-     * therefore pass NaN, never a stand-in zero -- 0 m accuracy and a
-     * due-north bearing are both values a real fix can legitimately have, so a
-     * substituted zero cannot be told apart from a reading afterwards.
+     * {@code Double.NaN} rather than as null. These values reach health and
+     * status reporting only, never the track: an unreported accuracy has to
+     * stay distinguishable from a measured one, because 0 m accuracy and a
+     * due-north bearing are both values a real fix can legitimately have, so
+     * a substituted zero could not be told apart from a reading afterwards.
      */
     public static class LocationFix {
 
@@ -229,10 +228,13 @@ public class LocationCaptureManager {
      * Capture decision logic, kept free of ATAK types so it can be unit tested
      * on a plain JVM. The ATAK plumbing lives in {@link #captureNow()}.
      * <p>
-     * A position is written only when the identity resolved <i>and</i> ATAK
-     * supplied a usable fix; every other path records the failure and writes
-     * nothing, so a lost signal can never be filled in with a stale or
-     * inferred position.
+     * This path writes no track points. The self-marker fix it reads has
+     * already been through ATAK's location fusion, so logging it would put
+     * processed positions into a track that is required to hold unmodified
+     * device fixes. {@link RawGnssCaptureManager} is the only writer into
+     * {@code location_points}; what happens here is identity resolution and
+     * health reporting, so a degraded or lost signal stays visible rather
+     * than being silently filled in.
      */
     void captureWith(IdentityManager.Identity identity, LocationFix fix) {
         healthManager.setIdentityResolved(identity.isResolved(),
@@ -251,10 +253,6 @@ public class LocationCaptureManager {
             return;
         }
 
-        trackManager.recordLocation(identity.getUid(), identity.getCallsign(),
-                fix.getLatitude(), fix.getLongitude(), fix.getAltitude(),
-                fix.getAccuracy(), fix.getBearing(), fix.getSpeed(),
-                fix.getTimestamp());
         healthManager.setTrackingActive(trackManager.isRecording());
         healthManager.recordLocationSuccess(fix.getTimestamp(),
                 fix.getAccuracy(), fix.getSource());

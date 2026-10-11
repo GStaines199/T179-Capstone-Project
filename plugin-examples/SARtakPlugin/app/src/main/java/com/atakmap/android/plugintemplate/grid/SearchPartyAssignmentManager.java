@@ -2,6 +2,7 @@ package com.atakmap.android.plugintemplate.grid;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -198,6 +199,13 @@ public class SearchPartyAssignmentManager {
         if (self != null)
             self.setRole(SearchTeamMember.TeamRole.SEARCHER);
         applyTeamStyle();
+    }
+
+    public void setSelfRole(boolean teamLeader) {
+        SearchTeamMember self = findMemberById(selfMemberId);
+        if (self != null)
+            self.setRole(teamLeader ? SearchTeamMember.TeamRole.TEAM_LEADER
+                    : SearchTeamMember.TeamRole.SEARCHER);
     }
 
     public void clearTeam() {
@@ -444,17 +452,21 @@ public class SearchPartyAssignmentManager {
         for (SearchTeamMember member : getVisibleMembers()) {
             if (member.getUniqueId().equals(selfMemberId))
                 continue;
-            long lastPresence = member.getLastPresenceTimestamp();
-            if (lastPresence <= 0L)
-                continue;
-            long age = now - lastPresence;
-            if (age > DISCONNECTED_AFTER_MS)
-                member.setConnectionStatus(
-                        SearchTeamMember.ConnectionStatus.DISCONNECTED);
-            else if (age > STALE_AFTER_MS)
-                member.setConnectionStatus(
-                        SearchTeamMember.ConnectionStatus.RECONNECTING);
+            updateConnectionAge(member, now);
         }
+    }
+
+    private void updateConnectionAge(SearchTeamMember member, long now) {
+        long lastPresence = member.getLastPresenceTimestamp();
+        if (lastPresence <= 0L)
+            return;
+        long age = now - lastPresence;
+        if (age > DISCONNECTED_AFTER_MS)
+            member.setConnectionStatus(
+                    SearchTeamMember.ConnectionStatus.DISCONNECTED);
+        else if (age > STALE_AFTER_MS)
+            member.setConnectionStatus(
+                    SearchTeamMember.ConnectionStatus.RECONNECTING);
     }
 
     public boolean updateFromPresence(
@@ -498,7 +510,8 @@ public class SearchPartyAssignmentManager {
                         presence.getMemberColorArgb());
             else
                 applyMemberStyle(member);
-            member.markPresenceSeen(formatLastPing(presence.getCreated()));
+            member.markPresenceSeenAt(formatLastPing(presence.getCreated()),
+                    presence.getCreated());
             long now = System.currentTimeMillis();
             searcherRepository.insertOrUpdate(
                     presence.getSenderUid(),
@@ -548,7 +561,8 @@ public class SearchPartyAssignmentManager {
                         snapshot.getMemberColorArgb());
             else
                 applyMemberStyle(member);
-            member.markPresenceSeen(formatLastPing(snapshot.getUpdatedAt()));
+            member.markPresenceSeenAt(formatLastPing(snapshot.getUpdatedAt()),
+                    snapshot.getUpdatedAt());
             if (snapshot.hasLocation()) {
                 GeoPoint point = new GeoPoint(snapshot.getLatitude(),
                         snapshot.getLongitude(), snapshot.getAltitude());
@@ -585,13 +599,13 @@ public class SearchPartyAssignmentManager {
     }
 
     /**
-     * Spreads the team across the cell into lanes abreast of the search line.
+     * Numbers the team's lanes in a fixed order, team leader first and then by
+     * UID, so every device assigns the same lane to the same searcher.
      *
-     * <p>Lanes are divided across the line, which is the easting axis only
-     * while the team is walking north or south. {@code direction} is therefore
-     * required rather than assumed: dividing along easting for an east-bound
-     * team would stack every lane along their own direction of travel, putting
-     * the whole team in single file down one strip of ground.
+     * <p>{@code direction} sets which way "ahead of the line" is measured for
+     * each member's line offset. It is required rather than assumed: measuring
+     * along northing for an east-bound team would report every searcher as
+     * level with the line however far ahead or behind they were.
      */
     public void arrangeMembersForCell(SearchGridCell cell,
             GridCoordinateConverter converter, GeoPoint leaderPoint,
@@ -602,38 +616,31 @@ public class SearchPartyAssignmentManager {
             direction = SearchLineDirection.NORTH;
 
         List<SearchTeamMember> laneMembers = getLaneMembers();
+        Collections.sort(laneMembers, new Comparator<SearchTeamMember>() {
+            @Override
+            public int compare(SearchTeamMember first,
+                    SearchTeamMember second) {
+                if (first.isTeamLeader() != second.isTeamLeader())
+                    return first.isTeamLeader() ? -1 : 1;
+                int byUid = first.getUniqueId().compareToIgnoreCase(
+                        second.getUniqueId());
+                if (byUid != 0)
+                    return byUid;
+                return first.getCallsign().compareToIgnoreCase(
+                        second.getCallsign());
+            }
+        });
         int laneCount = Math.max(1, laneMembers.size());
-        double laneAxisMin = direction.lineMin(cell);
-        double laneWidth = (direction.lineMax(cell) - laneAxisMin) / laneCount;
-        UTMPoint leaderUtm = UTMPoint.fromGeoPoint(leaderPoint);
-        int leaderLaneIndex = clamp((int) Math.floor((direction.lineCoordinate(
-                leaderUtm.getEasting(), leaderUtm.getNorthing())
-                - laneAxisMin) / laneWidth), 0, laneCount - 1);
-
-        SearchTeamMember leader = findMemberById(selfMemberId);
-        if (leader != null && leader.contributesLane()) {
-            leader.setLaneNumber(leaderLaneIndex + 1);
-            leader.updateMapPosition(leaderPoint.getLatitude(),
-                    leaderPoint.getLongitude(), 0.0, cell.getId(), "You",
-                    "Leader line");
-        }
-
-        List<Integer> availableLaneIndexes = new ArrayList<>();
-        for (int i = 0; i < laneCount; i++) {
-            if (i != leaderLaneIndex)
-                availableLaneIndexes.add(i);
-        }
-
-        int laneCursor = 0;
-        for (SearchTeamMember member : laneMembers) {
-            if (member.getUniqueId().equals(selfMemberId))
-                continue;
-
-            int laneIndex = laneCursor < availableLaneIndexes.size()
-                    ? availableLaneIndexes.get(laneCursor)
-                    : laneCursor;
-            laneCursor++;
+        UTMPoint selfUtm = UTMPoint.fromGeoPoint(leaderPoint);
+        for (int laneIndex = 0; laneIndex < laneMembers.size(); laneIndex++) {
+            SearchTeamMember member = laneMembers.get(laneIndex);
             member.setLaneNumber(laneIndex + 1);
+            if (member.getUniqueId().equals(selfMemberId)) {
+                member.updateMapPosition(leaderPoint.getLatitude(),
+                        leaderPoint.getLongitude(), 0.0, cell.getId(), "You",
+                        member.isTeamLeader() ? "Leader line" : "Assigned line");
+                continue;
+            }
             if (!member.hasLiveAtakContact())
                 continue;
 
@@ -641,7 +648,7 @@ public class SearchPartyAssignmentManager {
                     member.getLatitude(), member.getLongitude()));
             member.updateMapPosition(member.getLatitude(),
                     member.getLongitude(), member.getHeadingDegrees(),
-                    cell.getId(), formatDistance(distance(leaderUtm,
+                    cell.getId(), formatDistance(distance(selfUtm,
                             memberPoint)),
                     formatLineOffset(direction.progressMeters(
                             memberPoint.getEasting(),
@@ -751,6 +758,8 @@ public class SearchPartyAssignmentManager {
     private void applyMemberStyle(SearchTeamMember member) {
         if (member == null)
             return;
+        member.setAtakGroupName(teamCreated || teamId.length() > 0
+                ? teamColorName + " SARtak team" : "Unassigned");
         SearchTeamStyle.ColorChoice personal =
                 SearchTeamStyle.memberColorFor(member.getUniqueId(),
                         member.getLaneNumber(), member.isTeamLeader());
@@ -808,13 +817,18 @@ public class SearchPartyAssignmentManager {
             return;
         }
         member.setAtakGroupName(contact.getAtakGroupName());
-        member.setConnectionStatus(SearchTeamMember.ConnectionStatus.CONNECTED);
         member.updatePosition(point.getLatitude(), point.getLongitude(),
                 contact.getHeadingDegrees(), formatGeo(point),
                 formatAltitude(point), converter.cellIdForPoint(point),
                 formatLastPing(contact.getTimestamp()),
                 formatDistanceFromSelf(selfPoint, point),
                 member.getDistanceFromSearchLine());
+        if (contact.getTimestamp() > 0L)
+            member.markPresenceSeenAt(formatLastPing(contact.getTimestamp()),
+                    contact.getTimestamp());
+        else
+            member.setConnectionStatus(SearchTeamMember.ConnectionStatus.STALE);
+        updateConnectionAge(member, System.currentTimeMillis());
         member.updateMovement(contact.getHeadingDegrees(),
                 contact.isHeadingReliable(), contact.getSpeedMetersPerSecond());
         applyMemberStyle(member);

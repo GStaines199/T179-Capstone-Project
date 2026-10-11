@@ -1,0 +1,100 @@
+10-06 13:05:34.619  8047  8047 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-06 13:05:34.645  8047  8047 I AndroidRuntime: Using default boot image
+10-06 13:05:34.645  8047  8047 I AndroidRuntime: Leaving lock profiling enabled
+10-06 13:05:36.455  8047  8047 D AndroidRuntime: Calling main entry com.android.commands.monkey.Monkey
+10-06 13:05:36.531  8047  8047 I AndroidRuntime: VM exiting with result code 0.
+10-06 13:06:50.243  1679  4438 I MediaProvider: Begin Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130650.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:06:50.302  1679  4438 W ModernMediaScanner: Failed to visit /sdcard/sartak-20261006-130650.png: java.nio.file.AccessDeniedException: /sdcard/sartak-20261006-130650.png
+10-06 13:06:50.346  1679  4438 I MediaProvider: End Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130650.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:07:22.038  8287  8287 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-06 13:07:22.043  8287  8287 I AndroidRuntime: Using default boot image
+10-06 13:07:22.043  8287  8287 I AndroidRuntime: Leaving lock profiling enabled
+10-06 13:07:22.155  8287  8287 D AndroidRuntime: Calling main entry com.android.commands.input.Input
+10-06 13:07:22.193  8287  8287 D AndroidRuntime: Shutting down VM
+10-06 13:07:22.218  2558  2558 D AtakPluginRegistry: Loading plugin: com.atakmap.android.plugintemplate.plugin
+10-06 13:07:22.218  2558  2558 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-06 13:07:22.220  2558  2558 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-06 13:07:22.646  2558  2558 D AtakPluginRegistry: Loading com.atak.plugins.impl.IToolbarItem extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-06 13:07:22.647  2558  2558 D AtakPluginRegistry: Loading gov.tak.api.plugin.IPlugin extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-06 13:07:22.649  2558  2558 D AtakPluginRegistry: api matches[ com.atakmap.android.plugintemplate.plugin]; pluginApiVersion:com.atakmap.app@5.6.0.CIV
+10-06 13:07:22.663  2558  2558 D AtakPluginRegistry: SDK skipping signature check[com.atakmap.android.plugintemplate.plugin]
+10-06 13:07:22.755  2558  2558 D AtakPluginRegistry: Loaded com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle, for plugin: com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-06 13:07:22.755  2558  2558 D AtakPluginRegistry: Loading new Kernel plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle@cc5f778
+10-06 13:07:22.756  2558  2558 D ToolMapComponent: Loading new IToolbarItem plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool@811e51
+10-06 13:07:22.756  2558  2558 D PluginMapComponent: addPluginIcon: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool
+10-06 13:07:26.723  2558  2558 D PluginTemplateMapComponent: registering the plugin filter
+10-06 13:07:26.728  2558  2558 D AtakPluginRegistry: Loaded plugin: com.atakmap.android.plugintemplate.plugin, with extension count: 2
+10-06 13:07:29.675  2558  8326 W linker  : Warning: "/data/app/~~koywDqS35Yz-2Lu9uH4s3w==/com.atakmap.android.plugintemplate.plugin-7mhWjtZC1tSd9W5Q0_b2sw==/lib/x86_64/libdittoffi.so" has unsupported flags DT_FLAGS_1=0x81 (ignoring unsupported flags)
+10-06 13:07:29.766  2558  8326 I Ditto   : init_logging:init_tracing{config.service_name="ditto" tracing_format="json" rust_log="trace" otel_ratio=1.0 otel_endpoint="Disabled" otel_protocol="grpc"}: "initializing tracing" opentelemetry_enabled=false loki_enabled=false
+10-06 13:07:29.767  2558  8326 I Ditto   : post_init_logging: successfully initialized logging
+10-06 13:07:29.767  2558  8326 I Ditto   : post_init_logging: installed tracing-log compatibility layer originator=tracing-config
+10-06 13:07:30.172  2558  8334 I Ditto   : ditto_init: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-06 13:07:30.174  2558  8334 I Ditto   : ditto_init: DQL engine initialised
+10-06 13:07:30.175  2558  8334 I Ditto   : ditto_init: initializing auth client identity=OnlineWithAuthentication { app_id: ValidatedOnlineAppId("88ed3c0c-bf9b-4da2-bc94-6c3ac95751a3"), base_url: Url { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("i83inp.cloud.dittolive.app")), port: None, path: "/", query: None, fragment: None } }
+10-06 13:07:30.183  2558  8334 I Ditto   : ditto_init:new_auth_client{auth.kind=online_with_authentication}: peer key loaded from site info cache peer_pubkey=pkAocCgkMCmoSPBZ8ksQGCDlMkfTYnueMd1Tt-9mRZ-QO_TruGR70
+10-06 13:07:30.184  2558  8334 W Ditto   : ditto_init:new_auth_client{auth.kind=online_with_authentication}: error reading blob CBOR error=missing field `config` filename="dsoq.cbor"
+10-06 13:07:30.185  2558  8334 I Ditto   : ditto_init:new_auth_client{auth.kind=online_with_authentication}: CA certificate verifying this peer: MIIBWTCCAQCgAwIBAgIUJ8ugf31diqPvQUS73kGCjdxh6H4wCgYIKoZIzj0EAwIwDDEKMAgGA1UEAwwBKjAeFw0yNjA5MTAyMzU5NTNaFw0yNjA5MTgwMDAwNTNaMAwxCjAIBgNVBAMMASowWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASgQUhHflYEh8ZVe/HYimt6b3lEg3lSMKr9LiMVIkrtFkiIV2YFJMR/qM2CbGQnmpOf3l6od7LVvk1JC+oCEZH5o0AwPjAMBgNVHREEBTADggEqMB0GA1UdDgQWBBSdrG26FQqiPMeDOY7haVEeblnRezAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0cAMEQCICTBVLQT2HkmG3sm2tQ0Uwe5cHiMhUDv3Na0FXB+d9/XAiBvAXuDPmcU5VQPE3+6JboVPTcoL4PGI8dk0mOJz0GU0w==
+10-06 13:07:30.193  2558  8334 I Ditto   : ditto_init: timestamps were parsed from all existing files; trying to reopen the latest
+10-06 13:07:30.193  2558  8334 I Ditto   : ditto_init: suitable latest log file found; trying to open it path="/data/data/com.atakmap.app.civ/files/sartak_ditto/6105337b30067aa7989f8075/ditto_logs/ditto-logs-2026-10-05-13-46-40.881000.log"
+10-06 13:07:30.194  2558  8334 I Ditto   : ditto_init: metrics Prometheus exporter is not enabled
+10-06 13:07:30.194  2558  8334 I Ditto   : ditto_init: metrics Proxy exporter is not enabled
+10-06 13:07:30.194  2558  8334 I Ditto   : ditto_init: metrics OnFile exporter is not enabled
+10-06 13:07:30.194  2558  8334 I Ditto   : ditto_init: metrics VirtualCollection exporter is not enabled
+10-06 13:07:30.194  2558  8334 I Ditto   : ditto_init: metrics metrics-rs integration is not enabled
+10-06 13:07:30.196  2558  8334 I Ditto   : ditto_init: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-06 13:07:30.200  2558  8328 I Ditto   : next store system info collection scheduled delay=5 secs
+10-06 13:07:30.201  2558  8334 I Ditto   : ditto_init: Setting up blob storage for doc-sync blob_storage.kind=Dynamic blob_storage.dyn_choice=Some(Tiered)
+10-06 13:07:30.208  2558  8334 I Ditto   : ditto_init: Setting up blob storage for attachment-sync blob_storage.kind=Dynamic blob_storage.dyn_choice=Some(UnencryptedFs)
+10-06 13:07:30.217  2558  8334 I Ditto   : ditto_init: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-06 13:07:30.232  2558  8334 I Ditto   : ditto_init: starting Ditto... app_id=88ed3c0c-bf9b-4da2-bc94-6c3ac95751a3 local.peer_id=pkAocCgkMCmoSPBZ8ksQGCDlMkfTYnueMd1Tt-9mRZ-QO_TruGR70 sdk.platform=Android sdk.language=Kotlin sdk.version=5.0.0 sdk.commit=d64fe04b5b absolute_persistence_directory=PersistenceDirectory("/data/data/com.atakmap.app.civ/files/sartak_ditto/6105337b30067aa7989f8075")
+10-06 13:07:30.240  2558  8334 I Ditto   : Initialising WebSocket client transport
+10-06 13:07:30.379  2558  2558 I Ditto   : AppLifecycleListener: Application has been put to foreground.
+10-06 13:07:31.268  2558  8326 I Ditto   : Starting TCP server bind="[::]:0"
+10-06 13:07:31.270  2558  8326 I Ditto   : Starting WiFi Aware transport
+10-06 13:07:31.365  2558  8326 E Ditto   : WifiAwarePlatform: Device DOES NOT support WiFi Aware, skipping setup.
+10-06 13:07:31.371  2558  8326 I Ditto   : Starting mDNS discovery
+10-06 13:07:31.375  2558  8326 I Ditto   : Starting multicast discovery
+10-06 13:07:31.377  2558  8326 I Ditto   : Starting BLE transport
+10-06 13:07:31.379  2558  8331 I Ditto   : DNS-SD starting TCP browse
+10-06 13:07:31.382  2558  8331 I Ditto   : DNS-SD starting TCP registration service_info=ServiceInfo { instance_name: "dittoc38998fe_Q2CG5bTqmg", host_name: "dittoQ2CG5bTqmg.local.", ip_addrs: [fe80::c8f1:48ff:fe5c:50a4, fe80::5054:ff:fe12:3456, 10.0.2.15, ::1, 127.0.0.1, fe80::1699:c132:7acf:fff8, fec0::3adb:bacf:e8b7:8801, fec0::75b3:39a7:4d57:d85, 10.0.2.16], port: 45287, service_name: "_http-alt", protocol: "_tcp", domain: "local", is_awdl: false }
+10-06 13:07:31.395  2558  8326 I Ditto   : DittoBluetoothManager: Starting BLE systems.
+10-06 13:07:32.625  2558  8326 I Ditto   : add_ble_transport{local.peer_id=pk.+TruGR70 peer.subsystem=transport}: StableBluetoothPlatform: Asked to start scanning.
+10-06 13:07:32.643  2558  8326 I Ditto   : Starting WebSocket client connection to "wss://i83inp.cloud.dittolive.app/"
+10-06 13:07:32.678  2558  8364 I Ditto   : StableBluetoothPlatform: Android Bluetooth starting scanning, assuming success.
+10-06 13:07:32.678  2558  8328 I Ditto   : Bluetooth Client - platform state changed condition=Ok
+10-06 13:07:35.202  2558  8329 I Ditto   : gathering and publishing store system info
+10-06 13:07:35.234  2558  8330 I Ditto   : next store system info collection scheduled delay=600 secs
+10-06 13:07:38.734  8397  8397 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-06 13:07:38.738  8397  8397 I AndroidRuntime: Using default boot image
+10-06 13:07:38.738  8397  8397 I AndroidRuntime: Leaving lock profiling enabled
+10-06 13:07:39.463  8397  8397 D AndroidRuntime: Calling main entry com.android.commands.monkey.Monkey
+10-06 13:07:39.553  8397  8397 I AndroidRuntime: VM exiting with result code 0.
+10-06 13:07:40.244  2558  8331 I Ditto   : physical connection started remote=pkAocCgkMC3oFlU8aO7lBqnrSKFMmZ8w9nj0ddUTT-tz0ZHoDdTIY role=Client transport_type=Websocket
+10-06 13:07:40.252  2558  8330 I Ditto   : switching active transport remote=pkAocCgkMC3oFlU8aO7lBqnrSKFMmZ8w9nj0ddUTT-tz0ZHoDdTIY old_conn_type=None new_conn_type=Some(Websocket)
+10-06 13:07:40.689  2558  8333 I Ditto   : channel{service=replication local.peer_id=pk.+TruGR70 remote.peer_id=pk.+HoDdTIY}: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-06 13:07:40.820  2558  8328 I Ditto   : auth server login successful, caching JWT on disk
+10-06 13:07:41.248  2558  8328 I Ditto   : physical connection ended remote=pkAocCgkMC3oFlU8aO7lBqnrSKFMmZ8w9nj0ddUTT-tz0ZHoDdTIY role=Client transport_type=Websocket
+10-06 13:07:44.212  2558  8333 I Ditto   : physical connection started remote=pkAocCgkMC7fxj_HpxECRW5j93vO8j086ucVICOdTo2897VTGqLUE role=Client transport_type=Websocket
+10-06 13:07:44.217  2558  8333 I Ditto   : switching active transport remote=pkAocCgkMC7fxj_HpxECRW5j93vO8j086ucVICOdTo2897VTGqLUE old_conn_type=None new_conn_type=Some(Websocket)
+10-06 13:07:44.538  2558  8333 I Ditto   : channel{service=replication local.peer_id=pk.+TruGR70 remote.peer_id=pk.+VTGqLUE}: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-06 13:07:45.572  2558  8331 I Ditto   : channel{service=replication local.peer_id=pk.+TruGR70 remote.peer_id=pk.+VTGqLUE}:session{operation=receive_message}:outbound_cycle{update_index=8450231523874175084 trigger=BeginSync}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-06 13:07:45.578  2558  8331 I Ditto   : channel{service=replication local.peer_id=pk.+TruGR70 remote.peer_id=pk.+VTGqLUE}:session{operation=receive_message}:outbound_cycle{update_index=8450231523874175084 trigger=BeginSync}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-06 13:07:48.264  2558  2558 D PluginTemplateDropDownReceiver: Debug role set to Team Member
+10-06 13:07:48.264  2558  2558 W ContextImpl: Failed to ensure /data/user/0/com.atakmap.android.plugintemplate.plugin/shared_prefs: mkdir failed: ENOENT (No such file or directory)
+10-06 13:07:48.521  2558  2558 D PluginTemplateDropDownReceiver: Debug callsign set to QA-MEMBER
+10-06 13:07:49.250  2558  2558 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4
+10-06 13:07:49.250  2558  2558 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4
+10-06 13:07:49.250  2558  2558 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4 size: 0.5x1.0
+10-06 13:07:50.946  2558  8328 I Ditto   : channel{service=replication local.peer_id=pk.+TruGR70 remote.peer_id=pk.+VTGqLUE}:session{operation=receive_message}:inbound_cycle:integrate_received_update: Outdated assumptions about session state detected when processing update - initiating NACK. (The received update was based on an outdated assumption of the local session basis - assumed local session sync: 3, actual local session sync: Initiated(4))
+10-06 13:07:51.243  2558  8332 I Ditto   : metadata_garbage_collector: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-06 13:08:01.557  1679  4438 I MediaProvider: Begin Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130802.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:08:01.559  1679  4438 W ModernMediaScanner: Failed to visit /sdcard/sartak-20261006-130802.png: java.nio.file.AccessDeniedException: /sdcard/sartak-20261006-130802.png
+10-06 13:08:01.613  1679  4438 I MediaProvider: End Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130802.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:09:12.962  2558  2558 D DropDownManager: closing a right side drop down that is visible: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4
+10-06 13:09:12.963  2558  2558 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4 with backstack count: 0
+10-06 13:09:12.971  2558  2558 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4
+10-06 13:09:12.971  2558  2558 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4
+10-06 13:09:12.971  2558  2558 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@6e18af4 size: 0.5x1.0
+10-06 13:09:20.573  1679  4438 I MediaProvider: Begin Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130921.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:09:20.575  1679  4438 W ModernMediaScanner: Failed to visit /sdcard/sartak-20261006-130921.png: java.nio.file.AccessDeniedException: /sdcard/sartak-20261006-130921.png
+10-06 13:09:20.598  1679  4438 I MediaProvider: End Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-130921.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }

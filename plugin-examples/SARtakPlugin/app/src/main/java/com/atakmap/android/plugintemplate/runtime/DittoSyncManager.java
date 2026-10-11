@@ -1,5 +1,7 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import android.os.SystemClock;
+
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
@@ -28,6 +30,7 @@ import java.util.Map;
 public class DittoSyncManager {
 
     private static final String TAG = "SARtakDittoSync";
+    private static final String PERF_TAG = "SARtakPerf";
     private static final long PUBLISH_INTERVAL_MS = 5000L;
     private static final long AUTH_RETRY_INTERVAL_MS = 30000L;
     // How long stop() waits for queued writes before releasing the store.
@@ -163,10 +166,12 @@ public class DittoSyncManager {
             return;
         }
 
+        long startedAt = SystemClock.elapsedRealtime();
         try {
             DittoSdkBridge.initialize(mapView.getContext());
             ditto = DittoSdkBridge.createDitto(operationProfile
                     .getDittoDatabaseId(), operationProfile.getDittoAuthUrl());
+            long created = SystemClock.elapsedRealtime();
             DittoSdkBridge.setupAuthHandler(ditto,
                     operationProfile.getDittoDevelopmentToken());
             // First on the writer thread, so every insert still follows it.
@@ -291,6 +296,11 @@ public class DittoSyncManager {
                 status = "Ditto: waiting to start sync - " + syncFailure;
             else
                 updateReadyStatus();
+            if (BuildConfig.DEBUG)
+                Log.d(PERF_TAG, "ditto start ms create=" + (created - startedAt)
+                        + " observers+sync=" + (SystemClock.elapsedRealtime()
+                                - created)
+                        + " thread=" + Thread.currentThread().getName());
         } catch (Throwable throwable) {
             String failure = describeFailure(throwable);
             if (isNativePluginReloadFailure(throwable))
@@ -335,7 +345,9 @@ public class DittoSyncManager {
     private void cleanupDittoResources() {
         // Let queued writes reach the store before it is released; a write
         // still running against a closed Ditto can abort in native code.
+        long started = SystemClock.elapsedRealtime();
         int dropped = writeQueue.shutdown(STOP_DRAIN_TIMEOUT_MS);
+        long drained = SystemClock.elapsedRealtime();
         if (dropped > 0)
             Log.w(TAG, "Dropped " + dropped
                     + " Ditto writes still queued after "
@@ -360,8 +372,15 @@ public class DittoSyncManager {
         DittoSdkBridge.closeSubscription(sharedMarkerSubscription);
         DittoSdkBridge.closeSubscription(alertSubscription);
         DittoSdkBridge.closeSubscription(areaAssignmentSubscription);
+        long closed = SystemClock.elapsedRealtime();
         if (ditto != null)
             DittoSdkBridge.releaseDitto(ditto);
+        if (BuildConfig.DEBUG)
+            Log.d(PERF_TAG, "ditto stop ms drain=" + (drained - started)
+                    + " observers=" + (closed - drained)
+                    + " release=" + (SystemClock.elapsedRealtime() - closed)
+                    + " dropped=" + dropped + " thread="
+                    + Thread.currentThread().getName());
         operationStatusObserver = null;
         operationStatusSubscription = null;
         deviceObserver = null;

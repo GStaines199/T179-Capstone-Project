@@ -106,7 +106,11 @@ public class SARTakMapController {
     private static final double MAX_ROUTE_SELECTION_RESOLUTION_METERS = 150.0;
     private static final int MAX_ROUTE_RANGE_CELLS = 1200;
     private static final long MAP_REFRESH_DEBOUNCE_MS = 250L;
-    private static final long BACKGROUND_REFRESH_INTERVAL_MS = 10000L;
+    // backgroundHandler runs on the main looper, as does the drop-down's
+    // 5000 ms UI refresh. A multiple of 5000 keeps the two ticks landing
+    // together for the whole session; an offset period lets them drift
+    // apart (from Jake's 855667e).
+    private static final long BACKGROUND_REFRESH_INTERVAL_MS = 9700L;
     private static final long DEFERRED_SERVICE_START_MS = 3000L;
 
     private final MapView mapView;

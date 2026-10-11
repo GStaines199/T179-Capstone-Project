@@ -30,6 +30,9 @@ public class DittoSyncManager {
     private static final String TAG = "SARtakDittoSync";
     private static final long PUBLISH_INTERVAL_MS = 5000L;
     private static final long AUTH_RETRY_INTERVAL_MS = 30000L;
+    // How long stop() waits for queued writes before releasing the store.
+    // Only paid on operation change or dispose, and only if Ditto is slow.
+    private static final long STOP_DRAIN_TIMEOUT_MS = 2000L;
     private static final double MIN_HEADING_SPEED_METERS_PER_SECOND = 0.4;
     private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
             12.0;
@@ -102,8 +105,16 @@ public class DittoSyncManager {
                     SearchAreaAssignment>());
     private final Map<String, String> operationStatuses =
             Collections.synchronizedMap(new LinkedHashMap<String, String>());
+    // Every store write goes through here so none blocks the main thread.
+    private final DittoWriteQueue writeQueue = new DittoWriteQueue(
+            new DittoWriteQueue.FailureListener() {
+                @Override
+                public void onWriteFailed(Throwable throwable) {
+                    Log.w(TAG, "Ditto write task failed", throwable);
+                }
+            });
 
-    private Ditto ditto;
+    private volatile Ditto ditto;
     private DittoSyncSubscription operationStatusSubscription;
     private DittoSyncSubscription deviceSubscription;
     private DittoSyncSubscription teamEventSubscription;
@@ -128,11 +139,11 @@ public class DittoSyncManager {
     private volatile boolean configured;
     private volatile boolean authAttemptInFlight;
     private volatile String status = "Ditto: not started";
-    private long lastPublishTime;
-    private long lastReceiveTime;
+    private volatile long lastPublishTime;
+    private volatile long lastReceiveTime;
     private long lastAuthAttemptTime;
-    private String lastAuthFailure = "";
-    private OperationProfile operationProfile;
+    private volatile String lastAuthFailure = "";
+    private volatile OperationProfile operationProfile;
 
     public DittoSyncManager(MapView mapView,
             IdentityManager identityManager) {
@@ -158,11 +169,20 @@ public class DittoSyncManager {
                     .getDittoDatabaseId(), operationProfile.getDittoAuthUrl());
             DittoSdkBridge.setupAuthHandler(ditto,
                     operationProfile.getDittoDevelopmentToken());
-            String strictModeFailure = DittoSdkBridge.disableStrictModeSafely(
-                    ditto);
-            if (strictModeFailure.length() > 0)
-                Log.w(TAG, "Ditto strict mode setup failed: "
-                        + strictModeFailure);
+            // First on the writer thread, so every insert still follows it.
+            final Ditto strictModeTarget = ditto;
+            writeQueue.submit(null, new Runnable() {
+                @Override
+                public void run() {
+                    if (strictModeTarget != ditto)
+                        return;
+                    String strictModeFailure = DittoSdkBridge
+                            .disableStrictModeSafely(strictModeTarget);
+                    if (strictModeFailure.length() > 0)
+                        Log.w(TAG, "Ditto strict mode setup failed: "
+                                + strictModeFailure);
+                }
+            });
             operationStatusSubscription = DittoSdkBridge
                     .registerSubscription(ditto, OPERATION_STATUS_QUERY);
             operationStatusObserver = DittoSdkBridge.registerJsonObserver(
@@ -313,6 +333,13 @@ public class DittoSyncManager {
     }
 
     private void cleanupDittoResources() {
+        // Let queued writes reach the store before it is released; a write
+        // still running against a closed Ditto can abort in native code.
+        int dropped = writeQueue.shutdown(STOP_DRAIN_TIMEOUT_MS);
+        if (dropped > 0)
+            Log.w(TAG, "Dropped " + dropped
+                    + " Ditto writes still queued after "
+                    + STOP_DRAIN_TIMEOUT_MS + " ms");
         DittoSdkBridge.closeObserver(operationStatusObserver);
         DittoSdkBridge.closeObserver(deviceObserver);
         DittoSdkBridge.closeObserver(teamEventObserver);
@@ -498,15 +525,8 @@ public class DittoSyncManager {
         document.put("operationId", operationId);
         document.put("status", safe(operationStatus));
         document.put("updatedAt", System.currentTimeMillis());
-        try {
-            insertDocument(OPERATION_STATUS_COLLECTION, "operationStatus",
-                    document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: operation status publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto operation status publish failed", throwable);
-        }
+        queueInsert(OPERATION_STATUS_COLLECTION, "operationStatus", document,
+                "operation status publish", null);
     }
 
     public void publishDeviceStateNow(boolean teamCreated, String teamId,
@@ -545,14 +565,8 @@ public class DittoSyncManager {
         document.put("memberColorArgb", message.getMemberColorArgb());
         document.put("memberRole", safe(message.getMemberRole()));
 
-        try {
-            insertDocument(TEAM_EVENT_COLLECTION, "event", document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: team event publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto team event publish failed", throwable);
-        }
+        queueInsert(TEAM_EVENT_COLLECTION, "event", document,
+                "team event publish", null);
     }
 
     public void publishTeamMembership(String teamId, String teamName,
@@ -582,15 +596,8 @@ public class DittoSyncManager {
         document.put("updatedByCallsign", identity.getCallsign());
         document.put("updatedAt", now);
 
-        try {
-            insertDocument(TEAM_MEMBERSHIP_COLLECTION, "membership",
-                    document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: membership publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto team membership publish failed", throwable);
-        }
+        queueInsert(TEAM_MEMBERSHIP_COLLECTION, "membership", document,
+                "membership publish", null);
     }
 
     public void publishSearchGridStatus(SearchGridCotMessage message) {
@@ -608,14 +615,8 @@ public class DittoSyncManager {
         document.put("status", message.getStatus().name());
         document.put("created", message.getCreated());
 
-        try {
-            insertDocument(GRID_STATUS_COLLECTION, "grid", document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: grid publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto grid status publish failed", throwable);
-        }
+        queueInsert(GRID_STATUS_COLLECTION, "grid", document,
+                "grid publish", null);
     }
 
     public void publishSearchLine(SearchLineCotMessage message) {
@@ -649,14 +650,8 @@ public class DittoSyncManager {
         document.put("tolerance", message.getToleranceMeters());
         document.put("created", message.getCreated());
 
-        try {
-            insertDocument(SEARCH_LINE_COLLECTION, "line", document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: line publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto search line publish failed", throwable);
-        }
+        queueInsert(SEARCH_LINE_COLLECTION, "line", document,
+                "line publish", null);
     }
 
     public void publishSearchRoutePlan(SearchRoutePlan routePlan) {
@@ -681,14 +676,8 @@ public class DittoSyncManager {
         document.put("cellRunsUpdatedAt", routePlan.getUpdatedAt());
         document.put("cellIds", routePlan.getLegacyCellIdsJson());
 
-        try {
-            insertDocument(ROUTE_PLAN_COLLECTION, "routePlan", document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: route publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto route plan publish failed", throwable);
-        }
+        queueInsert(ROUTE_PLAN_COLLECTION, "routePlan", document,
+                "route publish", null);
     }
 
     public void publishAreaAssignment(SearchAreaAssignment assignment) {
@@ -721,15 +710,8 @@ public class DittoSyncManager {
         document.put("widthMeters", area.widthMeters);
         document.put("heightMeters", area.heightMeters);
 
-        try {
-            insertDocument(AREA_ASSIGNMENT_COLLECTION, "assignment",
-                    document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: area assignment publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto area assignment publish failed", throwable);
-        }
+        queueInsert(AREA_ASSIGNMENT_COLLECTION, "assignment", document,
+                "area assignment publish", null);
     }
 
     public void clearLocalCaches() {
@@ -821,11 +803,13 @@ public class DittoSyncManager {
     }
 
     private void updateReadyStatus() {
-        if (!started || ditto == null)
+        // Also called from the writer and auth threads, so read the profile
+        // once: an operation change can clear it at any time.
+        OperationProfile profile = operationProfile;
+        if (!started || ditto == null || profile == null)
             return;
         if (isAuthenticated())
-            status = "Ditto: active for " + operationProfile
-                    .getOperationName();
+            status = "Ditto: active for " + profile.getOperationName();
         else if (lastAuthFailure.length() > 0)
             status = "Ditto: auth failed, retrying - " + lastAuthFailure;
         else
@@ -861,16 +845,8 @@ public class DittoSyncManager {
         document.put("teamId", safe(message.getTeamId()));
         document.put("updatedAt", message.getUpdatedAt());
 
-        try {
-            insertDocument(SHARED_MARKER_COLLECTION, "marker", document);
-            updateReadyStatus();
-            return true;
-        } catch (Throwable throwable) {
-            status = "Ditto: marker publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto shared marker publish failed", throwable);
-            return false;
-        }
+        return queueInsert(SHARED_MARKER_COLLECTION, "marker", document,
+                "marker publish", null);
     }
 
     public boolean publishAlert(SearchAlertMessage message) {
@@ -897,16 +873,8 @@ public class DittoSyncManager {
         document.put("requiresHalt", message.requiresHalt());
         document.put("created", message.getCreated());
 
-        try {
-            insertDocument(ALERT_COLLECTION, "alert", document);
-            updateReadyStatus();
-            return true;
-        } catch (Throwable throwable) {
-            status = "Ditto: alert publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto alert publish failed", throwable);
-            return false;
-        }
+        return queueInsert(ALERT_COLLECTION, "alert", document,
+                "alert publish", null);
     }
 
     private boolean isSyncActive() {
@@ -920,7 +888,7 @@ public class DittoSyncManager {
     }
 
     public String getWriteQueueSummary() {
-        return "writes=inline";
+        return writeQueue.getSummary();
     }
 
     public String getDiagnosticsSummary() {
@@ -1017,20 +985,74 @@ public class DittoSyncManager {
         document.put("gridCellId", selectedCell == null ? ""
                 : selectedCell.getId());
 
-        try {
-            insertDocument(DEVICE_COLLECTION, "device", document);
-            lastPublishTime = now;
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: publish failed - " + describeFailure(throwable);
-            Log.w(TAG, "Ditto publish failed", throwable);
-        }
+        final long publishedAt = now;
+        queueInsert(DEVICE_COLLECTION, "device", document, "publish",
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        lastPublishTime = publishedAt;
+                    }
+                });
     }
 
-    private void insertDocument(String collection, String argumentName,
-            Map<String, Object> document) throws Throwable {
-        String json = toDittoJson(document);
-        DittoSdkBridge.executeJsonArgument(ditto, "INSERT INTO " + collection
+    /**
+     * Serialises the document on the caller's thread, from values it has
+     * already captured, and hands only the blocking store write to the
+     * writer thread. A queued write to the same document that has not run
+     * yet is replaced, not repeated.
+     *
+     * @return false if nothing was queued; a write that fails later is
+     *         reported through the status line and the log, as before
+     */
+    private boolean queueInsert(final String collection,
+            final String argumentName, Map<String, Object> document,
+            final String failureLabel, final Runnable onWritten) {
+        final Ditto target = ditto;
+        if (target == null)
+            return false;
+        final String json;
+        try {
+            json = toDittoJson(document);
+        } catch (Throwable throwable) {
+            reportWriteFailure(target, failureLabel, throwable);
+            return false;
+        }
+        Object documentId = document.get("_id");
+        writeQueue.submit(documentId == null ? null
+                : collection + "/" + documentId, new Runnable() {
+                    @Override
+                    public void run() {
+                        // The store was released while this waited.
+                        if (target != ditto)
+                            return;
+                        try {
+                            insertDocument(target, collection, argumentName,
+                                    json);
+                        } catch (Throwable throwable) {
+                            reportWriteFailure(target, failureLabel,
+                                    throwable);
+                            return;
+                        }
+                        if (onWritten != null)
+                            onWritten.run();
+                        if (target == ditto)
+                            updateReadyStatus();
+                    }
+                });
+        return true;
+    }
+
+    private void reportWriteFailure(Ditto target, String failureLabel,
+            Throwable throwable) {
+        if (target == ditto)
+            status = "Ditto: " + failureLabel + " failed - "
+                    + describeFailure(throwable);
+        Log.w(TAG, "Ditto " + failureLabel + " failed", throwable);
+    }
+
+    private void insertDocument(Ditto target, String collection,
+            String argumentName, String json) throws Throwable {
+        DittoSdkBridge.executeJsonArgument(target, "INSERT INTO " + collection
                 + " DOCUMENTS (deserialize_json(:" + argumentName
                 + ")) ON ID CONFLICT DO UPDATE", argumentName, json);
     }

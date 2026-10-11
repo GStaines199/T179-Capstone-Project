@@ -14,6 +14,7 @@ public class SearchGridStateStore {
 
     private final SharedPreferences preferences;
     private String operationId = "";
+    private int revision;
 
     public SearchGridStateStore(Context context) {
         preferences = context.getSharedPreferences(PREFS_NAME,
@@ -22,6 +23,16 @@ public class SearchGridStateStore {
 
     public void setOperationId(String operationId) {
         this.operationId = sanitize(operationId);
+        revision++;
+    }
+
+    /**
+     * Changes whenever a cell status is written or the operation scope
+     * changes, so callers can cache work derived from
+     * {@link #getKnownStatuses()} instead of re-reading every preference.
+     */
+    public int getRevision() {
+        return revision;
     }
 
     public SearchGridStatus getStatus(String cellId) {
@@ -42,12 +53,14 @@ public class SearchGridStateStore {
             return;
         preferences.edit().putString(keyForCell(cellId), status.name())
                 .apply();
+        revision++;
     }
 
     public void clearStatus(String cellId) {
         if (!isOperationScoped() || sanitize(cellId).length() == 0)
             return;
         preferences.edit().remove(keyForCell(cellId)).apply();
+        revision++;
     }
 
     public Map<String, SearchGridStatus> getKnownStatuses() {

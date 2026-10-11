@@ -3,6 +3,7 @@ package com.atakmap.android.plugintemplate.runtime;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
+import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 
 public class SearchLineCotMessage {
 
@@ -26,29 +27,49 @@ public class SearchLineCotMessage {
     private final double south;
     private final double east;
     private final double north;
-    private final double lineNorthing;
+    private final double lineOffset;
+    private final SearchLineDirection direction;
     private final SearchLineColorOption colorOption;
     private final double toleranceMeters;
     private final long created;
     private final String operationId;
 
+    /**
+     * Retained for callers that predate directional lines. Defaults to
+     * {@link SearchLineDirection#NORTH}, which is what every line was before
+     * the direction existed.
+     */
     public SearchLineCotMessage(String uid, String action, String teamId,
             String senderUid, String senderCallsign, String zoneDescriptor,
             String aggregateId, String cellId, int row, int column,
             double west, double south, double east, double north,
-            double lineNorthing, SearchLineColorOption colorOption,
+            double lineOffset, SearchLineColorOption colorOption,
             double toleranceMeters, long created) {
         this(uid, action, teamId, senderUid, senderCallsign, zoneDescriptor,
                 aggregateId, cellId, row, column, west, south, east, north,
-                lineNorthing, colorOption, toleranceMeters, created, "");
+                lineOffset, colorOption, toleranceMeters, created, "",
+                SearchLineDirection.NORTH);
     }
 
     public SearchLineCotMessage(String uid, String action, String teamId,
             String senderUid, String senderCallsign, String zoneDescriptor,
             String aggregateId, String cellId, int row, int column,
             double west, double south, double east, double north,
-            double lineNorthing, SearchLineColorOption colorOption,
+            double lineOffset, SearchLineColorOption colorOption,
             double toleranceMeters, long created, String operationId) {
+        this(uid, action, teamId, senderUid, senderCallsign, zoneDescriptor,
+                aggregateId, cellId, row, column, west, south, east, north,
+                lineOffset, colorOption, toleranceMeters, created, operationId,
+                SearchLineDirection.NORTH);
+    }
+
+    public SearchLineCotMessage(String uid, String action, String teamId,
+            String senderUid, String senderCallsign, String zoneDescriptor,
+            String aggregateId, String cellId, int row, int column,
+            double west, double south, double east, double north,
+            double lineOffset, SearchLineColorOption colorOption,
+            double toleranceMeters, long created, String operationId,
+            SearchLineDirection direction) {
         this.uid = uid;
         this.action = action;
         this.teamId = teamId;
@@ -63,7 +84,9 @@ public class SearchLineCotMessage {
         this.south = south;
         this.east = east;
         this.north = north;
-        this.lineNorthing = lineNorthing;
+        this.lineOffset = lineOffset;
+        this.direction = direction == null
+                ? SearchLineDirection.NORTH : direction;
         this.colorOption = colorOption;
         this.toleranceMeters = toleranceMeters;
         this.created = created;
@@ -76,7 +99,13 @@ public class SearchLineCotMessage {
     public String getSenderUid() { return senderUid; }
     public String getSenderCallsign() { return senderCallsign; }
     public String getZoneDescriptor() { return zoneDescriptor; }
-    public double getLineNorthing() { return lineNorthing; }
+    /**
+     * Where the line sits along its direction of travel: a northing for a
+     * north or south line, an easting for an east or west one. Read
+     * {@link #getDirection()} before interpreting it.
+     */
+    public double getLineOffset() { return lineOffset; }
+    public SearchLineDirection getDirection() { return direction; }
     public SearchLineColorOption getColorOption() { return colorOption; }
     public double getToleranceMeters() { return toleranceMeters; }
     public long getCreated() { return created; }

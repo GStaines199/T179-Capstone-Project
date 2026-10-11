@@ -598,11 +598,22 @@ public class SearchPartyAssignmentManager {
         }
     }
 
+    /**
+     * Numbers the team's lanes in a fixed order, team leader first and then by
+     * UID, so every device assigns the same lane to the same searcher.
+     *
+     * <p>{@code direction} sets which way "ahead of the line" is measured for
+     * each member's line offset. It is required rather than assumed: measuring
+     * along northing for an east-bound team would report every searcher as
+     * level with the line however far ahead or behind they were.
+     */
     public void arrangeMembersForCell(SearchGridCell cell,
             GridCoordinateConverter converter, GeoPoint leaderPoint,
-            double lineNorthing) {
+            double lineOffset, SearchLineDirection direction) {
         if (cell == null || leaderPoint == null || !leaderPoint.isValid())
             return;
+        if (direction == null)
+            direction = SearchLineDirection.NORTH;
 
         List<SearchTeamMember> laneMembers = getLaneMembers();
         Collections.sort(laneMembers, new Comparator<SearchTeamMember>() {
@@ -639,8 +650,9 @@ public class SearchPartyAssignmentManager {
                     member.getLongitude(), member.getHeadingDegrees(),
                     cell.getId(), formatDistance(distance(selfUtm,
                             memberPoint)),
-                    formatLineOffset(memberPoint.getNorthing()
-                            - lineNorthing));
+                    formatLineOffset(direction.progressMeters(
+                            memberPoint.getEasting(),
+                            memberPoint.getNorthing(), lineOffset)));
         }
     }
 
@@ -873,11 +885,13 @@ public class SearchPartyAssignmentManager {
         return Math.round(meters) + " m";
     }
 
+    /**
+     * Only reached for a member with a live fix, so the position is known by
+     * construction -- see the {@code hasLiveAtakContact} guard in
+     * {@link #arrangeMembersForCell}.
+     */
     private String formatLineOffset(double meters) {
-        long rounded = Math.round(Math.abs(meters));
-        if (rounded <= 2)
-            return "On line";
-        return rounded + " m " + (meters > 0 ? "ahead" : "behind");
+        return MemberPositionPolicy.lineDistanceLabel(true, meters);
     }
 
     private double distance(UTMPoint first, UTMPoint second) {

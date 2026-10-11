@@ -354,28 +354,70 @@ public class SearchGridManager {
      * so on a large area most of the area was silently left off it.
      */
     public List<SearchGridCell> getSerpentineRouteCells() {
+        return getSerpentineRouteCells(getPlannedAreaRecord(),
+                SearchLineDirection.NORTH);
+    }
+
+    /**
+     * Every cell of {@code area}, snaking along the search direction.
+     * North/South lines walk columns (west to east), East/West lines walk
+     * rows (south to north). The first leg always heads the way the line
+     * travels, so the route starts in the corner the line starts from:
+     * North south-west, South north-west, East south-west, West south-east.
+     */
+    public List<SearchGridCell> getSerpentineRouteCells(
+            SearchGridStateStore.PlannedAreaRecord area,
+            SearchLineDirection direction) {
         List<SearchGridCell> cells = new ArrayList<>();
-        if (!hasPlannedArea())
+        if (area == null || area.zone == null || area.zone.length() == 0
+                || area.east <= area.west || area.north <= area.south)
             return cells;
-        boolean northbound = true;
-        for (double x = plannedWest; x < plannedEast; x +=
-                GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
-            List<SearchGridCell> column = new ArrayList<>();
-            for (double y = plannedSouth; y < plannedNorth; y +=
-                    GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
-                SearchGridCell cell = createPlannedCell(x, y);
-                if (cell != null && isInsidePlannedArea(cell))
-                    column.add(cell);
+        if (direction == null)
+            direction = SearchLineDirection.NORTH;
+        double size = GridCoordinateConverter.BASE_CELL_SIZE_METERS;
+        int columns = (int) Math.round((area.east - area.west) / size);
+        int rows = (int) Math.round((area.north - area.south) / size);
+        boolean byColumn = direction.isNorthSouth();
+        int lanes = byColumn ? columns : rows;
+        int steps = byColumn ? rows : columns;
+        // Whether the first leg runs towards increasing northing/easting.
+        boolean forward = direction == SearchLineDirection.NORTH
+                || direction == SearchLineDirection.EAST;
+        List<SearchGridCell> lane = new ArrayList<>(steps);
+        for (int laneIndex = 0; laneIndex < lanes; laneIndex++) {
+            lane.clear();
+            for (int step = 0; step < steps; step++) {
+                int column = byColumn ? laneIndex : step;
+                int row = byColumn ? step : laneIndex;
+                SearchGridCell cell = createCellForZone(area.zone,
+                        area.west + column * size, area.south + row * size);
+                if (cell != null && isInsideArea(area, cell))
+                    lane.add(cell);
             }
-            if (northbound) {
-                cells.addAll(column);
+            if (forward) {
+                cells.addAll(lane);
             } else {
-                for (int i = column.size() - 1; i >= 0; i--)
-                    cells.add(column.get(i));
+                for (int i = lane.size() - 1; i >= 0; i--)
+                    cells.add(lane.get(i));
             }
-            northbound = !northbound;
+            forward = !forward;
         }
         return cells;
+    }
+
+    /** Whether {@code cell}'s centre lies inside the box or circle. */
+    static boolean isInsideArea(SearchGridStateStore.PlannedAreaRecord area,
+            SearchGridCell cell) {
+        double centerEasting = (cell.getWest() + cell.getEast()) / 2.0;
+        double centerNorthing = (cell.getSouth() + cell.getNorth()) / 2.0;
+        if (centerEasting < area.west || centerEasting > area.east
+                || centerNorthing < area.south || centerNorthing > area.north)
+            return false;
+        if (!PlannedAreaShape.CIRCLE.name().equals(area.shape))
+            return true;
+        double dx = centerEasting - area.centerEasting;
+        double dy = centerNorthing - area.centerNorthing;
+        return dx * dx + dy * dy <= area.radiusMeters * area.radiusMeters;
     }
 
     public List<SearchGridCell> cellsForIds(List<String> cellIds) {

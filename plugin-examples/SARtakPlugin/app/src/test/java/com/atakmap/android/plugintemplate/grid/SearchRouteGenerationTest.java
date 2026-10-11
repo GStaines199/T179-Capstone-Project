@@ -98,6 +98,137 @@ public class SearchRouteGenerationTest {
     }
 
     // ------------------------------------------------------------------
+    // Search direction and assigned areas
+    // ------------------------------------------------------------------
+
+    @Test
+    public void serpentine_eastLine_snakesRowByRowFromTheSouthWest() {
+        List<SearchGridCell> route = manager.getSerpentineRouteCells(
+                box(500000, 6960000, 500300, 6960300),
+                SearchLineDirection.EAST);
+
+        // 3 x 3 cells: east along the south row, back west, east again.
+        assertEquals(Arrays.asList(
+                id(500000, 6960000), id(500100, 6960000), id(500200, 6960000),
+                id(500200, 6960100), id(500100, 6960100), id(500000, 6960100),
+                id(500000, 6960200), id(500100, 6960200), id(500200, 6960200)),
+                ids(route));
+    }
+
+    @Test
+    public void serpentine_westLine_startsSouthEastHeadingWest() {
+        List<SearchGridCell> route = manager.getSerpentineRouteCells(
+                box(500000, 6960000, 500300, 6960200),
+                SearchLineDirection.WEST);
+
+        assertEquals(Arrays.asList(
+                id(500200, 6960000), id(500100, 6960000), id(500000, 6960000),
+                id(500000, 6960100), id(500100, 6960100), id(500200, 6960100)),
+                ids(route));
+    }
+
+    @Test
+    public void serpentine_southLine_startsNorthWestHeadingSouth() {
+        List<SearchGridCell> route = manager.getSerpentineRouteCells(
+                box(500000, 6960000, 500200, 6960300),
+                SearchLineDirection.SOUTH);
+
+        assertEquals(Arrays.asList(
+                id(500000, 6960200), id(500000, 6960100), id(500000, 6960000),
+                id(500100, 6960000), id(500100, 6960100), id(500100, 6960200)),
+                ids(route));
+    }
+
+    @Test
+    public void serpentine_northLine_matchesThePlannedAreaRoute() {
+        planBox(498500, 6958500, 501600, 6961600);
+
+        assertEquals(ids(manager.getSerpentineRouteCells()),
+                ids(manager.getSerpentineRouteCells(
+                        manager.getPlannedAreaRecord(),
+                        SearchLineDirection.NORTH)));
+    }
+
+    /** Every direction covers a non-square box fully, one step at a time. */
+    @Test
+    public void serpentine_everyDirection_coversTheBoxWithNeighbourSteps() {
+        SearchGridStateStore.PlannedAreaRecord area = box(498500, 6958500,
+                501600, 6960700);
+        for (SearchLineDirection direction : SearchLineDirection.values()) {
+            List<SearchGridCell> route = manager.getSerpentineRouteCells(area,
+                    direction);
+
+            assertCoversAreaOnce(area, route, 31 * 22);
+            assertEachStepIsToANeighbour(route);
+            assertFirstLegHeads(direction, route);
+        }
+    }
+
+    @Test
+    public void serpentine_twentyKilometreBoxEast_coversAllAndSyncsAsRuns()
+            throws Exception {
+        SearchGridStateStore.PlannedAreaRecord area = box(492700, 6951500,
+                512800, 6971600);
+
+        long started = System.nanoTime();
+        List<SearchGridCell> route = manager.getSerpentineRouteCells(area,
+                SearchLineDirection.EAST);
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+
+        assertCoversAreaOnce(area, route, 40401);
+        assertEachStepIsToANeighbour(route);
+        assertTrue("generation took " + elapsedMs + " ms", elapsedMs < 3000);
+        // Rows encode as one run each, just like columns.
+        SearchRoutePlan plan = new SearchRoutePlan("plan-1", "op-1",
+                "team-1", "Alpha", "Green", 0, "uid-1", "LEAD", 1L,
+                ids(route));
+        assertEquals(201, plan.getCellRuns().size());
+        assertEquals(2 * 201, plan.getRouteVertexIds().size());
+        String json = plan.toJsonObject().toString();
+        assertTrue("document is " + json.length() + " chars",
+                json.length() < 20_000);
+        assertEquals(ids(route), SearchRoutePlan.fromJson(json).getCellIds());
+    }
+
+    @Test
+    public void serpentine_circleEast_coversEveryCellOnce() {
+        manager.restorePlannedArea(new SearchGridStateStore.PlannedAreaRecord(
+                "CIRCLE", ZONE, 502000, 6961000, 492000, 6951000, 512000,
+                6971000, 10000, 20000, 20000));
+
+        List<SearchGridCell> route = manager.getSerpentineRouteCells(
+                manager.getPlannedAreaRecord(), SearchLineDirection.EAST);
+
+        assertCoversPlannedAreaOnce(route);
+    }
+
+    /**
+     * Auto Route follows the HQ-assigned area, not the (larger) area this
+     * device planned: nothing outside the assignment, nothing in it missed.
+     */
+    @Test
+    public void serpentine_assignedArea_coversExactlyThatArea() {
+        planBox(492700, 6951500, 512800, 6971600);
+        SearchGridStateStore.PlannedAreaRecord assigned = box(500000, 6960000,
+                501500, 6961000);
+
+        List<SearchGridCell> route = manager.getSerpentineRouteCells(assigned,
+                SearchLineDirection.EAST);
+
+        assertCoversAreaOnce(assigned, route, 15 * 10);
+        assertEquals(id(500000, 6960000), route.get(0).getId());
+    }
+
+    @Test
+    public void serpentine_noArea_isEmpty() {
+        assertTrue(manager.getSerpentineRouteCells(null,
+                SearchLineDirection.EAST).isEmpty());
+        assertTrue(manager.getSerpentineRouteCells(box(500000, 6960000,
+                500000, 6960000), SearchLineDirection.NORTH).isEmpty());
+        assertTrue(manager.getSerpentineRouteCells().isEmpty());
+    }
+
+    // ------------------------------------------------------------------
     // Drawing
     // ------------------------------------------------------------------
 
@@ -247,6 +378,42 @@ public class SearchRouteGenerationTest {
                             && cell.getNorth() <= extent.north);
         }
         assertEquals(manager.getAreaCellCount(), route.size());
+    }
+
+    private static void assertCoversAreaOnce(
+            SearchGridStateStore.PlannedAreaRecord area,
+            List<SearchGridCell> route, int expectedCells) {
+        Set<String> seen = new HashSet<>();
+        for (SearchGridCell cell : route) {
+            assertTrue("repeated cell " + cell.getId(), seen.add(cell.getId()));
+            assertTrue("cell outside the area " + cell.getId(),
+                    cell.getWest() >= area.west && cell.getEast() <= area.east
+                            && cell.getSouth() >= area.south
+                            && cell.getNorth() <= area.north);
+        }
+        assertEquals(expectedCells, route.size());
+    }
+
+    /** The first move goes the way the search line travels. */
+    private static void assertFirstLegHeads(SearchLineDirection direction,
+            List<SearchGridCell> route) {
+        SearchGridCell first = route.get(0);
+        SearchGridCell second = route.get(1);
+        double east = second.getWest() - first.getWest();
+        double north = second.getSouth() - first.getSouth();
+        double expectedEast = direction == SearchLineDirection.EAST ? 100
+                : direction == SearchLineDirection.WEST ? -100 : 0;
+        double expectedNorth = direction == SearchLineDirection.NORTH ? 100
+                : direction == SearchLineDirection.SOUTH ? -100 : 0;
+        assertEquals(direction.name(), expectedEast, east, 0.001);
+        assertEquals(direction.name(), expectedNorth, north, 0.001);
+    }
+
+    private static SearchGridStateStore.PlannedAreaRecord box(double west,
+            double south, double east, double north) {
+        return new SearchGridStateStore.PlannedAreaRecord("BOX", ZONE,
+                (west + east) / 2, (south + north) / 2, west, south, east,
+                north, 0, east - west, north - south);
     }
 
     private void assertEachStepIsToANeighbour(List<SearchGridCell> route) {

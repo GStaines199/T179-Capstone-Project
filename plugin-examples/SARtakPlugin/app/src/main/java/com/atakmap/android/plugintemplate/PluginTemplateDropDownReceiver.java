@@ -37,7 +37,9 @@ import android.widget.Toast;
 import com.atak.plugins.impl.PluginLayoutInflater;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
+import com.atakmap.android.plugintemplate.grid.CellProgressList;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
+import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
@@ -111,6 +113,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Button generateRouteButton;
     private final Button toggleRouteButton;
     private final Button clearRouteButton;
+    private final View routePreviewControls;
+    private final Button confirmRoutePreviewButton;
     private final Button markerModeMeButton;
     private final Button markerModeTeamButton;
     private final Button markerModeLeadersButton;
@@ -213,6 +217,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private boolean consumingPendingQrScan;
     private AlertDialog pasteOperationJoinDialog;
     private String activeGridReviewPromptCellId = "";
+    private SearchGridStatus gridListStatus = SearchGridStatus.PARTIAL;
+    private int gridListPage;
+    private String gridListRenderKey = "";
 
     /**************************** CONSTRUCTOR *****************************/
 
@@ -258,6 +265,10 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 R.id.toggle_route_button);
         clearRouteButton = templateView.findViewById(
                 R.id.clear_route_button);
+        routePreviewControls = templateView.findViewById(
+                R.id.route_preview_controls);
+        confirmRoutePreviewButton = templateView.findViewById(
+                R.id.confirm_route_preview_button);
         markerModeMeButton = templateView
                 .findViewById(R.id.marker_mode_me_button);
         markerModeTeamButton = templateView
@@ -412,6 +423,17 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         generateRouteButton.setOnClickListener(this);
         toggleRouteButton.setOnClickListener(this);
         clearRouteButton.setOnClickListener(this);
+        confirmRoutePreviewButton.setOnClickListener(this);
+        templateView.findViewById(R.id.cancel_route_preview_button)
+                .setOnClickListener(this);
+        // Show Confirm/Cancel as soon as the end cell is tapped, not on the
+        // next 5 s refresh.
+        mapController.setRouteSelectionListener(new Runnable() {
+            @Override
+            public void run() {
+                refreshGridUi();
+            }
+        });
         startSearchLineButton.setOnClickListener(this);
         pauseSearchLineButton.setOnClickListener(this);
         searchLineColourButton.setOnClickListener(this);
@@ -515,9 +537,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             boolean generated = mapController
                     .generateSerpentineRouteFromPlannedArea();
             Toast.makeText(getMapView().getContext(),
-                    generated ? "Serpentine route generated"
+                    generated ? mapController.getLastAutoRouteSummary()
                             : "Plan a search area and create a team first",
+                    Toast.LENGTH_LONG).show();
+        } else if (id == R.id.confirm_route_preview_button) {
+            boolean added = mapController.confirmRouteSelectionPreview();
+            Toast.makeText(getMapView().getContext(),
+                    added ? "Cells added to route" : "No cells added",
                     Toast.LENGTH_SHORT).show();
+        } else if (id == R.id.cancel_route_preview_button) {
+            mapController.cancelRouteSelectionPreview();
         } else if (id == R.id.toggle_route_button) {
             boolean visible = mapController.toggleRouteOverlay();
             Toast.makeText(getMapView().getContext(),
@@ -793,6 +822,13 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + mapController.getGridColorLabel());
         generateRouteButton.setEnabled(canManageRoute);
         clearRouteButton.setEnabled(canManageRoute);
+        boolean routePreview = canManageRoute
+                && mapController.hasRouteSelectionPreview();
+        routePreviewControls.setVisibility(routePreview ? View.VISIBLE
+                : View.GONE);
+        if (routePreview)
+            confirmRoutePreviewButton.setText("Confirm: " + mapController
+                    .getRouteSelectionPreviewSummary());
         toggleRouteButton.setText(mapController.isRouteOverlayVisible()
                 ? "Hide Route" : "Show Route");
         setInputTextIfIdle(teamNameInput, mapController.getTeamName());
@@ -2921,17 +2957,117 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
     }
 
+    /**
+     * One page of the area's partial or completed cells. Only rebuilt when
+     * the page's content changes, since this runs on every panel refresh.
+     */
     private void renderGridReviewCards() {
+        CellProgressList.Page page = mapController.getCellProgressPage(
+                gridListStatus, gridListPage);
+        gridListPage = page.pageIndex;
+        StringBuilder key = new StringBuilder();
+        key.append(page.status).append('|').append(page.pageIndex)
+                .append('|').append(page.total).append('|')
+                .append(page.partialTotal).append('|')
+                .append(page.completeTotal);
+        for (SearchGridCell cell : page.cells)
+            key.append('|').append(cell.getId());
+        if (key.toString().equals(gridListRenderKey))
+            return;
+        gridListRenderKey = key.toString();
+
         gridReviewContainer.removeAllViews();
-        List<SearchGridCell> cells = mapController.getGridReviewCells();
-        if (cells.isEmpty()) {
-            gridReviewContainer.addView(createCardText(
-                    "Partial and completed cells will appear here.", 13,
+        gridReviewContainer.addView(createGridListFilterRow(page));
+        boolean complete = page.status == SearchGridStatus.COMPLETE;
+        if (page.total == 0) {
+            gridReviewContainer.addView(createCardText(complete
+                    ? "Completed cells in this area will appear here."
+                    : "Partial cells in this area will appear here.", 13,
                     false));
             return;
         }
-        for (final SearchGridCell cell : cells)
+        gridReviewContainer.addView(createCardText("Showing "
+                + page.firstNumber() + "-" + page.lastNumber() + " of "
+                + page.total + (complete ? " completed" : " partial")
+                + " cells. Tap one to select it and centre the map.", 12,
+                false));
+        for (final SearchGridCell cell : page.cells)
             gridReviewContainer.addView(createGridReviewCard(cell));
+        if (page.pageCount > 1)
+            gridReviewContainer.addView(createGridListPager(page));
+    }
+
+    private View createGridListFilterRow(CellProgressList.Page page) {
+        LinearLayout row = new LinearLayout(pluginContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, 0, 0, dp(6));
+        row.addView(createGridListFilterButton("Partial ("
+                + page.partialTotal + ")", SearchGridStatus.PARTIAL,
+                page.status), new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        LinearLayout.LayoutParams completeParams =
+                new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        completeParams.setMargins(dp(6), 0, 0, 0);
+        row.addView(createGridListFilterButton("Complete ("
+                + page.completeTotal + ")", SearchGridStatus.COMPLETE,
+                page.status), completeParams);
+        return row;
+    }
+
+    private Button createGridListFilterButton(String label,
+            final SearchGridStatus status, SearchGridStatus shown) {
+        Button button = new Button(pluginContext);
+        boolean active = status == shown;
+        button.setText(active ? "● " + label : label);
+        button.setTypeface(active ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+        button.setAlpha(active ? 1.0f : 0.7f);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (gridListStatus == status)
+                    return;
+                gridListStatus = status;
+                gridListPage = 0;
+                renderGridReviewCards();
+            }
+        });
+        return button;
+    }
+
+    private View createGridListPager(final CellProgressList.Page page) {
+        LinearLayout row = new LinearLayout(pluginContext);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        Button previous = new Button(pluginContext);
+        previous.setText("< Prev");
+        previous.setEnabled(page.hasPrevious());
+        previous.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                gridListPage = page.pageIndex - 1;
+                renderGridReviewCards();
+            }
+        });
+        row.addView(previous, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        TextView position = createCardText("Page " + (page.pageIndex + 1)
+                + " of " + page.pageCount, 13, false);
+        position.setGravity(android.view.Gravity.CENTER);
+        row.addView(position, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button next = new Button(pluginContext);
+        next.setText("Next >");
+        next.setEnabled(page.hasNext());
+        next.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                gridListPage = page.pageIndex + 1;
+                renderGridReviewCards();
+            }
+        });
+        row.addView(next, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        return row;
     }
 
     private View createGridReviewCard(final SearchGridCell cell) {

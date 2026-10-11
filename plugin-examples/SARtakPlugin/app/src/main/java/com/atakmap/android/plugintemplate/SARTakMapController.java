@@ -17,12 +17,15 @@ import com.atakmap.android.plugintemplate.database.LocationRepository;
 import com.atakmap.android.plugintemplate.database.SearcherRepository;
 import com.atakmap.android.plugintemplate.database.StorageAvailability;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
+import com.atakmap.android.plugintemplate.grid.CellProgressList;
 import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
 import com.atakmap.android.plugintemplate.grid.MapOverlayDiagnostics;
 import com.atakmap.android.plugintemplate.grid.MemberPositionPolicy;
 import com.atakmap.android.plugintemplate.grid.OverlayVisibilityStore;
 import com.atakmap.android.plugintemplate.grid.RemainingCellsFormatter;
 import com.atakmap.android.plugintemplate.grid.RouteProgressTracker;
+import com.atakmap.android.plugintemplate.grid.RouteSelectionPreview;
+import com.atakmap.android.plugintemplate.grid.RouteSelectionPreviewOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
@@ -82,6 +85,7 @@ import com.atakmap.coremap.maps.coords.GeoPointMetaData;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,6 +126,8 @@ public class SARTakMapController {
     private final SearchLineOverlay searchLineOverlay;
     private final SearchRouteOverlay searchRouteOverlay;
     private final SearchTeamAssignmentOverlay assignmentOverlay;
+    private final RouteSelectionPreviewOverlay routePreviewOverlay;
+    private final CellProgressList cellProgressList = new CellProgressList();
     private final PluginHealthManager healthManager;
     private final IdentityManager identityManager;
     private final LocationCaptureManager locationCaptureManager;
@@ -162,6 +168,9 @@ public class SARTakMapController {
             new RouteProgressTracker();
     private SearchGridCell routeSelectionAnchor;
     private String routeSelectionHint = "Route selection off";
+    private RouteSelectionPreview routeSelectionPreview;
+    private Runnable routeSelectionListener;
+    private String lastAutoRouteSummary = "";
     private SearchLineColorOption gridColorOption = SearchLineColorOption.CYAN;
     private boolean searchLinePausedByAlert;
     private volatile boolean disposed;
@@ -206,6 +215,8 @@ public class SARTakMapController {
         this.searchRouteOverlay = new SearchRouteOverlay(mapView);
         this.assignmentOverlay = new SearchTeamAssignmentOverlay(mapView,
                 converter, gridManager);
+        this.routePreviewOverlay = new RouteSelectionPreviewOverlay(mapView,
+                converter);
         this.gridOverlay.setGridColor(gridColorOption.getArgb());
         this.searchLineStateStore = new SearchLineStateStore(runtimeContext);
         this.overlayVisibilityStore = new OverlayVisibilityStore(
@@ -256,8 +267,10 @@ public class SARTakMapController {
         this.mapEventListener = new MapEventDispatcher.MapEventDispatchListener() {
             @Override
             public void onMapEvent(MapEvent event) {
-                if (handleRouteSelectionMapEvent(event))
+                if (handleRouteSelectionMapEvent(event)) {
+                    notifyRouteSelectionListener();
                     return;
+                }
                 scheduleOverlayRefresh();
             }
         };
@@ -857,13 +870,35 @@ public class SARTakMapController {
         return true;
     }
 
+    /**
+     * Snakes a route over the team's assigned area (from HQ, or the lead's
+     * own published plan) when it has one, else over this device's planned
+     * area, along the search line direction.
+     */
     public boolean generateSerpentineRouteFromPlannedArea() {
-        if (!canManageRoutePlan() || !gridManager.hasPlannedArea())
+        lastAutoRouteSummary = "";
+        if (!canManageRoutePlan())
             return false;
+        SearchAreaAssignment assignment = getAssignedAreaForMyTeam();
+        SearchGridStateStore.PlannedAreaRecord area = assignment == null
+                ? null : assignment.getArea();
+        boolean assigned = area != null && area.shape != null
+                && area.shape.length() > 0;
+        if (!assigned)
+            area = gridManager.getPlannedAreaRecord();
+        if (area == null)
+            return false;
+        SearchLineDirection direction = getSearchLineDirection();
         long started = SystemClock.elapsedRealtimeNanos();
-        List<SearchGridCell> routeCells = gridManager.getSerpentineRouteCells();
+        List<SearchGridCell> routeCells = gridManager.getSerpentineRouteCells(
+                area, direction);
         if (routeCells.isEmpty())
             return false;
+        lastAutoRouteSummary = "Auto route: " + routeCells.size()
+                + " cells over the "
+                + (assigned ? "team's assigned area" : "planned area") + ", "
+                + direction.getLabel() + " line ("
+                + (direction.isNorthSouth() ? "columns" : "rows") + ")";
         List<String> cellIds = new ArrayList<>();
         for (SearchGridCell cell : routeCells)
             cellIds.add(cell.getId());
@@ -879,6 +914,8 @@ public class SARTakMapController {
         if (BuildConfig.DEBUG)
             Log.d(PERF_TAG, "auto route cells=" + activeRoutePlan.size()
                     + " planned=" + gridManager.getAreaCellCount()
+                    + " assigned=" + assigned + " direction="
+                    + direction.name()
                     + " build=" + millis(started, built)
                     + " publish=" + millis(built, published)
                     + " refresh=" + millis(published,
@@ -895,6 +932,7 @@ public class SARTakMapController {
                 identity == null ? "" : identity.getCallsign());
         routeSelectionAnchor = null;
         gridOverlay.setRouteSelectionAnchor(null);
+        clearRouteSelectionPreview();
         routeSelectionHint = gridOverlay.isSelectionMode()
                 ? "Tap a start cell, then tap an end cell to select a lane or box."
                 : "Route selection off";
@@ -917,6 +955,7 @@ public class SARTakMapController {
         gridOverlay.setSelectionMode(active);
         routeSelectionAnchor = null;
         gridOverlay.setRouteSelectionAnchor(null);
+        clearRouteSelectionPreview();
         routeSelectionHint = active
                 ? "Tap a start cell, then tap an end cell to select a lane or box."
                 : "Route selection off";
@@ -928,6 +967,71 @@ public class SARTakMapController {
 
     public boolean isRouteSelectionMode() {
         return gridOverlay.isSelectionMode();
+    }
+
+    /** Called on the UI thread whenever a route selection tap changes state. */
+    public void setRouteSelectionListener(Runnable listener) {
+        routeSelectionListener = listener;
+    }
+
+    public String getLastAutoRouteSummary() {
+        return lastAutoRouteSummary;
+    }
+
+    public boolean hasRouteSelectionPreview() {
+        return routeSelectionPreview != null;
+    }
+
+    public String getRouteSelectionPreviewSummary() {
+        return routeSelectionPreview == null ? ""
+                : routeSelectionPreview.describe();
+    }
+
+    /** Adds the previewed lane or box to the route. */
+    public boolean confirmRouteSelectionPreview() {
+        RouteSelectionPreview preview = routeSelectionPreview;
+        clearRouteSelectionPreview();
+        boolean added = preview != null && canManageRoutePlan()
+                && addRouteRange(preview);
+        if (preview != null && !added && canManageRoutePlan())
+            routeSelectionHint = "Nothing added. Tap a start cell, then an end cell.";
+        refreshOverlay();
+        return added;
+    }
+
+    public void cancelRouteSelectionPreview() {
+        boolean hadPreview = routeSelectionPreview != null;
+        clearRouteSelectionPreview();
+        // Start over: the next tap picks a new start cell.
+        routeSelectionAnchor = null;
+        gridOverlay.setRouteSelectionAnchor(null);
+        if (hadPreview)
+            routeSelectionHint = "Selection cancelled. Tap a start cell, then an end cell.";
+        refreshOverlay();
+    }
+
+    /**
+     * Partial or complete cells of the current area, one page at a time,
+     * for the Grid tab list. Built from the stored statuses, not the area.
+     */
+    public CellProgressList.Page getCellProgressPage(SearchGridStatus status,
+            int pageIndex) {
+        long started = SystemClock.elapsedRealtimeNanos();
+        CellProgressList.Page page = cellProgressList.page(gridManager,
+                status, pageIndex);
+        long elapsedNanos = SystemClock.elapsedRealtimeNanos() - started;
+        // Only slow calls are logged: a cached page costs microseconds.
+        if (BuildConfig.DEBUG && elapsedNanos >= 1_000_000L)
+            Log.d(PERF_TAG, "cell list " + status + " page="
+                    + page.pageIndex + "/" + page.pageCount + " partial="
+                    + page.partialTotal + " complete=" + page.completeTotal
+                    + " took=" + elapsedNanos / 1_000_000L + " ms");
+        return page;
+    }
+
+    private void clearRouteSelectionPreview() {
+        routeSelectionPreview = null;
+        routePreviewOverlay.clear();
     }
 
     public boolean toggleAssignmentOverlay() {
@@ -1622,6 +1726,7 @@ public class SARTakMapController {
             teamCotWorkflow.publishPresence("", "", "", "",
                     "", 0, "", 0, "");
         activeRoutePlan = null;
+        clearRouteSelectionPreview();
         assignmentManager.clearTeam();
         teamStateStore.clear();
         searchLineStateStore.clear();
@@ -2328,6 +2433,7 @@ public class SARTakMapController {
         searchLineOverlay.setVisible(false);
         searchRouteOverlay.setVisible(false);
         assignmentOverlay.setVisible(false);
+        clearRouteSelectionPreview();
     }
 
     private void refreshOverlay() {
@@ -2347,6 +2453,9 @@ public class SARTakMapController {
     }
 
     private void renderOverlaysOnly() {
+        // A role or team change can take route editing away mid-preview.
+        if (routeSelectionPreview != null && !canManageRoutePlan())
+            clearRouteSelectionPreview();
         long started = SystemClock.elapsedRealtimeNanos();
         gridOverlay.render(gridManager);
         long gridDone = SystemClock.elapsedRealtimeNanos();
@@ -2383,6 +2492,8 @@ public class SARTakMapController {
                         searchRouteOverlay.getMapGroup(), view)
                 + " " + MapOverlayDiagnostics.describe("assignItems",
                         assignmentOverlay.getMapGroup(), view)
+                + " " + MapOverlayDiagnostics.describe("previewItems",
+                        routePreviewOverlay.getMapGroup(), view)
                 + " | " + gridOverlay.getLastDiagnostics());
     }
 
@@ -2839,6 +2950,7 @@ public class SARTakMapController {
         activeRoutePlan = null;
         routeSelectionAnchor = null;
         gridOverlay.setRouteSelectionAnchor(null);
+        clearRouteSelectionPreview();
         routeSelectionHint = "Route selection off";
         searchRouteOverlay.setVisible(true);
         inactiveMembershipTimes.clear();
@@ -3673,19 +3785,48 @@ public class SARTakMapController {
             refreshOverlay();
             return true;
         }
-        addRouteRange(routeSelectionAnchor, tappedCell);
-        routeSelectionAnchor = null;
-        gridOverlay.setRouteSelectionAnchor(null);
+        // The second tap (and any tap while a preview waits) only previews;
+        // the route changes when the lead taps Confirm.
+        previewRouteRange(routeSelectionAnchor, tappedCell);
         refreshOverlay();
         return true;
     }
-    private boolean addRouteRange(SearchGridCell anchor, SearchGridCell end) {
+
+    private void previewRouteRange(SearchGridCell anchor, SearchGridCell end) {
+        long started = SystemClock.elapsedRealtimeNanos();
         List<SearchGridCell> range = gridManager.cellsBetween(anchor, end,
                 MAX_ROUTE_RANGE_CELLS);
         if (range.isEmpty()) {
-            routeSelectionHint = "No cells selected. Use cells in the same UTM zone and inside the operation area.";
-            return false;
+            clearRouteSelectionPreview();
+            routeSelectionHint = "No cells selected. Use cells in the same UTM zone and inside the operation area. Tap another end cell.";
+            return;
         }
+        RouteSelectionPreview preview = new RouteSelectionPreview(anchor, end,
+                range, MAX_ROUTE_RANGE_CELLS, activeRoutePlan == null ? null
+                        : new HashSet<>(activeRoutePlan.getCellIds()));
+        routeSelectionPreview = preview;
+        routePreviewOverlay.show(preview);
+        routeSelectionHint = preview.describe()
+                + ". Confirm or Cancel, or tap another end cell.";
+        if (BuildConfig.DEBUG)
+            Log.d(PERF_TAG, "route preview cells=" + preview.getCellCount()
+                    + " new=" + preview.getNewCellCount() + " blocks="
+                    + preview.blocks().size() + " took=" + millis(started,
+                            SystemClock.elapsedRealtimeNanos()) + " ms");
+    }
+
+    private void notifyRouteSelectionListener() {
+        Runnable listener = routeSelectionListener;
+        if (listener != null)
+            listener.run();
+    }
+
+    private boolean addRouteRange(RouteSelectionPreview preview) {
+        List<SearchGridCell> range = preview.getCells();
+        if (range.isEmpty())
+            return false;
+        routeSelectionAnchor = null;
+        gridOverlay.setRouteSelectionAnchor(null);
         List<String> cellIds = new ArrayList<>();
         if (activeRoutePlan != null)
             cellIds.addAll(activeRoutePlan.getCellIds());
@@ -3698,18 +3839,11 @@ public class SARTakMapController {
                 identity == null ? "" : identity.getCallsign());
         publishRoutePlan();
         searchRouteOverlay.setVisible(true);
-        boolean limited = range.size() >= MAX_ROUTE_RANGE_CELLS;
-        routeSelectionHint = (isLane(anchor, end) ? "Lane" : "Box")
-                + " added: " + range.size() + " cells"
-                + (limited ? " (selection limit reached)" : "")
+        routeSelectionHint = preview.getLabel() + " added: "
+                + preview.getNewCellCount() + " new cells"
+                + (preview.isLimited() ? " (selection limit reached)" : "")
                 + ". Tap another start cell or stop selecting.";
         return true;
-    }
-
-    private boolean isLane(SearchGridCell anchor, SearchGridCell end) {
-        return anchor != null && end != null
-                && (Math.abs(anchor.getWest() - end.getWest()) < 0.1
-                        || Math.abs(anchor.getSouth() - end.getSouth()) < 0.1);
     }
     private void registerMapListeners() {
         MapEventDispatcher dispatcher = mapView.getMapEventDispatcher();

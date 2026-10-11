@@ -21,6 +21,8 @@ import com.atakmap.android.plugintemplate.grid.GridCoordinateConverter;
 import com.atakmap.android.plugintemplate.grid.MapOverlayDiagnostics;
 import com.atakmap.android.plugintemplate.grid.MemberPositionPolicy;
 import com.atakmap.android.plugintemplate.grid.OverlayVisibilityStore;
+import com.atakmap.android.plugintemplate.grid.RemainingCellsFormatter;
+import com.atakmap.android.plugintemplate.grid.RouteProgressTracker;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
@@ -30,6 +32,7 @@ import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchLineManager;
+import com.atakmap.android.plugintemplate.grid.SearchLineOperationExit;
 import com.atakmap.android.plugintemplate.grid.SearchLineOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchLineStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
@@ -78,6 +81,7 @@ import com.atakmap.coremap.maps.coords.GeoPointMetaData;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -154,6 +158,8 @@ public class SARTakMapController {
     private String lastAppliedAreaAssignmentId = "";
     private String lastPublishedAreaFingerprint = "";
     private SearchRoutePlan activeRoutePlan;
+    private final RouteProgressTracker routeProgressTracker =
+            new RouteProgressTracker();
     private SearchGridCell routeSelectionAnchor;
     private String routeSelectionHint = "Route selection off";
     private SearchLineColorOption gridColorOption = SearchLineColorOption.CYAN;
@@ -970,6 +976,7 @@ public class SARTakMapController {
                     .append(SearchGridDisplayFormatter.formatCellCompact(
                             cells.get(cells.size() - 1)));
         }
+        builder.append('\n').append(getRouteRemainingSummary());
         builder.append("\nGuide line: ")
                 .append(searchRouteOverlay.isVisible() ? "shown" : "hidden");
         builder.append(" | Selection: ")
@@ -978,6 +985,28 @@ public class SARTakMapController {
         builder.append("\nTeam assignment overlay: ")
                 .append(assignmentOverlay.isVisible() ? "shown" : "hidden");
         return builder.toString();
+    }
+
+    /** Home tab: what is left of the planned area and of the route. */
+    public String getRemainingCellsSummary() {
+        applyRemoteRoutePlanIfAvailable();
+        return RemainingCellsFormatter.areaRemaining(gridManager
+                .hasPlannedArea() ? gridManager.getAreaProgress() : null)
+                + "\n" + getRouteRemainingSummary();
+    }
+
+    private String getRouteRemainingSummary() {
+        RouteProgressTracker.Progress progress = routeProgressTracker
+                .getProgress(activeRoutePlan, gridStateStore);
+        String nextText = null;
+        if (progress != null && progress.nextCellId != null) {
+            List<SearchGridCell> next = gridManager.cellsForIds(
+                    Collections.singletonList(progress.nextCellId));
+            if (!next.isEmpty())
+                nextText = SearchGridDisplayFormatter.formatCellCompact(
+                        next.get(0));
+        }
+        return RemainingCellsFormatter.routeRemaining(progress, nextText);
     }
 
     public List<SearchAreaAssignment> getAreaAssignments() {
@@ -1484,7 +1513,24 @@ public class SARTakMapController {
     }
 
     public void leaveOperation() {
+        // End the line while still scoped to the old operation and team, so
+        // the END reaches that team and nothing carries into the next one.
+        SearchLineOperationExit.endForLeave(searchLineManager,
+                searchLineStateStore, assignmentManager.isTeamCreated()
+                        && !isOperationArchived(),
+                new SearchLineOperationExit.EndPublisher() {
+                    @Override
+                    public void publishEnd() {
+                        searchLineCotWorkflow.publishNow(
+                                SearchLineCotMessage.ACTION_END,
+                                assignmentManager.getTeamId(),
+                                searchLineManager);
+                    }
+                });
         clearLocalTeam(true);
+        // Same clean-up as switching operation: drops the old operation's
+        // line, route and cached CoT messages.
+        suspendCurrentOperation();
         activeOperationProfile = null;
         operationStateStore.clear();
         scopeLocalStoresToActiveOperation();
@@ -2172,6 +2218,7 @@ public class SARTakMapController {
                 + " complete, " + progress.partial + " partial, "
                 + progress.inProgress + " in progress, "
                 + progress.totalCells + " cells total\n"
+                + RemainingCellsFormatter.areaRemaining(progress) + "\n"
                 + getNextCellDisplaySummary() + "\n"
                 + gridOverlay.getLastDiagnostics();
     }

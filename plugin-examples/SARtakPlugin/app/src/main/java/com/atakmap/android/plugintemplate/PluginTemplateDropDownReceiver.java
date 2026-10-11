@@ -158,6 +158,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView homeCellValue;
     private final TextView assignmentValue;
     private final TextView homeAssignmentValue;
+    private final TextView homeRemainingValue;
     private final TextView homeSearchLineValue;
     private final TextView searchLineStatusValue;
     private final TextView searchLineMembersValue;
@@ -332,6 +333,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeCellValue = templateView.findViewById(R.id.home_cell_value);
         assignmentValue = templateView.findViewById(R.id.assignment_value);
         homeAssignmentValue = templateView.findViewById(R.id.home_assignment_value);
+        homeRemainingValue = templateView.findViewById(R.id.home_remaining_value);
         homeSearchLineValue = templateView
                 .findViewById(R.id.home_search_line_value);
         searchLineStatusValue = templateView
@@ -693,6 +695,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         routePlanValue.setText(mapController.getRoutePlanSummary());
         assignmentValue.setText(assignmentSummary);
         homeAssignmentValue.setText(assignmentSummary);
+        homeRemainingValue.setText(mapController.getRemainingCellsSummary());
         homeSearchLineValue.setText(searchLineSummary);
         searchLineStatusValue.setText(searchLineSummary);
         searchLineMembersValue.setText(searchLineMembers);

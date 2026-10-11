@@ -270,6 +270,14 @@
                     android:text="@string/grid_no_cell" />
 
                 <TextView
+                    android:id="@+id/home_remaining_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Area left: no planned area" />
+
+                <TextView
                     style="@style/SARtakLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

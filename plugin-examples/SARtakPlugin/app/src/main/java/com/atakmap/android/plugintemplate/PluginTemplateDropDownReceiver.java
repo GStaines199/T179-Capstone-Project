@@ -161,6 +161,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView homeSearchLineValue;
     private final TextView searchLineStatusValue;
     private final TextView searchLineMembersValue;
+    private final TextView homeSpacingValue;
+    private final TextView homeSearchLineMembersValue;
     private final TextView pluginHealthValue;
     private final TextView currentOperationValue;
     private final TextView operationSummaryValue;
@@ -336,6 +338,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.search_line_status_value);
         searchLineMembersValue = templateView
                 .findViewById(R.id.search_line_members_value);
+        homeSpacingValue = templateView.findViewById(R.id.home_spacing_value);
+        homeSearchLineMembersValue = templateView
+                .findViewById(R.id.home_search_line_members_value);
         pluginHealthValue = templateView.findViewById(
                 R.id.plugin_health_value);
         currentOperationValue = templateView.findViewById(
@@ -691,6 +696,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         homeSearchLineValue.setText(searchLineSummary);
         searchLineStatusValue.setText(searchLineSummary);
         searchLineMembersValue.setText(searchLineMembers);
+        homeSearchLineMembersValue.setText(searchLineMembers);
+        homeSpacingValue.setText(mapController.getSearchLineSpacingSummary());
         pluginHealthValue.setText(mapController.getPluginHealthSummary());
         currentOperationValue.setText(mapController.getOperationHeadline());
         operationSummaryValue.setText(mapController.getOperationSummary());

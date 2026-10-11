@@ -5,6 +5,7 @@ import com.atakmap.coremap.maps.coords.UTMPoint;
 import com.atakmap.android.plugintemplate.runtime.SearchLineCotMessage;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -395,6 +396,54 @@ public class SearchLineManager {
                 + " | Heading: " + getDirectionLabel()
                 + " | Leader pace: " + formatPace(getLeaderPace())
                 + " | Line pace: " + formatPace(getLinePace());
+    }
+
+    /**
+     * How far apart the searchers are along the line, measured from where
+     * they actually are.
+     *
+     * <p>Searchers are ordered by position across the line, not by lane
+     * number: lanes are numbered leader first and then by UID, which says
+     * nothing about who is standing next to whom. A searcher with no usable
+     * position is left out and counted, never placed somewhere it might be.
+     */
+    public String getSpacingSummary() {
+        if (state == SearchLineState.NOT_STARTED || activeCell == null)
+            return "Measured when search line is active";
+
+        List<Double> across = new ArrayList<>();
+        int notLocated = 0;
+        for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
+            if (!member.contributesLane())
+                continue;
+            if (!MemberPositionPolicy.hasUsablePosition(member)) {
+                notLocated++;
+                continue;
+            }
+            UTMPoint point = UTMPoint.fromGeoPoint(new GeoPoint(
+                    member.getLatitude(), member.getLongitude()));
+            across.add(direction.lineCoordinate(point.getEasting(),
+                    point.getNorthing()));
+        }
+        String missing = notLocated == 0 ? ""
+                : " | " + notLocated + " not located";
+        if (across.size() < 2)
+            return "Needs 2 located searchers" + missing;
+
+        Collections.sort(across);
+        double min = Double.MAX_VALUE;
+        double max = 0.0;
+        for (int i = 1; i < across.size(); i++) {
+            double gap = across.get(i) - across.get(i - 1);
+            min = Math.min(min, gap);
+            max = Math.max(max, gap);
+        }
+        if (across.size() == 2)
+            return Math.round(max) + " m apart" + missing;
+        double average = (across.get(across.size() - 1) - across.get(0))
+                / (across.size() - 1);
+        return Math.round(min) + "-" + Math.round(max) + " m apart, avg "
+                + Math.round(average) + " m" + missing;
     }
 
     public String getMemberLineSummary() {

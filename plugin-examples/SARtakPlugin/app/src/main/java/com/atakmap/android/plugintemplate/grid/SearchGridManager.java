@@ -77,7 +77,6 @@ public class SearchGridManager {
         }
     }
 
-    private static final int MAX_RENDER_CELLS = 600;
     private static final int MAX_REVIEW_CELLS = 200;
 
     private final GridCoordinateConverter converter;
@@ -349,6 +348,11 @@ public class SearchGridManager {
                 + " km";
     }
 
+    /**
+     * Every planned cell, column by column, alternating north and south. Not
+     * capped: the route used to stop after the column that crossed 600 cells,
+     * so on a large area most of the area was silently left off it.
+     */
     public List<SearchGridCell> getSerpentineRouteCells() {
         List<SearchGridCell> cells = new ArrayList<>();
         if (!hasPlannedArea())
@@ -370,8 +374,6 @@ public class SearchGridManager {
                     cells.add(column.get(i));
             }
             northbound = !northbound;
-            if (cells.size() >= MAX_RENDER_CELLS)
-                break;
         }
         return cells;
     }

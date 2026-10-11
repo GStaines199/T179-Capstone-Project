@@ -325,6 +325,7 @@
                             android:text="@string/spacing_heading" />
 
                         <TextView
+                            android:id="@+id/home_spacing_value"
                             style="@style/SARtakValue"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -340,6 +341,7 @@
                     android:text="@string/line_heading" />
 
                 <TextView
+                    android:id="@+id/home_search_line_members_value"
                     style="@style/SARtakValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

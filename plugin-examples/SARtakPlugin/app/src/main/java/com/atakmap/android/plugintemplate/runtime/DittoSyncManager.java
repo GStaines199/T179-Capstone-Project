@@ -674,10 +674,12 @@ public class DittoSyncManager {
         document.put("createdByCallsign", safe(routePlan
                 .getCreatedByCallsign()));
         document.put("updatedAt", routePlan.getUpdatedAt());
-        JSONArray cells = new JSONArray();
-        for (String cellId : routePlan.getCellIds())
-            cells.put(cellId);
-        document.put("cellIds", cells);
+        // Runs keep a large-area route to a few KB; see RouteCellRuns. Both
+        // fields are always written because ON ID CONFLICT DO UPDATE keeps
+        // any field left out, which would leave a stale list behind.
+        document.put("cellRuns", routePlan.getCellRunsJson());
+        document.put("cellRunsUpdatedAt", routePlan.getUpdatedAt());
+        document.put("cellIds", routePlan.getLegacyCellIdsJson());
 
         try {
             insertDocument(ROUTE_PLAN_COLLECTION, "routePlan", document);

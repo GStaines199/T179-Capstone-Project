@@ -14,7 +14,6 @@ import java.util.List;
 public class SearchRouteOverlay {
 
     private static final String GROUP_NAME = "SARtak Search Route Overlay";
-    private static final int MAX_ROUTE_POINTS = 5000;
 
     private final MapView mapView;
     private final OverlayItemSync itemSync = new OverlayItemSync();
@@ -71,13 +70,16 @@ public class SearchRouteOverlay {
         lastRenderKey = renderKey;
 
         List<OverlayItemSync.Spec> specs = new ArrayList<>();
+        // Only the ends of each straight run are resolved: resolving all
+        // 40,401 cells of a large-area route cost about half a second here.
         List<SearchGridCell> routeCells = plan == null
                 ? new ArrayList<SearchGridCell>()
-                : gridManager.cellsForIds(plan.getCellIds());
+                : routeVertices(gridManager.cellsForIds(
+                        plan.getRouteVertexIds()));
         if (routeCells.size() >= 2) {
-            int count = Math.min(routeCells.size(), MAX_ROUTE_POINTS);
-            GeoPoint[] points = new GeoPoint[count];
-            for (int i = 0; i < count; i++)
+            // Not capped: the line used to stop after 5000 cells.
+            GeoPoint[] points = new GeoPoint[routeCells.size()];
+            for (int i = 0; i < points.length; i++)
                 points[i] = centerOf(routeCells.get(i), converter);
             specs.add(new OverlayItemSync.Spec("sartak-route-"
                     + plan.getPlanId(), "Search route", "search-route-guide",
@@ -85,6 +87,38 @@ public class SearchRouteOverlay {
                     Shape.BASIC_LINE_STYLE_DASHED));
         }
         itemSync.apply(routeGroup, specs, false);
+    }
+
+    /**
+     * The cells where the route line bends. A cell partway along a straight
+     * stretch adds nothing to the drawn line, so a serpentine route over a
+     * 20 km area needs about 400 vertices rather than 40,401.
+     */
+    static List<SearchGridCell> routeVertices(List<SearchGridCell> cells) {
+        if (cells.size() <= 2)
+            return cells;
+        List<SearchGridCell> vertices = new ArrayList<>();
+        vertices.add(cells.get(0));
+        for (int i = 1; i < cells.size() - 1; i++) {
+            if (!isStraightThrough(cells.get(i - 1), cells.get(i),
+                    cells.get(i + 1)))
+                vertices.add(cells.get(i));
+        }
+        vertices.add(cells.get(cells.size() - 1));
+        return vertices;
+    }
+
+    private static boolean isStraightThrough(SearchGridCell previous,
+            SearchGridCell cell, SearchGridCell next) {
+        if (!previous.getZoneDescriptor().equals(cell.getZoneDescriptor())
+                || !cell.getZoneDescriptor().equals(next.getZoneDescriptor()))
+            return false;
+        double inX = cell.getWest() - previous.getWest();
+        double inY = cell.getSouth() - previous.getSouth();
+        double outX = next.getWest() - cell.getWest();
+        double outY = next.getSouth() - cell.getSouth();
+        // Cell corners are whole metres, so these products are exact.
+        return inX * outY - inY * outX == 0.0 && inX * outX + inY * outY > 0.0;
     }
 
     private GeoPoint centerOf(SearchGridCell cell,

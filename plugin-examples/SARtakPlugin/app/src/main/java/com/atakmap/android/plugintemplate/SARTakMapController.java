@@ -77,6 +77,7 @@ import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.GeoPointMetaData;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -226,7 +227,7 @@ public class SARTakMapController {
         this.searchLineCotWorkflow.setDittoSyncManager(dittoSyncManager);
         applyOperationIdToWorkflows();
         this.rawGnssCaptureManager = new RawGnssCaptureManager(runtimeContext,
-                identityManager, trackManager, locationRepository,
+                identityManager, trackManager,
                 new RawGnssCaptureManager.Listener() {
                     @Override
                     public void onRawGnssCaptured(RawGnssCapture capture) {
@@ -853,6 +854,7 @@ public class SARTakMapController {
     public boolean generateSerpentineRouteFromPlannedArea() {
         if (!canManageRoutePlan() || !gridManager.hasPlannedArea())
             return false;
+        long started = SystemClock.elapsedRealtimeNanos();
         List<SearchGridCell> routeCells = gridManager.getSerpentineRouteCells();
         if (routeCells.isEmpty())
             return false;
@@ -863,9 +865,18 @@ public class SARTakMapController {
         activeRoutePlan = ensureRoutePlan().withCells(cellIds,
                 identity == null ? "" : identity.getUid(),
                 identity == null ? "" : identity.getCallsign());
+        long built = SystemClock.elapsedRealtimeNanos();
         publishRoutePlan();
+        long published = SystemClock.elapsedRealtimeNanos();
         searchRouteOverlay.setVisible(true);
         refreshOverlay();
+        if (BuildConfig.DEBUG)
+            Log.d(PERF_TAG, "auto route cells=" + activeRoutePlan.size()
+                    + " planned=" + gridManager.getAreaCellCount()
+                    + " build=" + millis(started, built)
+                    + " publish=" + millis(built, published)
+                    + " refresh=" + millis(published,
+                            SystemClock.elapsedRealtimeNanos()) + " ms");
         return true;
     }
 
@@ -942,8 +953,12 @@ public class SARTakMapController {
             return gridOverlay.isSelectionMode()
                     ? "No route planned. " + routeSelectionHint
                     : "No route planned. Use Select Route Cells or generate a serpentine route from the planned area.";
-        List<SearchGridCell> cells = gridManager.cellsForIds(activeRoutePlan
-                .getCellIds());
+        // Only the ends are shown, so only the ends are resolved: this runs on
+        // every panel refresh and a large-area route has tens of thousands of
+        // cells.
+        List<String> routeIds = activeRoutePlan.getCellIds();
+        List<SearchGridCell> cells = gridManager.cellsForIds(Arrays.asList(
+                routeIds.get(0), routeIds.get(routeIds.size() - 1)));
         StringBuilder builder = new StringBuilder();
         builder.append("Route: ").append(activeRoutePlan.size())
                 .append(" cells");
@@ -2094,6 +2109,10 @@ public class SARTakMapController {
         return searchLineManager.getMemberLineSummary();
     }
 
+    public String getSearchLineSpacingSummary() {
+        return searchLineManager.getSpacingSummary();
+    }
+
     public String getSearchLineWarningSummary() {
         String warning = searchLineManager.getWarningSummary();
         String connection = getConnectionAlertSummary();
@@ -2644,8 +2663,14 @@ public class SARTakMapController {
         if (plan == null)
             return;
         if (activeRoutePlan == null || plan.getUpdatedAt()
-                > activeRoutePlan.getUpdatedAt())
+                > activeRoutePlan.getUpdatedAt()) {
+            if (BuildConfig.DEBUG && activeRoutePlan != null)
+                Log.d(PERF_TAG, "route replaced by synced plan cells="
+                        + plan.size() + " (was " + activeRoutePlan.size()
+                        + ") updatedAt=" + plan.getUpdatedAt() + " (was "
+                        + activeRoutePlan.getUpdatedAt() + ")");
             activeRoutePlan = plan;
+        }
     }
 
     private SearchRoutePlan ensureRoutePlan() {
@@ -3617,10 +3642,9 @@ public class SARTakMapController {
         List<String> cellIds = new ArrayList<>();
         if (activeRoutePlan != null)
             cellIds.addAll(activeRoutePlan.getCellIds());
-        for (SearchGridCell cell : range) {
-            if (!cellIds.contains(cell.getId()))
-                cellIds.add(cell.getId());
-        }
+        // SearchRoutePlan drops repeats, keeping each cell's first position.
+        for (SearchGridCell cell : range)
+            cellIds.add(cell.getId());
         IdentityManager.Identity identity = identityManager.resolveIdentity();
         activeRoutePlan = ensureRoutePlan().withCells(cellIds,
                 identity == null ? "" : identity.getUid(),

@@ -64,6 +64,18 @@ public class SearchLineDirectionLayoutTest {
         assertNotNull(root.findViewById(R.id.pause_search_line_button));
     }
 
+    /**
+     * The Home tab's Spacing value and line summary need ids, or the
+     * receiver has nothing to update and they stay as placeholder text.
+     */
+    @Test
+    public void theHomeSpacingViews_canBeUpdated() {
+        View root = inflate();
+
+        assertNotNull(root.findViewById(R.id.home_spacing_value));
+        assertNotNull(root.findViewById(R.id.home_search_line_members_value));
+    }
+
     @Test
     public void theDirectionButton_startsLabelled() {
         View root = inflate();

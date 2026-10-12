@@ -2155,7 +2155,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private void handleJoinResponse(SearchTeamCotMessage response) {
         if (SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(
                 response.getAction())) {
-            mapController.acceptJoinResponse(response);
+            if (!mapController.acceptJoinResponse(response))
+                return;
             Toast.makeText(getMapView().getContext(),
                     "Joined " + response.getTeamName(), Toast.LENGTH_LONG)
                     .show();

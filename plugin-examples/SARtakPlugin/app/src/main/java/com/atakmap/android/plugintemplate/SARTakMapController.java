@@ -1742,8 +1742,17 @@ public class SARTakMapController {
         boolean leavingAsMember = notifyLeader
                 && assignmentManager.isTeamCreated()
                 && !assignmentManager.isOwnTeam(getFixedLeaderTeamId());
-        if (leavingAsMember)
+        if (leavingAsMember) {
             publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_LEFT);
+            // So an accept from before leaving can't put this device back in.
+            IdentityManager.Identity identity =
+                    identityManager.getCurrentIdentity();
+            rememberInactiveMembership(assignmentManager.getTeamId(),
+                    identity == null ? assignmentManager.getSelfMemberId()
+                            : identity.getUid(),
+                    identity == null ? "" : identity.getCallsign(),
+                    System.currentTimeMillis());
+        }
         if (leavingAsMember)
             teamCotWorkflow.memberLeft(assignmentManager.getTeamId(),
                     assignmentManager.getTeamName(),
@@ -1822,7 +1831,22 @@ public class SARTakMapController {
         }
     }
 
-    public void acceptJoinResponse(SearchTeamCotMessage response) {
+    /**
+     * Joins the team a leader accepted this device into, and reports whether
+     * it did. Both the panel poll and the background refresh call this, so an
+     * accept is applied once whichever sees it first; before that, the second
+     * caller re-applied it and a member removed within the accept's 60 s
+     * lifetime was put straight back in the team. An accept from before this
+     * device last left or was removed from the team answers an old request.
+     */
+    public boolean acceptJoinResponse(SearchTeamCotMessage response) {
+        if (assignmentManager.isTeamCreated()
+                || !rememberAppliedMessage(response))
+            return false;
+        if (hasNewerInactiveMembership(response.getTeamId(),
+                response.getTargetUid(), response.getTargetCallsign(),
+                response.getCreated()))
+            return false;
         forgetInactiveMembership(response.getTeamId(),
                 assignmentManager.getSelfMemberId(),
                 response.getTargetCallsign(), response.getCreated());
@@ -1836,6 +1860,7 @@ public class SARTakMapController {
         publishTeamPresence();
         publishDittoDeviceStateNow();
         refreshOverlay();
+        return true;
     }
 
     public void respondToInvite(SearchTeamCotMessage invite,
@@ -3344,8 +3369,6 @@ public class SARTakMapController {
 
         if (!assignmentManager.isTeamCreated()) {
             for (SearchTeamCotMessage response : getJoinResponsesForMe()) {
-                if (!rememberAppliedMessage(response))
-                    continue;
                 if (SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(
                         response.getAction()))
                     acceptJoinResponse(response);

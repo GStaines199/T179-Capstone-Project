@@ -1727,8 +1727,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                             boolean switched = mapController.switchOperation(
                                     selected.getOperationId());
                             Toast.makeText(getMapView().getContext(),
-                                    switched ? "Switched to "
-                                            + selected.getOperationName()
+                                    switched ? withDittoProfileNotice("Switched to "
+                                            + selected.getOperationName())
                                             : "Operation could not be opened",
                                     Toast.LENGTH_LONG).show();
                             handledTeamMessages.clear();
@@ -1826,7 +1826,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                                     return;
                                 }
                                 Toast.makeText(getMapView().getContext(),
-                                        "Operation joined",
+                                        withDittoProfileNotice("Operation joined"),
                                         Toast.LENGTH_LONG).show();
                                 dialog.dismiss();
                                 refreshGridUi();
@@ -1854,13 +1854,19 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
     }
 
+    /** Adds what joining or switching did to the saved Ditto profiles. */
+    private String withDittoProfileNotice(String message) {
+        String notice = mapController.takeDittoProfileNotice();
+        return notice == null ? message : message + ". " + notice;
+    }
+
     private void joinOperationFromScannedCode(String joinCode) {
         boolean joined = mapController.joinOperationFromCode(joinCode);
         if (joined && pasteOperationJoinDialog != null
                 && pasteOperationJoinDialog.isShowing())
             pasteOperationJoinDialog.dismiss();
         Toast.makeText(getMapView().getContext(),
-                joined ? "Operation joined from QR"
+                joined ? withDittoProfileNotice("Operation joined from QR")
                         : "Invalid SARtak operation QR",
                 Toast.LENGTH_LONG).show();
         if (joined)
@@ -2149,7 +2155,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private void handleJoinResponse(SearchTeamCotMessage response) {
         if (SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(
                 response.getAction())) {
-            mapController.acceptJoinResponse(response);
+            if (!mapController.acceptJoinResponse(response))
+                return;
             Toast.makeText(getMapView().getContext(),
                     "Joined " + response.getTeamName(), Toast.LENGTH_LONG)
                     .show();
@@ -2398,9 +2405,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     java.util.Locale.US, "Sender location: %.6f, %.6f",
                     alert.getLatitude(), alert.getLongitude()), 12, false));
 
+        card.addView(createCardText(
+                mapController.getAlertAckStatus(alert).detail(), 12, false));
         if (fromMe) {
-            card.addView(createCardText(mapController.getAlertAckSummary(alert),
-                    12, false));
             card.addView(createCancelButton("Clear alert / resume",
                     new View.OnClickListener() {
                         @Override

@@ -47,6 +47,7 @@ public final class DittoWriteQueue {
     private final Map<String, PendingWrite> waitingByKey = new HashMap<>();
     private final FailureListener failureListener;
     private ExecutorService executor;
+    private boolean finished;
     private volatile Thread writerThread;
     private int queued;
     private long completed;
@@ -67,17 +68,21 @@ public final class DittoWriteQueue {
      * @param key identifies the document being written, or null. If a write
      *            with the same key is still waiting, it is replaced by this
      *            one and keeps its place in the queue.
+     * @return false if nothing was queued: no write, or {@link #finish} was
+     *         called
      */
-    public void submit(String key, Runnable write) {
+    public boolean submit(String key, Runnable write) {
         if (write == null)
-            return;
+            return false;
         synchronized (lock) {
+            if (finished)
+                return false;
             if (key != null) {
                 PendingWrite waiting = waitingByKey.get(key);
                 if (waiting != null) {
                     waiting.write = write;
                     coalesced++;
-                    return;
+                    return true;
                 }
             }
             PendingWrite pending = new PendingWrite(key, write);
@@ -85,6 +90,7 @@ public final class DittoWriteQueue {
                 waitingByKey.put(key, pending);
             queued++;
             executorLocked().execute(new WriteTask(pending));
+            return true;
         }
     }
 
@@ -150,6 +156,21 @@ public final class DittoWriteQueue {
             }
             queued = 0;
             return droppedWrites;
+        }
+    }
+
+    /**
+     * Lets everything already queued run, then lets the writer thread end,
+     * without waiting for it. Later submits are ignored, so nothing can run
+     * after a final task queued just before this (such as closing the store
+     * the writes go to).
+     */
+    public void finish() {
+        synchronized (lock) {
+            finished = true;
+            if (executor != null)
+                executor.shutdown();
+            executor = null;
         }
     }
 

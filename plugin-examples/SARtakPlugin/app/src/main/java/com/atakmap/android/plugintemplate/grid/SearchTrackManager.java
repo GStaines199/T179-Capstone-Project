@@ -35,7 +35,14 @@ public class SearchTrackManager {
     private double sessionDistanceMeters;
     private double lastLatitude = Double.NaN;
     private double lastLongitude = Double.NaN;
+    private long lastTimestamp;
     private boolean distanceDirty = true;
+
+    /**
+     * Faster than anyone searching moves, on foot or in a vehicle or aircraft.
+     * A leg implying more than this is a position jump, not travel.
+     */
+    static final double MAX_PLAUSIBLE_SPEED_MPS = 150.0;
 
     public SearchTrackManager(TrackSessionRepository trackSessionRepository,
             LocationRepository locationRepository) {
@@ -225,10 +232,12 @@ public class SearchTrackManager {
         }
         if (!distanceDirty) {
             if (!Double.isNaN(lastLatitude))
-                sessionDistanceMeters += haversineDistance(lastLatitude,
-                        lastLongitude, latitude, longitude);
+                sessionDistanceMeters += legDistance(lastLatitude,
+                        lastLongitude, lastTimestamp, latitude, longitude,
+                        timestamp);
             lastLatitude = latitude;
             lastLongitude = longitude;
+            lastTimestamp = timestamp;
         }
     }
 
@@ -243,15 +252,18 @@ public class SearchTrackManager {
             sessionDistanceMeters = 0.0;
             lastLatitude = Double.NaN;
             lastLongitude = Double.NaN;
+            lastTimestamp = 0L;
             if (activeSessionId != null) {
                 for (double[] point : locationRepository
                         .getAllPointsForSession(activeSessionId)) {
+                    long timestamp = point.length > 2 ? (long) point[2] : 0L;
                     if (!Double.isNaN(lastLatitude))
-                        sessionDistanceMeters += haversineDistance(
-                                lastLatitude, lastLongitude, point[0],
-                                point[1]);
+                        sessionDistanceMeters += legDistance(lastLatitude,
+                                lastLongitude, lastTimestamp, point[0],
+                                point[1], timestamp);
                     lastLatitude = point[0];
                     lastLongitude = point[1];
+                    lastTimestamp = timestamp;
                 }
             }
             distanceDirty = false;
@@ -292,6 +304,24 @@ public class SearchTrackManager {
                 distanceMeters / 1000.0, formatDuration(elapsedSeconds),
                 trackPoints, visible ? "Shown on map" : "Hidden from map",
                 activeSessionId == null ? "pending" : activeSessionId);
+    }
+
+    /**
+     * Metres walked between two consecutive fixes, or 0 when getting from one
+     * to the other would take an impossible speed. A receiver that jumps to a
+     * stale or default position and back (the emulator's GPS swaps between
+     * California and Brisbane on boot) otherwise added thousands of km. The
+     * next leg is measured from the jumped-to fix, so a real move after a gap
+     * still counts. Timestamps in ms; a missing or out-of-order one counts as
+     * one second apart.
+     */
+    static double legDistance(double lat1, double lng1, long time1,
+            double lat2, double lng2, long time2) {
+        double meters = haversineDistance(lat1, lng1, lat2, lng2);
+        double seconds = time1 > 0L && time2 > time1
+                ? (time2 - time1) / 1000.0 : 1.0;
+        return meters > MAX_PLAUSIBLE_SPEED_MPS * Math.max(seconds, 1.0)
+                ? 0.0 : meters;
     }
 
     /**

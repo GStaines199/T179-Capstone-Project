@@ -32,15 +32,45 @@ import java.util.TimeZone;
  * <li>A marker with no document yet is shared when it was created on this
  * device (ATAK {@code parent_uid}), created during this session, or first
  * seen after the session's first scan. Markers restored from ATAK's own
- * store that other people made are not pushed into the operation.</li>
+ * store that other people made are not pushed into the operation. This
+ * device's own markers from before it joined the operation are held back
+ * until the user answers "share them?" once (finding T4-7).</li>
  * <li>A shared marker that disappears from the map between two scans was
- * deleted on this device; a tombstone is published.</li>
+ * deleted on this device; a tombstone is published. So is one that was on
+ * the map when SARtak last ran and is gone after a restart (finding T4-5),
+ * checked once, after ATAK has had time to reload its markers, and skipped
+ * if most of them vanished at once.</li>
+ * <li>A searcher may only delete markers they created; leaders and HQ may
+ * delete any (finding T4-6). A refused delete is undone on this device and
+ * not sent.</li>
  * </ul>
  */
 public class SharedMapMarkerReconciler {
 
     /** Grace period for "created during this session". */
     static final long SESSION_CREATION_GRACE_MS = 5L * 60L * 1000L;
+
+    /**
+     * How long after startup before markers missing since the last run are
+     * treated as deleted. ATAK reloads its saved markers in the background,
+     * so an earlier scan can miss markers that are about to come back.
+     */
+    static final long RESTORED_DELETE_DELAY_MS = 30_000L;
+
+    /**
+     * When more than half of the remembered markers are missing, and at
+     * least this many, the comparison is skipped: that looks like ATAK not
+     * having loaded them, not like the user deleting them.
+     */
+    static final int RESTORED_DELETE_SANITY_MIN = 3;
+
+    /** What to do with this device's own markers from before it joined. */
+    public enum ExistingMarkers {
+        /** Hold them back until the user is asked. */
+        ASK,
+        SHARE,
+        KEEP_PRIVATE
+    }
 
     public interface LocalMap {
         /** Snapshots of every shareable local marker. */
@@ -80,15 +110,22 @@ public class SharedMapMarkerReconciler {
         public int removed;
         public int published;
         public int deleted;
+        /** Own markers from before joining, waiting for the user's answer. */
+        public int existingWaiting;
+        /** Titles of markers this device may not delete, put back. */
+        public final List<String> refusedDeletes = new ArrayList<>();
 
         public boolean changedAnything() {
-            return applied + removed + published + deleted > 0;
+            return applied + removed + published + deleted
+                    + refusedDeletes.size() > 0;
         }
 
         @Override
         public String toString() {
             return "applied=" + applied + " removed=" + removed
-                    + " published=" + published + " deleted=" + deleted;
+                    + " published=" + published + " deleted=" + deleted
+                    + " refused=" + refusedDeletes.size()
+                    + " existingWaiting=" + existingWaiting;
         }
     }
 
@@ -97,23 +134,91 @@ public class SharedMapMarkerReconciler {
     private final Set<String> tombstoned = new HashSet<>();
     private final Set<String> baseline = new HashSet<>();
     private Set<String> previouslyPresent = new HashSet<>();
+    private final Set<String> restoredPresent = new HashSet<>();
+    // This device's own shared markers on the map at the last scan.
+    private Set<String> ownPresent = new HashSet<>();
+    private String deviceUid = "";
     private boolean baselineEstablished;
     private String operationId = "";
     private long sessionStartedAt;
+    private long operationJoinedAt;
+    private ExistingMarkers existingMarkers = ExistingMarkers.ASK;
+    private boolean canDeleteOthersMarkers = true;
 
     public void reset(String operationId, long sessionStartedAt) {
         this.operationId = operationId == null ? "" : operationId.trim();
         this.sessionStartedAt = sessionStartedAt;
+        operationJoinedAt = sessionStartedAt;
         syncedSignatures.clear();
         appliedVersions.clear();
         tombstoned.clear();
         baseline.clear();
+        restoredPresent.clear();
+        ownPresent = new HashSet<>();
         previouslyPresent = new HashSet<>();
         baselineEstablished = false;
     }
 
     public String getOperationId() {
         return operationId;
+    }
+
+    /**
+     * When this device first joined the operation. Its own markers created
+     * before then are "existing" and wait for {@link ExistingMarkers}.
+     */
+    public void setOperationJoinedAt(long joinedAt) {
+        operationJoinedAt = joinedAt;
+    }
+
+    public void setExistingMarkers(ExistingMarkers policy) {
+        existingMarkers = policy == null ? ExistingMarkers.ASK : policy;
+    }
+
+    public ExistingMarkers getExistingMarkers() {
+        return existingMarkers;
+    }
+
+    /** True for leaders and HQ; searchers may only delete their own. */
+    public void setCanDeleteOthersMarkers(boolean allowed) {
+        canDeleteOthersMarkers = allowed;
+    }
+
+    /**
+     * This device's own shared markers that were on its map when SARtak last
+     * ran for this operation. Any still missing once ATAK has settled were
+     * deleted while SARtak wasn't running. Markers imported from others
+     * don't count: ATAK doesn't keep those across a restart, so their absence
+     * says nothing; they come back from Ditto.
+     */
+    public void restorePresent(Set<String> markerUids) {
+        restoredPresent.clear();
+        if (markerUids != null)
+            restoredPresent.addAll(markerUids);
+    }
+
+    /**
+     * Own shared markers on the map at the last scan, plus remembered ones
+     * not yet checked, to save for {@link #restorePresent} after a restart.
+     */
+    public Set<String> getPresentForRestart() {
+        Set<String> present = new HashSet<>();
+        for (String uid : previouslyPresent) {
+            if (syncedSignatures.containsKey(uid) && ownPresent.contains(uid))
+                present.add(uid);
+        }
+        present.addAll(restoredPresent);
+        return present;
+    }
+
+    /** Shared markers on the map at the last scan that others created. */
+    public Set<String> getOthersPresent() {
+        Set<String> others = new HashSet<>();
+        for (String uid : previouslyPresent) {
+            if (syncedSignatures.containsKey(uid) && !ownPresent.contains(uid))
+                others.add(uid);
+        }
+        return others;
     }
 
     /**
@@ -163,6 +268,7 @@ public class SharedMapMarkerReconciler {
         if (operationId.length() == 0)
             return result;
         Map<String, SharedMapMarkerMessage> byUid = index(documents);
+        this.deviceUid = safe(deviceUid);
         applyRemote(byUid, local, safe(selfUid), result);
         publishLocal(byUid, local, publisher, safe(selfUid),
                 safe(selfCallsign), safe(deviceUid), safe(teamId), now,
@@ -202,6 +308,12 @@ public class SharedMapMarkerReconciler {
             }
             if (tombstoned.contains(uid))
                 continue;
+            // Was on the map last run and is missing now: either ATAK hasn't
+            // reloaded it yet or it was deleted meanwhile. Re-importing it
+            // would hide the delete, so leave it to checkRestoredPresent().
+            if (restoredPresent.contains(uid) && !local.exists(uid)
+                    && isOwn(document, selfUid))
+                continue;
             String version = document.versionSignature();
             if (version.equals(appliedVersions.get(uid)))
                 continue;
@@ -234,6 +346,7 @@ public class SharedMapMarkerReconciler {
             Result result) {
         List<SharedMapMarkerMessage> snapshots = local.scanShareable();
         Set<String> present = new HashSet<>();
+        Set<String> own = new HashSet<>();
         for (SharedMapMarkerMessage snapshot : snapshots) {
             String uid = snapshot.getMarkerUid();
             if (uid.length() == 0 || !snapshot.hasValidPosition())
@@ -244,6 +357,10 @@ public class SharedMapMarkerReconciler {
                 continue;
             }
             present.add(uid);
+            SharedMapMarkerMessage shared = byUid.get(uid);
+            if (isOwn(snapshot, selfUid, deviceUid)
+                    || shared != null && isOwn(shared, selfUid, deviceUid))
+                own.add(uid);
             boolean firstSeenInBaseline = !baselineEstablished;
             if (firstSeenInBaseline)
                 baseline.add(uid);
@@ -258,7 +375,7 @@ public class SharedMapMarkerReconciler {
                     syncedSignatures.put(uid, signature);
                     continue;
                 }
-            } else if (!shouldShareNewMarker(snapshot, deviceUid)) {
+            } else if (!shouldShareNewMarker(snapshot, deviceUid, result)) {
                 continue;
             }
             SharedMapMarkerMessage message = outgoing(snapshot, document,
@@ -285,38 +402,132 @@ public class SharedMapMarkerReconciler {
             if (document == null || document.isDeleted()
                     || local.exists(uid))
                 continue;
-            SharedMapMarkerMessage tombstone = new SharedMapMarkerMessage
-                    .Builder().markerUid(uid).operationId(operationId)
-                    .deleted(true, now, selfUid, selfCallsign).build();
-            final String deletedOperationId = operationId;
-            if (publisher.publishDeletion(tombstone, new Runnable() {
-                @Override
-                public void run() {
-                    deletionFailed(deletedOperationId, uid);
-                }
-            })) {
-                tombstoned.add(uid);
-                syncedSignatures.remove(uid);
-                result.deleted++;
-            } else {
-                // Try again on the next scan.
-                present.add(uid);
-            }
+            deleteOrRefuse(document, local, publisher, selfUid, selfCallsign,
+                    deviceUid, now, present, result);
         }
+        restoredPresent.removeAll(present);
+        if (!restoredPresent.isEmpty()
+                && now - sessionStartedAt >= RESTORED_DELETE_DELAY_MS)
+            checkRestoredPresent(byUid, local, publisher, selfUid,
+                    selfCallsign, deviceUid, now, present, result);
         previouslyPresent = present;
+        ownPresent = own;
         baselineEstablished = true;
     }
 
-    private boolean shouldShareNewMarker(SharedMapMarkerMessage snapshot,
+    /**
+     * One-off check of markers remembered from the last run that are still
+     * missing now ATAK has settled: they were deleted while SARtak wasn't
+     * running.
+     */
+    private void checkRestoredPresent(
+            Map<String, SharedMapMarkerMessage> byUid, LocalMap local,
+            Publisher publisher, String selfUid, String selfCallsign,
+            String deviceUid, long now, Set<String> present, Result result) {
+        List<SharedMapMarkerMessage> missing = new ArrayList<>();
+        int remembered = restoredPresent.size();
+        for (String uid : restoredPresent) {
+            SharedMapMarkerMessage document = byUid.get(uid);
+            if (document != null && !document.isDeleted()
+                    && isOwn(document, selfUid)
+                    && !tombstoned.contains(uid) && !local.exists(uid))
+                missing.add(document);
+        }
+        restoredPresent.clear();
+        if (isMassDisappearance(missing.size(), remembered))
+            return;
+        for (SharedMapMarkerMessage document : missing)
+            deleteOrRefuse(document, local, publisher, selfUid, selfCallsign,
+                    deviceUid, now, present, result);
+    }
+
+    /** True when the missing markers look like a load failure, not deletes. */
+    static boolean isMassDisappearance(int missing, int remembered) {
+        return missing >= RESTORED_DELETE_SANITY_MIN
+                && missing * 2 > remembered;
+    }
+
+    /**
+     * Publishes a tombstone for a marker deleted on this device, or, when
+     * this device may not delete it, puts it back on the map instead.
+     */
+    private void deleteOrRefuse(SharedMapMarkerMessage document,
+            LocalMap local, Publisher publisher, String selfUid,
+            String selfCallsign, String deviceUid, long now,
+            Set<String> present, Result result) {
+        final String uid = document.getMarkerUid();
+        if (!mayDelete(document, selfUid, deviceUid)) {
+            SharedMapMarkerMessage restored = local.apply(document);
+            if (restored != null) {
+                syncedSignatures.put(uid, restored.contentSignature());
+                present.add(uid);
+            }
+            result.refusedDeletes.add(document.getTitle().length() == 0
+                    ? uid : document.getTitle());
+            return;
+        }
+        SharedMapMarkerMessage tombstone = new SharedMapMarkerMessage
+                .Builder().markerUid(uid).operationId(operationId)
+                .deleted(true, now, selfUid, selfCallsign).build();
+        final String deletedOperationId = operationId;
+        if (publisher.publishDeletion(tombstone, new Runnable() {
+            @Override
+            public void run() {
+                deletionFailed(deletedOperationId, uid);
+            }
+        })) {
+            tombstoned.add(uid);
+            syncedSignatures.remove(uid);
+            result.deleted++;
+        } else {
+            // Try again on the next scan.
+            present.add(uid);
+        }
+    }
+
+    /** Leaders and HQ may delete any marker; searchers only their own. */
+    private boolean mayDelete(SharedMapMarkerMessage document, String selfUid,
             String deviceUid) {
+        return canDeleteOthersMarkers || isOwn(document, selfUid, deviceUid);
+    }
+
+    private boolean isOwn(SharedMapMarkerMessage document, String selfUid) {
+        return isOwn(document, selfUid, deviceUid);
+    }
+
+    /** Created on this device (the sender, for documents with no creator). */
+    private static boolean isOwn(SharedMapMarkerMessage document,
+            String selfUid, String deviceUid) {
+        String creator = document.getCreatorUid().length() > 0
+                ? document.getCreatorUid() : document.getSenderUid();
+        return creator.length() > 0 && (creator.equals(selfUid)
+                || creator.equals(deviceUid));
+    }
+
+    private boolean shouldShareNewMarker(SharedMapMarkerMessage snapshot,
+            String deviceUid, Result result) {
         if (deviceUid.length() > 0
-                && deviceUid.equals(snapshot.getCreatorUid()))
-            return true;
+                && deviceUid.equals(snapshot.getCreatorUid())) {
+            if (!isFromBeforeJoining(snapshot)
+                    || existingMarkers == ExistingMarkers.SHARE)
+                return true;
+            if (existingMarkers == ExistingMarkers.ASK)
+                result.existingWaiting++;
+            return false;
+        }
         if (snapshot.getCreatedAt() > 0L)
             return snapshot.getCreatedAt()
                     >= sessionStartedAt - SESSION_CREATION_GRACE_MS;
         // No creation metadata: fall back to "appeared during this session".
         return !baseline.contains(snapshot.getMarkerUid());
+    }
+
+    /** An own marker made before this device joined the operation. */
+    private boolean isFromBeforeJoining(SharedMapMarkerMessage snapshot) {
+        if (snapshot.getCreatedAt() > 0L)
+            return snapshot.getCreatedAt()
+                    < operationJoinedAt - SESSION_CREATION_GRACE_MS;
+        return baseline.contains(snapshot.getMarkerUid());
     }
 
     private SharedMapMarkerMessage outgoing(SharedMapMarkerMessage snapshot,

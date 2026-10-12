@@ -50,6 +50,7 @@ import com.atakmap.android.plugintemplate.grid.SearchTeamStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 import com.atakmap.android.plugintemplate.grid.SearchTrackOverlay;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
+import com.atakmap.android.plugintemplate.runtime.AlertAckStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakRoleResolver;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
@@ -79,6 +80,7 @@ import com.atakmap.android.plugintemplate.runtime.SearchRoutePlan;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SharedMapMarkerSyncManager;
+import com.atakmap.android.plugintemplate.runtime.SharedMarkerStateStore;
 import com.atakmap.android.plugintemplate.runtime.StepTimer;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
@@ -116,6 +118,8 @@ public class SARTakMapController {
     // apart (from Jake's 855667e).
     private static final long BACKGROUND_REFRESH_INTERVAL_MS = 9700L;
     private static final long DEFERRED_SERVICE_START_MS = 3000L;
+    // Closing the store took up to ~2.7 s on emulators (finding T2-1).
+    private static final long DITTO_UNLOAD_WAIT_MS = 5000L;
 
     private final MapView mapView;
     private final GridCoordinateConverter converter;
@@ -147,6 +151,7 @@ public class SARTakMapController {
     private final SearchLineCotWorkflow searchLineCotWorkflow;
     private final DittoSyncManager dittoSyncManager;
     private final DittoCredentialStore dittoCredentialStore;
+    private String dittoProfileNotice;
     private final DittoAtakContactBridge dittoAtakContactBridge;
     private final SharedMapMarkerSyncManager sharedMapMarkerSyncManager;
     private final SearchTeamStateStore teamStateStore;
@@ -246,7 +251,8 @@ public class SARTakMapController {
         this.dittoSyncManager = new DittoSyncManager(mapView, identityManager);
         this.dittoAtakContactBridge = new DittoAtakContactBridge(mapView);
         this.sharedMapMarkerSyncManager = new SharedMapMarkerSyncManager(
-                mapView, identityManager, dittoSyncManager);
+                mapView, identityManager, dittoSyncManager,
+                new SharedMarkerStateStore(runtimeContext));
         // Merely restoring an operation must not start Ditto while ATAK is
         // still constructing plugins on its main thread.
         this.dittoSyncManager.prepareOperationProfile(activeOperationProfile);
@@ -670,41 +676,24 @@ public class SARTakMapController {
     public String getAlertAckSummary(SearchAlertMessage alert) {
         if (alert == null)
             return "No alert selected";
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
-        String selfCallsign = identity == null ? "" : identity.getCallsign();
-        java.util.Set<String> expected = new java.util.LinkedHashSet<>();
-        java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+        return getAlertAckStatus(alert).summary();
+    }
+
+    /** Every team member the alert was meant for, other than its sender. */
+    public AlertAckStatus getAlertAckStatus(SearchAlertMessage alert) {
+        java.util.Map<String, String> recipients =
+                new java.util.LinkedHashMap<>();
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
-            if (matchesMember(member.getUniqueId(), member.getCallsign(),
-                    alert.getSenderUid(), alert.getSenderCallsign())
-                    || matchesMember(member.getUniqueId(), member.getCallsign(),
-                            selfUid, selfCallsign))
+            if (member.getUniqueId() == null
+                    || member.getUniqueId().trim().length() == 0
+                    || matchesMember(member.getUniqueId(),
+                            member.getCallsign(), alert.getSenderUid(),
+                            alert.getSenderCallsign()))
                 continue;
-            expected.add(member.getUniqueId());
-            names.put(member.getUniqueId(), member.getCallsign());
+            recipients.put(member.getUniqueId(), member.getCallsign());
         }
-        java.util.Set<String> acknowledged = new java.util.LinkedHashSet<>();
-        for (SearchAlertMessage message : dittoSyncManager.getAlertMessages()) {
-            if (message.getAlertId().equals(alert.getAlertId())
-                    && SearchAlertMessage.ACTION_ACK.equals(message
-                            .getAction())
-                    && message.getCreated() >= alert.getCreated()
-                    && expected.contains(message.getAckUid()))
-                acknowledged.add(message.getAckUid());
-        }
-        StringBuilder missing = new StringBuilder();
-        for (String uid : expected) {
-            if (!acknowledged.contains(uid)) {
-                if (missing.length() > 0)
-                    missing.append(", ");
-                missing.append(names.get(uid));
-            }
-        }
-        String summary = acknowledged.size() + "/" + expected.size()
-                + " acknowledged";
-        return missing.length() == 0 ? summary : summary + " | Waiting: "
-                + missing;
+        return AlertAckStatus.of(alert, dittoSyncManager.getAlertMessages(),
+                recipients, getSelfMemberId());
     }
 
     public boolean toggleTeamCallsigns() {
@@ -1375,7 +1364,10 @@ public class SARTakMapController {
                         + (isOperationArchived() ? " (archived)" : "")
                         : "Create or join an operation");
         appendReadinessLine(builder, dittoState, "Ditto sync",
-                dittoSyncManager.getSummary());
+                isOfflineWithNoPeers()
+                        ? "Offline: no network and no SARtak device heard from"
+                                + " in 30 sec | " + dittoSyncManager.getSummary()
+                        : dittoSyncManager.getSummary());
         appendReadinessLine(builder,
                 hqRole || teamReady ? READINESS_READY : READINESS_WAITING,
                 "SAR team",
@@ -1753,8 +1745,17 @@ public class SARTakMapController {
         boolean leavingAsMember = notifyLeader
                 && assignmentManager.isTeamCreated()
                 && !assignmentManager.isOwnTeam(getFixedLeaderTeamId());
-        if (leavingAsMember)
+        if (leavingAsMember) {
             publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_LEFT);
+            // So an accept from before leaving can't put this device back in.
+            IdentityManager.Identity identity =
+                    identityManager.getCurrentIdentity();
+            rememberInactiveMembership(assignmentManager.getTeamId(),
+                    identity == null ? assignmentManager.getSelfMemberId()
+                            : identity.getUid(),
+                    identity == null ? "" : identity.getCallsign(),
+                    System.currentTimeMillis());
+        }
         if (leavingAsMember)
             teamCotWorkflow.memberLeft(assignmentManager.getTeamId(),
                     assignmentManager.getTeamName(),
@@ -1833,7 +1834,22 @@ public class SARTakMapController {
         }
     }
 
-    public void acceptJoinResponse(SearchTeamCotMessage response) {
+    /**
+     * Joins the team a leader accepted this device into, and reports whether
+     * it did. Both the panel poll and the background refresh call this, so an
+     * accept is applied once whichever sees it first; before that, the second
+     * caller re-applied it and a member removed within the accept's 60 s
+     * lifetime was put straight back in the team. An accept from before this
+     * device last left or was removed from the team answers an old request.
+     */
+    public boolean acceptJoinResponse(SearchTeamCotMessage response) {
+        if (assignmentManager.isTeamCreated()
+                || !rememberAppliedMessage(response))
+            return false;
+        if (hasNewerInactiveMembership(response.getTeamId(),
+                response.getTargetUid(), response.getTargetCallsign(),
+                response.getCreated()))
+            return false;
         forgetInactiveMembership(response.getTeamId(),
                 assignmentManager.getSelfMemberId(),
                 response.getTargetCallsign(), response.getCreated());
@@ -1847,6 +1863,7 @@ public class SARTakMapController {
         publishTeamPresence();
         publishDittoDeviceStateNow();
         refreshOverlay();
+        return true;
     }
 
     public void respondToInvite(SearchTeamCotMessage invite,
@@ -2477,6 +2494,8 @@ public class SARTakMapController {
         rawGnssCaptureManager.stop();
         healthManager.stop();
         dittoSyncManager.stop();
+        // Unloading: the store must be closed before the plugin goes away.
+        dittoSyncManager.awaitStopped(DITTO_UNLOAD_WAIT_MS);
         dittoAtakContactBridge.clear();
         teamCotWorkflow.dispose();
         gridCotWorkflow.dispose();
@@ -2707,7 +2726,8 @@ public class SARTakMapController {
         timer.mark("lifecycle");
         applyDittoMembershipSnapshots();
         timer.mark("membership");
-        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
+        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId(),
+                isLeaderRole() || isHqRole());
         timer.mark("markers");
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
@@ -3060,7 +3080,8 @@ public class SARTakMapController {
         restoreSearchDirection();
         publishDittoDeviceStateNow();
         syncDittoDevicesToAtakMarkers();
-        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
+        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId(),
+                isLeaderRole() || isHqRole());
         refreshTeamContactsInternal();
         refreshOverlay();
     }
@@ -3130,6 +3151,8 @@ public class SARTakMapController {
                 || summary.contains("stopped")
                 || summary.contains("(inactive)")
                 || summary.contains("(unknown)"))
+            return READINESS_WAITING;
+        if (isOfflineWithNoPeers())
             return READINESS_WAITING;
         return READINESS_READY;
     }
@@ -3351,8 +3374,6 @@ public class SARTakMapController {
 
         if (!assignmentManager.isTeamCreated()) {
             for (SearchTeamCotMessage response : getJoinResponsesForMe()) {
-                if (!rememberAppliedMessage(response))
-                    continue;
                 if (SearchTeamCotMessage.ACTION_JOIN_ACCEPT.equals(
                         response.getAction()))
                     acceptJoinResponse(response);
@@ -3835,35 +3856,26 @@ public class SARTakMapController {
     private void saveCredentialsFromOperationProfile(OperationProfile profile) {
         if (profile == null || !profile.hasDittoCredentials())
             return;
-        DittoCredentialProfile existing =
-                findDittoCredentialProfileByConnection(profile
-                        .getDittoDatabaseId(), profile.getDittoAuthUrl());
         String label = profile.getOperationName().length() == 0
                 ? "Imported Operation Profile"
                 : profile.getOperationName();
-        DittoCredentialProfile credentialProfile = existing == null
-                ? DittoCredentialProfile.create(label,
-                        DittoCredentialProfile.CONNECTION_SDK,
-                        profile.getDittoDatabaseId(),
+        DittoCredentialStore.ImportResult result = dittoCredentialStore
+                .importFromOperation(label, profile.getDittoDatabaseId(),
                         profile.getDittoAuthUrl(),
-                        profile.getDittoDevelopmentToken())
-                : existing.updated(label, DittoCredentialProfile.CONNECTION_SDK,
-                        profile.getDittoDatabaseId(), profile.getDittoAuthUrl(),
                         profile.getDittoDevelopmentToken());
-        dittoCredentialStore.saveProfile(credentialProfile);
+        if (result == DittoCredentialStore.ImportResult.TOKEN_UPDATED)
+            dittoProfileNotice = "Updated the token of the saved Ditto profile"
+                    + " for this operation";
     }
 
-    private DittoCredentialProfile findDittoCredentialProfileByConnection(
-            String databaseId, String authUrl) {
-        String targetDatabaseId = databaseId == null ? "" : databaseId.trim();
-        String targetAuthUrl = authUrl == null ? "" : authUrl.trim();
-        for (DittoCredentialProfile profile : dittoCredentialStore
-                .getProfiles()) {
-            if (profile.getDatabaseId().equals(targetDatabaseId)
-                    && profile.getAuthUrl().equals(targetAuthUrl))
-                return profile;
-        }
-        return null;
+    /**
+     * Returns, once, a message about what joining or switching did to the
+     * saved Ditto profiles, or null when there is nothing to say.
+     */
+    public String takeDittoProfileNotice() {
+        String notice = dittoProfileNotice;
+        dittoProfileNotice = null;
+        return notice;
     }
 
     private boolean handleRouteSelectionMapEvent(MapEvent event) {
@@ -4026,6 +4038,28 @@ public class SARTakMapController {
             if (teamId.length() > 0)
                 return teamId;
             return "Unassigned";
+        }
+    }
+
+    /**
+     * Ditto can only be syncing if it has a network or a nearby peer it is
+     * still hearing from. Either alone is enough: Ditto also syncs device to
+     * device with no internet.
+     */
+    private boolean isOfflineWithNoPeers() {
+        return dittoSyncManager.getRecentPeerCount() == 0
+                && !isNetworkConnected();
+    }
+
+    private boolean isNetworkConnected() {
+        try {
+            ConnectivityManager manager = (ConnectivityManager) mapView
+                    .getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo active = manager == null ? null
+                    : manager.getActiveNetworkInfo();
+            return active != null && active.isConnected();
+        } catch (Exception exception) {
+            return true;
         }
     }
 

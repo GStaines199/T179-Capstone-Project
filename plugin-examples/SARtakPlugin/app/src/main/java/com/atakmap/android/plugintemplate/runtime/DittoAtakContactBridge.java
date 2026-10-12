@@ -380,9 +380,12 @@ public class DittoAtakContactBridge {
 
     private boolean isLeader(DittoDeviceSnapshot snapshot) {
         String role = safe(snapshot.getRole()).toLowerCase();
+        // A device outside any team reports itself as its own leader, which
+        // labelled every unassigned member "Team Lead" in the invite list.
         return role.equals("team lead") || role.equals("team leader")
                 || role.equals("leader")
-                || matches(snapshot.getUid(), snapshot.getLeaderUid());
+                || (snapshot.isTeamCreated()
+                        && matches(snapshot.getUid(), snapshot.getLeaderUid()));
     }
 
     private boolean matches(String first, String second) {

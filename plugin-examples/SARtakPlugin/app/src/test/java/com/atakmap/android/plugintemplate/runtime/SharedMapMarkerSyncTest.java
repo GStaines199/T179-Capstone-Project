@@ -14,6 +14,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -313,12 +314,18 @@ public class SharedMapMarkerSyncTest {
     }
 
     @Test
-    public void ownMarkersFromBeforeStartupAreShared() {
+    public void ownMarkersFromBeforeJoiningWaitForTheAnswerThenShare() {
         alpha.createMarker("old-own", "Old", 5.0, 5.0,
                 SESSION - 86_400_000L);
         alpha.startSession(SESSION);
         bravo.startSession(SESSION);
 
+        runRounds(3);
+        assertNull(network.document("old-own"));
+        assertEquals(1, alpha.lastResult.existingWaiting);
+
+        alpha.reconciler.setExistingMarkers(
+                SharedMapMarkerReconciler.ExistingMarkers.SHARE);
         runRounds(3);
 
         assertNotNull(bravo.map.get("old-own"));
@@ -490,6 +497,192 @@ public class SharedMapMarkerSyncTest {
         assertEquals(0, bravo.published);
     }
 
+    // Finding T4-7: own markers from before joining wait for one answer.
+
+    @Test
+    public void ownMarkersFromBeforeJoiningStayPrivateWhenTheUserSaysNo() {
+        alpha.createMarker("old-own", "Old", 5.0, 5.0,
+                SESSION - 86_400_000L);
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.reconciler.setExistingMarkers(
+                SharedMapMarkerReconciler.ExistingMarkers.KEEP_PRIVATE);
+        alpha.createMarker("new-own", "New", 6.0, 6.0, SESSION + 1000L);
+
+        runRounds(4);
+
+        assertNull(network.document("old-own"));
+        assertNotNull(network.document("new-own"));
+        assertEquals(0, alpha.lastResult.existingWaiting);
+    }
+
+    @Test
+    public void ownMarkersMadeAfterJoiningAreSharedAfterARestart() {
+        // Joined two days ago; this marker is from yesterday, before today's
+        // ATAK start but after joining.
+        alpha.createMarker("mine", "Mine", 5.0, 5.0, SESSION - 86_400_000L);
+        alpha.startSession(SESSION);
+        alpha.reconciler.setOperationJoinedAt(SESSION - 2L * 86_400_000L);
+        bravo.startSession(SESSION);
+
+        runRounds(3);
+
+        assertNotNull(network.document("mine"));
+        assertEquals(0, alpha.lastResult.existingWaiting);
+    }
+
+    // Finding T4-6: searchers may only delete their own markers.
+
+    @Test
+    public void searcherCannotDeleteSomeoneElsesMarker() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        bravo.canDeleteOthers = false;
+        alpha.createMarker("m1", "Footprint", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+
+        bravo.map.remove("m1");
+        network.tick();
+        bravo.sync();
+
+        assertEquals(Collections.singletonList("Footprint"),
+                bravo.lastResult.refusedDeletes);
+        runRounds(3);
+        assertNotNull(bravo.map.get("m1"));
+        assertNotNull(alpha.map.get("m1"));
+        assertFalse(network.document("m1").isDeleted());
+    }
+
+    @Test
+    public void searcherCanDeleteTheirOwnMarker() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        bravo.canDeleteOthers = false;
+        bravo.createMarker("m1", "Mine", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+        assertNotNull(alpha.map.get("m1"));
+
+        bravo.map.remove("m1");
+        runRounds(3);
+
+        assertNull(alpha.map.get("m1"));
+        assertTrue(network.document("m1").isDeleted());
+    }
+
+    @Test
+    public void leaderCanDeleteSomeoneElsesMarker() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.canDeleteOthers = false;
+        alpha.createMarker("m1", "Footprint", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+
+        // Bravo is the leader here.
+        bravo.map.remove("m1");
+        runRounds(3);
+
+        assertNull(alpha.map.get("m1"));
+    }
+
+    // Finding T4-5: deletes made while SARtak wasn't running.
+
+
+    @Test
+    public void ownMarkerDeletedWhileSarTakWasOffIsDeletedAfterARestart() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.createMarker("m1", "Gone", 10.0, 20.0, SESSION + 1000L);
+        alpha.createMarker("m2", "Kept", 11.0, 21.0, SESSION + 1000L);
+        alpha.createMarker("m3", "Kept too", 12.0, 22.0, SESSION + 1000L);
+        runRounds(3);
+
+        // SARtak is off on Alpha while its marker is deleted in plain ATAK.
+        alpha.map.remove("m1");
+        alpha.restart(SESSION + 3_600_000L);
+        runRounds(8);
+
+        assertTrue(network.document("m1").isDeleted());
+        assertNull(bravo.map.get("m1"));
+        assertNotNull(bravo.map.get("m2"));
+        assertNotNull(bravo.map.get("m3"));
+    }
+
+    @Test
+    public void importedMarkersMissingAfterARestartComeBackInsteadOfBeingDeleted() {
+        // ATAK doesn't keep markers SARtak imported, so after a restart
+        // they are missing until Ditto brings them back. Seen on the lead
+        // emulator before this rule: it deleted a member's marker.
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.createMarker("m1", "Theirs", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+
+        bravo.map.remove("m1");
+        bravo.restart(SESSION + 3_600_000L);
+        runRounds(8);
+
+        assertFalse(network.document("m1").isDeleted());
+        assertNotNull(bravo.map.get("m1"));
+        assertNotNull(alpha.map.get("m1"));
+    }
+
+    @Test
+    public void ownMarkersAtakReloadsLateAreNotDeleted() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.createMarker("m1", "Slow", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+        SharedMapMarkerMessage saved = alpha.map.remove("m1");
+
+        alpha.restart(SESSION + 3_600_000L);
+        runRounds(3);
+        assertFalse(network.document("m1").isDeleted());
+        // ATAK finishes reloading its saved markers.
+        alpha.map.put("m1", saved);
+        runRounds(8);
+
+        assertFalse(network.document("m1").isDeleted());
+        assertNotNull(bravo.map.get("m1"));
+    }
+
+    @Test
+    public void mostOwnMarkersVanishingAtOnceIsNotTreatedAsDeletes() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        for (int i = 0; i < 4; i++)
+            alpha.createMarker("m" + i, "Marker " + i, i, i,
+                    SESSION + 1000L);
+        runRounds(3);
+
+        alpha.map.clear();
+        alpha.restart(SESSION + 3_600_000L);
+        runRounds(8);
+
+        for (int i = 0; i < 4; i++)
+            assertFalse(network.document("m" + i).isDeleted());
+        assertEquals(4, bravo.map.size());
+    }
+
+    @Test
+    public void markersOthersCreatedAreReportedForTheImportList() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.createMarker("m1", "Theirs", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+
+        assertTrue(bravo.reconciler.getOthersPresent().contains("m1"));
+        assertFalse(alpha.reconciler.getOthersPresent().contains("m1"));
+    }
+
+    @Test
+    public void massDisappearanceNeedsMostAndAtLeastThree() {
+        assertFalse(SharedMapMarkerReconciler.isMassDisappearance(1, 1));
+        assertFalse(SharedMapMarkerReconciler.isMassDisappearance(2, 2));
+        assertFalse(SharedMapMarkerReconciler.isMassDisappearance(3, 6));
+        assertTrue(SharedMapMarkerReconciler.isMassDisappearance(3, 5));
+        assertTrue(SharedMapMarkerReconciler.isMassDisappearance(10, 10));
+    }
+
     private void runRounds(int rounds) {
         for (int i = 0; i < rounds; i++) {
             network.tick();
@@ -509,6 +702,11 @@ public class SharedMapMarkerSyncTest {
         final Map<String, SharedMapMarkerMessage> map = new LinkedHashMap<>();
         final Map<String, Map<String, Stamp>> replica = new LinkedHashMap<>();
         SharedMapMarkerReconciler reconciler;
+        SharedMapMarkerReconciler.Result lastResult;
+        /** False for a searcher (finding T4-6). */
+        boolean canDeleteOthers = true;
+        /** What SARtak saved for the next start (finding T4-5). */
+        java.util.Set<String> savedPresent = new java.util.HashSet<>();
         boolean connected = true;
         int published;
         long now;
@@ -539,14 +737,17 @@ public class SharedMapMarkerSyncTest {
             // ATAK drops in-memory meta; SARtak-created markers come back
             // only if ATAK saved them, which the tests model explicitly.
             startSession(startedAt);
+            reconciler.restorePresent(savedPresent);
         }
 
         void sync() {
             if (reconciler == null)
                 return;
             now += 5000L;
-            reconciler.sync(documents(), this, this, uid, callsign,
-                    deviceUid, "team-1", now);
+            reconciler.setCanDeleteOthersMarkers(canDeleteOthers);
+            lastResult = reconciler.sync(documents(), this, this, uid,
+                    callsign, deviceUid, "team-1", now);
+            savedPresent = reconciler.getPresentForRestart();
             // Failures are reported after the sync, as the main-thread post
             // does on a device.
             List<Runnable> reported = new ArrayList<>(failures);

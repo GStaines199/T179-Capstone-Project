@@ -36,6 +36,7 @@ import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchLineManager;
 import com.atakmap.android.plugintemplate.grid.SearchLineOperationExit;
+import com.atakmap.android.plugintemplate.grid.TeamAreaVersionTracker;
 import com.atakmap.android.plugintemplate.grid.SearchLineOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchLineStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchPartyAssignmentManager;
@@ -165,7 +166,8 @@ public class SARTakMapController {
     private String atakContactSummary = "ATAK contacts not scanned yet";
     private AtakRoleResolver.Role currentRole = AtakRoleResolver.Role.TEAM_MEMBER;
     private OperationProfile activeOperationProfile;
-    private String lastAppliedAreaAssignmentId = "";
+    private final TeamAreaVersionTracker teamAreaVersions =
+            new TeamAreaVersionTracker();
     private String lastPublishedAreaFingerprint = "";
     private SearchRoutePlan activeRoutePlan;
     private final RouteProgressTracker routeProgressTracker =
@@ -821,8 +823,8 @@ public class SARTakMapController {
                 System.currentTimeMillis(), area);
         dittoSyncManager.publishAreaAssignment(assignment);
         lastPublishedAreaFingerprint = fingerprint;
-        lastAppliedAreaAssignmentId = assignment.getAssignmentId() + "@"
-                + assignment.getUpdatedAt();
+        teamAreaVersions.recordPublished(assignment.getAssignmentId(),
+                assignment.getUpdatedAt());
     }
 
     private void publishPersistedAreaIfNeeded() {
@@ -3186,12 +3188,26 @@ public class SARTakMapController {
         SearchAreaAssignment assignment = getAssignedAreaForMyTeam();
         if (assignment == null || assignment.getArea() == null)
             return;
-        String applyKey = assignment.getAssignmentId() + "@"
-                + assignment.getUpdatedAt();
-        if (applyKey.equals(lastAppliedAreaAssignmentId))
+        SearchGridStateStore.PlannedAreaRecord current =
+                gridManager.getPlannedAreaRecord();
+        TeamAreaVersionTracker.Decision decision = teamAreaVersions.decide(
+                assignment.getAssignmentId(), assignment.getUpdatedAt(),
+                plannedAreaFingerprint(assignment.getArea()),
+                current == null ? "" : plannedAreaFingerprint(current));
+        if (decision == TeamAreaVersionTracker.Decision.SKIP)
             return;
+        if (decision == TeamAreaVersionTracker.Decision.RECORD_ONLY) {
+            teamAreaVersions.recordApplied(assignment.getAssignmentId(),
+                    assignment.getUpdatedAt());
+            return;
+        }
         if (gridManager.restorePlannedArea(assignment.getArea())) {
-            lastAppliedAreaAssignmentId = applyKey;
+            teamAreaVersions.recordApplied(assignment.getAssignmentId(),
+                    assignment.getUpdatedAt());
+            if (BuildConfig.DEBUG)
+                Log.d(PERF_TAG, "team area applied from "
+                        + assignment.getAssignedByCallsign() + " updatedAt="
+                        + assignment.getUpdatedAt());
             gridOverlay.setVisible(true);
         }
     }

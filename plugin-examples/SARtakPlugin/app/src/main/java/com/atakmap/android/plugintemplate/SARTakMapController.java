@@ -116,6 +116,8 @@ public class SARTakMapController {
     // apart (from Jake's 855667e).
     private static final long BACKGROUND_REFRESH_INTERVAL_MS = 9700L;
     private static final long DEFERRED_SERVICE_START_MS = 3000L;
+    // Closing the store took up to ~2.7 s on emulators (finding T2-1).
+    private static final long DITTO_UNLOAD_WAIT_MS = 5000L;
 
     private final MapView mapView;
     private final GridCoordinateConverter converter;
@@ -2478,6 +2480,8 @@ public class SARTakMapController {
         rawGnssCaptureManager.stop();
         healthManager.stop();
         dittoSyncManager.stop();
+        // Unloading: the store must be closed before the plugin goes away.
+        dittoSyncManager.awaitStopped(DITTO_UNLOAD_WAIT_MS);
         dittoAtakContactBridge.clear();
         teamCotWorkflow.dispose();
         gridCotWorkflow.dispose();

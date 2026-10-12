@@ -249,4 +249,41 @@ public class DittoWriteQueueTest {
             Thread.currentThread().interrupt();
         }
     }
+
+    @Test
+    public void finishRunsWhatIsQueuedThenRefusesMore() throws Exception {
+        final CountDownLatch gate = new CountDownLatch(1);
+        final CountDownLatch last = new CountDownLatch(1);
+        queue.submit(null, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    gate.await();
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+                ran.add("first");
+            }
+        });
+        queue.submit(null, new Runnable() {
+            @Override
+            public void run() {
+                ran.add("second");
+                last.countDown();
+            }
+        });
+
+        // Returns while the first write is still held.
+        queue.finish();
+        assertFalse(queue.submit(null, new Runnable() {
+            @Override
+            public void run() {
+                ran.add("late");
+            }
+        }));
+        gate.countDown();
+
+        assertTrue(last.await(WAIT_MS, TimeUnit.MILLISECONDS));
+        assertEquals(java.util.Arrays.asList("first", "second"), ran);
+    }
 }

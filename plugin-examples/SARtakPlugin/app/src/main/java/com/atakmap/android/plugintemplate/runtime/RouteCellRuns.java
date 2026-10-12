@@ -2,8 +2,6 @@ package com.atakmap.android.plugintemplate.runtime;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Compact form of a route's cell list for sync.
@@ -23,8 +21,11 @@ public final class RouteCellRuns {
     /** Refuses to expand a damaged or hostile document into millions of ids. */
     static final int MAX_DECODED_CELLS = 250_000;
 
-    private static final Pattern CELL_ID_PATTERN = Pattern.compile(
-            "^utm-([^-]+)-c100-e(\\d+)-n(\\d+)$");
+    private static final String ID_PREFIX = "utm-";
+    private static final String SIZE_AND_EASTING = "-c100-e";
+    private static final String NORTHING = "-n";
+    /** Longer digit strings could overflow a long; no real cell is near it. */
+    private static final int MAX_DIGITS = 18;
     private static final long CELL_SIZE_METERS = 100L;
 
     private RouteCellRuns() {
@@ -158,23 +159,58 @@ public final class RouteCellRuns {
             this.northing = northing;
         }
 
+        /**
+         * Parses {@code utm-<zone>-c100-e<easting>-n<northing>} by hand.
+         *
+         * <p>This runs once per cell of a route, 40,401 times for a 20 km
+         * Auto Route, on the main thread, where a regex match plus
+         * rebuilding the id to compare it was too slow.
+         */
         static ParsedId parse(String cellId) {
-            if (cellId == null)
+            if (cellId == null || !cellId.startsWith(ID_PREFIX))
                 return null;
-            Matcher matcher = CELL_ID_PATTERN.matcher(cellId);
-            if (!matcher.matches())
+            int zoneEnd = cellId.indexOf('-', ID_PREFIX.length());
+            if (zoneEnd <= ID_PREFIX.length()
+                    || !cellId.startsWith(SIZE_AND_EASTING, zoneEnd))
                 return null;
-            try {
-                ParsedId parsed = new ParsedId(matcher.group(1),
-                        Long.parseLong(matcher.group(2)),
-                        Long.parseLong(matcher.group(3)));
-                // Only ids that decode back to exactly themselves can be
-                // folded into a run; "e0502000" would come back as "e502000".
-                return cellId(parsed.zone, parsed.easting, parsed.northing)
-                        .equals(cellId) ? parsed : null;
-            } catch (NumberFormatException ignored) {
+            int eastingStart = zoneEnd + SIZE_AND_EASTING.length();
+            int eastingEnd = digitsEnd(cellId, eastingStart);
+            if (!cellId.startsWith(NORTHING, eastingEnd))
                 return null;
-            }
+            int northingStart = eastingEnd + NORTHING.length();
+            if (digitsEnd(cellId, northingStart) != cellId.length())
+                return null;
+            long easting = canonicalNumber(cellId, eastingStart, eastingEnd);
+            long northing = canonicalNumber(cellId, northingStart,
+                    cellId.length());
+            if (easting < 0 || northing < 0)
+                return null;
+            return new ParsedId(cellId.substring(ID_PREFIX.length(),
+                    zoneEnd), easting, northing);
+        }
+
+        private static int digitsEnd(String text, int from) {
+            int index = from;
+            while (index < text.length() && text.charAt(index) >= '0'
+                    && text.charAt(index) <= '9')
+                index++;
+            return index;
+        }
+
+        /**
+         * The digits as a number, or -1 when there are none, too many, or a
+         * leading zero. Only ids that rebuild to exactly themselves can be
+         * folded into a run; "e0502000" would come back as "e502000".
+         */
+        private static long canonicalNumber(String text, int from, int to) {
+            int length = to - from;
+            if (length <= 0 || length > MAX_DIGITS
+                    || (length > 1 && text.charAt(from) == '0'))
+                return -1;
+            long value = 0;
+            for (int index = from; index < to; index++)
+                value = value * 10 + (text.charAt(index) - '0');
+            return value;
         }
     }
 }

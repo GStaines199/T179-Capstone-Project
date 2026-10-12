@@ -96,6 +96,21 @@ public class SearchPartyAssignmentManager {
         return leader == null ? "" : leader.getCallsign();
     }
 
+    /**
+     * Whether the current team is the one this device created, given the id
+     * this device gives its own team.
+     *
+     * <p>Decided by the team id, not by the ATAK role or the roster's leader
+     * flag: both follow the role, and a lead can switch to HQ after creating
+     * the team. Leaving then has to act as the team's owner, not as a member
+     * walking out of its own team.
+     */
+    public boolean isOwnTeam(String ownTeamId) {
+        return teamCreated && ownTeamId != null
+                && ownTeamId.trim().length() > 0
+                && ownTeamId.trim().equals(teamId);
+    }
+
     public int getLastAtakMatchedMembers() {
         return lastAtakMatchedMembers;
     }

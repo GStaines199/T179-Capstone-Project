@@ -1708,6 +1708,9 @@ public class SARTakMapController {
     }
 
     public void resetDebugFixture() {
+        // Like leaveOperation(), but local only: nothing is sent to the team.
+        SearchLineOperationExit.endForLeave(searchLineManager,
+                searchLineStateStore, false, null);
         activeOperationProfile = null;
         operationStateStore.clear();
         scopeLocalStoresToActiveOperation();
@@ -1721,10 +1724,14 @@ public class SARTakMapController {
     }
 
     private void clearLocalTeam(boolean notifyLeader) {
-        if (notifyLeader && assignmentManager.isTeamCreated()
-                && !isLeaderRole())
+        // Whether this device is a member of the team, not its current ATAK
+        // role: a lead that switched to HQ still owns the team it made.
+        boolean leavingAsMember = notifyLeader
+                && assignmentManager.isTeamCreated()
+                && !assignmentManager.isOwnTeam(getFixedLeaderTeamId());
+        if (leavingAsMember)
             publishSelfMembership(DittoTeamMembershipSnapshot.STATUS_LEFT);
-        if (notifyLeader && assignmentManager.isTeamCreated() && !isLeaderRole())
+        if (leavingAsMember)
             teamCotWorkflow.memberLeft(assignmentManager.getTeamId(),
                     assignmentManager.getTeamName(),
                     assignmentManager.getLeaderUid(),

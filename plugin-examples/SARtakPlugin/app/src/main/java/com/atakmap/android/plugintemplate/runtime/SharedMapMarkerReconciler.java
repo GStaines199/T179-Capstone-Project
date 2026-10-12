@@ -366,6 +366,27 @@ public class SharedMapMarkerReconciler {
         return live;
     }
 
+    /**
+     * The shared-marker list every role sees: a count, then up to
+     * {@code limit} markers, newest edit first, then how many more there are.
+     */
+    public static String summarize(List<SharedMapMarkerMessage> live,
+            int limit, TimeZone timeZone) {
+        if (live == null || live.isEmpty())
+            return "No shared markers in this operation yet";
+        StringBuilder text = new StringBuilder();
+        text.append(live.size()).append(live.size() == 1
+                ? " shared marker, newest edit first:"
+                : " shared markers, newest edit first:");
+        int shown = Math.min(Math.max(0, limit), live.size());
+        for (int i = 0; i < shown; i++)
+            text.append("\n- ").append(describe(live.get(i), timeZone));
+        if (live.size() > shown)
+            text.append("\n(and ").append(live.size() - shown)
+                    .append(" more)");
+        return text.toString();
+    }
+
     /** "Title - by Alpha 14:05 11 Oct (edited by Bravo 14:20 11 Oct)". */
     public static String describe(SharedMapMarkerMessage marker,
             TimeZone timeZone) {

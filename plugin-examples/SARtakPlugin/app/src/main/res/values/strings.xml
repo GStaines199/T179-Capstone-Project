@@ -133,6 +133,8 @@
     <string name="alerts_heading">Team Alerts</string>
     <string name="no_active_alerts">No active SARtak alerts</string>
     <string name="active_alerts">Active Alerts / Acknowledgements</string>
+    <string name="shared_markers_heading">Shared Markers</string>
+    <string name="no_shared_markers">No shared markers in this operation yet</string>
     <string name="alert_hold_position">Hold Position</string>
     <string name="alert_request_leader">Request Team Leader</string>
     <string name="alert_emergency_stop">Emergency Stop</string>

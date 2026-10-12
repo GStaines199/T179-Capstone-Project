@@ -126,6 +126,12 @@ public class SharedMapMarkerSyncManager {
         return lines;
     }
 
+    /** Count and newest markers, for the Alerts tab on every role. */
+    public String summarizeLiveMarkers(int limit) {
+        return SharedMapMarkerReconciler.summarize(getLiveMarkers(), limit,
+                TimeZone.getDefault());
+    }
+
     private final SharedMapMarkerReconciler.Publisher publisher =
             new SharedMapMarkerReconciler.Publisher() {
                 @Override

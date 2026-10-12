@@ -454,6 +454,27 @@ public class SharedMapMarkerSyncTest {
     }
 
     @Test
+    public void summaryListsTheNewestMarkersAndCountsTheRest() {
+        List<SharedMapMarkerMessage> live = new ArrayList<>();
+        for (int i = 0; i < 3; i++)
+            live.add(new SharedMapMarkerMessage.Builder().markerUid("m" + i)
+                    .title("Marker " + i)
+                    .creator("device-alpha", "ALPHA", 1_791_720_300_000L)
+                    .sender("device-alpha", "ALPHA").build());
+
+        assertEquals("3 shared markers, newest edit first:\n"
+                        + "- Marker 0 - by ALPHA 12:05 11 Oct\n"
+                        + "- Marker 1 - by ALPHA 12:05 11 Oct\n"
+                        + "(and 1 more)",
+                SharedMapMarkerReconciler.summarize(live, 2,
+                        TimeZone.getTimeZone("UTC")));
+        assertEquals("No shared markers in this operation yet",
+                SharedMapMarkerReconciler.summarize(
+                        new ArrayList<SharedMapMarkerMessage>(), 2,
+                        TimeZone.getTimeZone("UTC")));
+    }
+
+    @Test
     public void largeMarkerSetSyncsOnceAndThenStaysQuiet() {
         alpha.startSession(SESSION);
         bravo.startSession(SESSION);

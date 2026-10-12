@@ -1493,6 +1493,13 @@ public class SARTakMapController {
                 + (activeOperationProfile.isArchived() ? " (archived)" : "");
     }
 
+    /** Shared markers of the active operation, shown to every role. */
+    public String getSharedMarkersSummary() {
+        if (!hasActiveOperation())
+            return "Join an operation to see shared markers";
+        return sharedMapMarkerSyncManager.summarizeLiveMarkers(10);
+    }
+
     public String getOperationDashboardSummary() {
         if (activeOperationProfile == null)
             return "No active operation selected";

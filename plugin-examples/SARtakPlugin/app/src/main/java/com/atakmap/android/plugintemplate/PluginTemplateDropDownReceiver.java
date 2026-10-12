@@ -193,6 +193,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final TextView hqOperationSummaryValue;
     private final TextView devicesSummaryValue;
     private final TextView alertsSummaryValue;
+    private final TextView alertsSharedMarkersValue;
     private final TextView teamAlertsValue;
     private final TextView homeAlertsValue;
     private final TextView currentRoleValue;
@@ -396,6 +397,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 .findViewById(R.id.devices_summary_value);
         alertsSummaryValue = templateView
                 .findViewById(R.id.alerts_summary_value);
+        alertsSharedMarkersValue = templateView
+                .findViewById(R.id.alerts_shared_markers_value);
         teamAlertsValue = templateView.findViewById(R.id.team_alerts_value);
         homeAlertsValue = templateView.findViewById(R.id.home_alerts_value);
         currentRoleValue = templateView.findViewById(R.id.current_role_value);
@@ -849,8 +852,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
         if (currentTab == TAB_DEVICES)
             renderDeviceCards();
-        if (currentTab == TAB_ALERTS)
+        if (currentTab == TAB_ALERTS) {
             renderAlertCards();
+            alertsSharedMarkersValue.setText(mapController
+                    .getSharedMarkersSummary());
+        }
         updateAlertButtons(teamCreated);
         teamAlertsValue.setText(alertSummary);
         homeAlertsValue.setText(alertSummary);

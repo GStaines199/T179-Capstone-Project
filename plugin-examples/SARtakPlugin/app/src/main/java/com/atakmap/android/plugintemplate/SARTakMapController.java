@@ -31,6 +31,7 @@ import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
 import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
+import com.atakmap.android.plugintemplate.grid.SearchDirectionStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
@@ -118,6 +119,7 @@ public class SARTakMapController {
     private final GridCoordinateConverter converter;
     private final SearchGridStateStore gridStateStore;
     private final SearchLineStateStore searchLineStateStore;
+    private final SearchDirectionStore searchDirectionStore;
     private final OverlayVisibilityStore overlayVisibilityStore;
     private final SearchGridManager gridManager;
     private final SearchGridOverlay gridOverlay;
@@ -225,6 +227,7 @@ public class SARTakMapController {
                 converter);
         this.gridOverlay.setGridColor(gridColorOption.getArgb());
         this.searchLineStateStore = new SearchLineStateStore(runtimeContext);
+        this.searchDirectionStore = new SearchDirectionStore(runtimeContext);
         this.overlayVisibilityStore = new OverlayVisibilityStore(
                 runtimeContext);
         restoreOverlayVisibility();
@@ -329,6 +332,7 @@ public class SARTakMapController {
         try {
             registerMapListeners();
             initialiseRuntime();
+            restoreSearchDirection();
             restoreLeaderSearchLine();
             teamMarkerOverlay.render();
             // Raw GNSS is rendered through ATAK's native crumb trail.
@@ -504,6 +508,10 @@ public class SARTakMapController {
      */
     public void setSearchLineDirection(SearchLineDirection direction) {
         searchLineManager.setDirection(direction, getCurrentUserPoint());
+        if (assignmentManager.isTeamCreated())
+            searchDirectionStore.save(getActiveOperationId(),
+                    assignmentManager.getTeamId(),
+                    searchLineManager.getDirection());
         arrangeTeamMembers();
         publishSearchLine(SearchLineCotMessage.ACTION_UPDATE);
         refreshOverlay();
@@ -2535,6 +2543,20 @@ public class SARTakMapController {
      * expire after 30 s, so without this a leader whose ATAK restarts loses
      * the line while the team is still searching on it.
      */
+    /**
+     * Brings back the direction the lead chose for this team, even with no
+     * line running. A restored running line sets its own direction after.
+     */
+    private void restoreSearchDirection() {
+        if (!isLeaderRole() || !assignmentManager.isTeamCreated()
+                || !hasActiveOperation())
+            return;
+        SearchLineDirection saved = searchDirectionStore.load(
+                getActiveOperationId(), assignmentManager.getTeamId());
+        if (saved != null && !searchLineManager.isStarted())
+            searchLineManager.setDirection(saved, null);
+    }
+
     private void restoreLeaderSearchLine() {
         SearchLineStateStore.Record record = searchLineStateStore.load();
         if (record == null)
@@ -2999,6 +3021,7 @@ public class SARTakMapController {
         dittoSyncManager.useOperationProfile(profile);
         rosterJoinTimes.clear();
         teamStateStore.load(assignmentManager);
+        restoreSearchDirection();
         publishDittoDeviceStateNow();
         syncDittoDevicesToAtakMarkers();
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());

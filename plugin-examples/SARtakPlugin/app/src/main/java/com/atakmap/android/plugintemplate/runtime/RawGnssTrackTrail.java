@@ -7,6 +7,7 @@ import com.atakmap.android.maps.CrumbTrail;
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
+import com.atakmap.android.track.crumb.Crumb;
 import com.atakmap.android.track.crumb.CrumbDatabase;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.GeoPointMetaData;
@@ -124,8 +125,21 @@ public class RawGnssTrackTrail {
         return trail != null;
     }
 
+    /**
+     * Crumbs currently on the map. {@code CrumbTrail.size} is the size each
+     * crumb is drawn at (ATAK's track_crumb_size, default 10), not a count,
+     * which is why the Track tab showed "10 crumbs" however far anyone walked;
+     * ATAK keeps the real count private, so the trail's list is walked here.
+     */
     public int getCrumbCount() {
-        return trail == null ? 0 : trail.size;
+        if (trail == null)
+            return 0;
+        int count = 0;
+        synchronized (trail) {
+            for (Crumb crumb = trail.first; crumb != null; crumb = crumb.next)
+                count++;
+        }
+        return count;
     }
 
     public long getLastFixTimestamp() {

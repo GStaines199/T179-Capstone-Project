@@ -188,7 +188,7 @@ public class LocationRepository {
     }
 
     /**
-     * Every point in a session as {lat, lon}, oldest first. Unlike
+     * Every point in a session as {lat, lon, timestamp ms}, oldest first. Unlike
      * {@link #getPointsForSession} this is not capped to the display limit, so
      * a whole-session measurement such as distance sees the start of a long
      * search as well as the end.
@@ -197,11 +197,12 @@ public class LocationRepository {
         List<double[]> points = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor cursor = db.rawQuery(
-                "SELECT latitude, longitude FROM location_points "
+                "SELECT latitude, longitude, timestamp FROM location_points "
                         + "WHERE session_id = ? ORDER BY timestamp ASC, id ASC",
                 new String[] {sessionId});
         while (cursor.moveToNext())
-            points.add(new double[] {cursor.getDouble(0), cursor.getDouble(1)});
+            points.add(new double[] {cursor.getDouble(0), cursor.getDouble(1),
+                    cursor.getLong(2)});
         cursor.close();
         return points;
     }

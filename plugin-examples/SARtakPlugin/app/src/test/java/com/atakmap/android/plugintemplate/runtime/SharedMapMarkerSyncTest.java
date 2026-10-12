@@ -150,6 +150,51 @@ public class SharedMapMarkerSyncTest {
     }
 
     @Test
+    public void markerWhoseQueuedWriteFailsIsPublishedAgain() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.createMarker("m1", "Footprint", 10.0, 20.0, SESSION + 1000L);
+        alpha.failNextWrites = 1;
+
+        runRounds(4);
+
+        assertEquals("Published once, lost, then published again", 2,
+                alpha.published);
+        assertNotNull(network.document("m1"));
+        assertEquals("Footprint", bravo.map.get("m1").getTitle());
+    }
+
+    @Test
+    public void editWhoseQueuedWriteFailsIsPublishedAgain() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.createMarker("m1", "Footprint", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+
+        alpha.failNextWrites = 1;
+        alpha.edit("m1", "Footprint (fresh)", 10.001, 20.002);
+        runRounds(4);
+
+        assertEquals("Footprint (fresh)", bravo.map.get("m1").getTitle());
+    }
+
+    @Test
+    public void deletionWhoseQueuedWriteFailsIsSentAgain() {
+        alpha.startSession(SESSION);
+        bravo.startSession(SESSION);
+        alpha.createMarker("m1", "Footprint", 10.0, 20.0, SESSION + 1000L);
+        runRounds(3);
+
+        alpha.failNextWrites = 1;
+        alpha.map.remove("m1");
+        runRounds(4);
+
+        assertTrue(network.document("m1").isDeleted());
+        assertNull(bravo.map.get("m1"));
+        assertNull(alpha.map.get("m1"));
+    }
+
+    @Test
     public void deletionOnReceivingDevicePropagatesToCreator() {
         alpha.startSession(SESSION);
         bravo.startSession(SESSION);
@@ -446,6 +491,12 @@ public class SharedMapMarkerSyncTest {
         boolean connected = true;
         int published;
         long now;
+        /**
+         * Writes still to be accepted then lost, like a queued Ditto write
+         * that throws on the writer thread after publish() returned true.
+         */
+        int failNextWrites;
+        final List<Runnable> failures = new ArrayList<>();
 
         Device(Network network, String uid, String callsign,
                 String deviceUid) {
@@ -475,6 +526,24 @@ public class SharedMapMarkerSyncTest {
             now += 5000L;
             reconciler.sync(documents(), this, this, uid, callsign,
                     deviceUid, "team-1", now);
+            // Failures are reported after the sync, as the main-thread post
+            // does on a device.
+            List<Runnable> reported = new ArrayList<>(failures);
+            failures.clear();
+            for (Runnable failure : reported)
+                failure.run();
+        }
+
+        /** Accepts the write, or loses it if a failure is pending. */
+        private boolean write(Map<String, Object> document, Runnable onFailed) {
+            if (failNextWrites > 0) {
+                failNextWrites--;
+                if (onFailed != null)
+                    failures.add(onFailed);
+                return true;
+            }
+            network.write(this, document);
+            return true;
         }
 
         SharedMapMarkerMessage localMarker(String markerUid, String title,
@@ -562,16 +631,16 @@ public class SharedMapMarkerSyncTest {
         }
 
         @Override
-        public boolean publish(SharedMapMarkerMessage message) {
+        public boolean publish(SharedMapMarkerMessage message,
+                Runnable onFailed) {
             published++;
-            network.write(this, message.toDocument(OP));
-            return true;
+            return write(message.toDocument(OP), onFailed);
         }
 
         @Override
-        public boolean publishDeletion(SharedMapMarkerMessage tombstone) {
-            network.write(this, tombstone.toDeletionDocument(OP));
-            return true;
+        public boolean publishDeletion(SharedMapMarkerMessage tombstone,
+                Runnable onFailed) {
+            return write(tombstone.toDeletionDocument(OP), onFailed);
         }
     }
 

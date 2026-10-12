@@ -129,19 +129,34 @@ public class SharedMapMarkerSyncManager {
     private final SharedMapMarkerReconciler.Publisher publisher =
             new SharedMapMarkerReconciler.Publisher() {
                 @Override
-                public boolean publish(SharedMapMarkerMessage message) {
+                public boolean publish(SharedMapMarkerMessage message,
+                        Runnable onFailed) {
                     debug("publish", message);
-                    return dittoSyncManager.publishSharedMapMarker(message);
+                    return dittoSyncManager.publishSharedMapMarker(message,
+                            onMainThread(onFailed));
                 }
 
                 @Override
                 public boolean publishDeletion(
-                        SharedMapMarkerMessage tombstone) {
+                        SharedMapMarkerMessage tombstone, Runnable onFailed) {
                     debug("publish-delete", tombstone);
-                    return dittoSyncManager
-                            .publishSharedMapMarkerDeletion(tombstone);
+                    return dittoSyncManager.publishSharedMapMarkerDeletion(
+                            tombstone, onMainThread(onFailed));
                 }
             };
+
+    /** The reconciler runs on the main thread; failures arrive on the writer. */
+    private Runnable onMainThread(final Runnable action) {
+        if (action == null)
+            return null;
+        return new Runnable() {
+            @Override
+            public void run() {
+                Log.w(TAG, "shared marker write failed; retrying next scan");
+                mapView.post(action);
+            }
+        };
+    }
 
     private class AtakLocalMap implements SharedMapMarkerReconciler.LocalMap {
 

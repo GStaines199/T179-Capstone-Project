@@ -61,10 +61,18 @@ public class SharedMapMarkerReconciler {
         SharedMapMarkerMessage apply(SharedMapMarkerMessage document);
     }
 
+    /**
+     * Writes documents. A true return means the write was accepted (queued),
+     * not that it finished; if it later fails, the publisher runs
+     * {@code onFailed} so the next scan tries again. {@code onFailed} must be
+     * run later on the thread that calls {@link #sync}, never from inside
+     * the publish call, since the reconciler is not thread-safe.
+     */
     public interface Publisher {
-        boolean publish(SharedMapMarkerMessage message);
+        boolean publish(SharedMapMarkerMessage message, Runnable onFailed);
 
-        boolean publishDeletion(SharedMapMarkerMessage tombstone);
+        boolean publishDeletion(SharedMapMarkerMessage tombstone,
+                Runnable onFailed);
     }
 
     public static class Result {
@@ -106,6 +114,33 @@ public class SharedMapMarkerReconciler {
 
     public String getOperationId() {
         return operationId;
+    }
+
+    /**
+     * A publish of this marker failed after it was queued. Forgets that the
+     * marker is in sync, unless it has changed or synced again since, so the
+     * next scan publishes it again.
+     */
+    void publishFailed(String failedOperationId, String markerUid,
+            String signature) {
+        if (!operationId.equals(failedOperationId))
+            return;
+        if (signature.equals(syncedSignatures.get(markerUid)))
+            syncedSignatures.remove(markerUid);
+    }
+
+    /**
+     * A tombstone for this marker failed after it was queued. Puts the marker
+     * back to "shared, and gone from the map since the last scan", so the
+     * next scan sends the deletion again.
+     */
+    void deletionFailed(String failedOperationId, String markerUid) {
+        if (!operationId.equals(failedOperationId)
+                || !tombstoned.remove(markerUid))
+            return;
+        if (!syncedSignatures.containsKey(markerUid))
+            syncedSignatures.put(markerUid, "");
+        previouslyPresent.add(markerUid);
     }
 
     /** Applies synced documents to the map. Safe to call at any rate. */
@@ -228,13 +263,22 @@ public class SharedMapMarkerReconciler {
             }
             SharedMapMarkerMessage message = outgoing(snapshot, document,
                     selfUid, selfCallsign, teamId, now);
-            if (publisher.publish(message)) {
+            final String publishedOperationId = operationId;
+            final String publishedUid = uid;
+            final String publishedSignature = signature;
+            if (publisher.publish(message, new Runnable() {
+                @Override
+                public void run() {
+                    publishFailed(publishedOperationId, publishedUid,
+                            publishedSignature);
+                }
+            })) {
                 syncedSignatures.put(uid, signature);
                 result.published++;
             }
         }
 
-        for (String uid : previouslyPresent) {
+        for (final String uid : previouslyPresent) {
             if (present.contains(uid) || !syncedSignatures.containsKey(uid))
                 continue;
             SharedMapMarkerMessage document = byUid.get(uid);
@@ -244,7 +288,13 @@ public class SharedMapMarkerReconciler {
             SharedMapMarkerMessage tombstone = new SharedMapMarkerMessage
                     .Builder().markerUid(uid).operationId(operationId)
                     .deleted(true, now, selfUid, selfCallsign).build();
-            if (publisher.publishDeletion(tombstone)) {
+            final String deletedOperationId = operationId;
+            if (publisher.publishDeletion(tombstone, new Runnable() {
+                @Override
+                public void run() {
+                    deletionFailed(deletedOperationId, uid);
+                }
+            })) {
                 tombstoned.add(uid);
                 syncedSignatures.remove(uid);
                 result.deleted++;

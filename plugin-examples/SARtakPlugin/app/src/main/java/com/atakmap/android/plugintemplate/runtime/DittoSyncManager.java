@@ -858,10 +858,20 @@ public class DittoSyncManager {
     }
 
     public boolean publishSharedMapMarker(SharedMapMarkerMessage message) {
+        return publishSharedMapMarker(message, null);
+    }
+
+    /**
+     * @param onFailed run on the writer thread if the queued write later
+     *                 throws, so the caller can try again
+     */
+    public boolean publishSharedMapMarker(SharedMapMarkerMessage message,
+            Runnable onFailed) {
         if (!started || ditto == null || message == null)
             return false;
         return queueInsert(SHARED_MARKER_COLLECTION, "marker",
-                message.toDocument(getOperationId()), "marker publish", null);
+                message.toDocument(getOperationId()), "marker publish", null,
+                onFailed);
     }
 
     /**
@@ -872,12 +882,18 @@ public class DittoSyncManager {
      */
     public boolean publishSharedMapMarkerDeletion(
             SharedMapMarkerMessage tombstone) {
+        return publishSharedMapMarkerDeletion(tombstone, null);
+    }
+
+    /** @param onFailed as for {@link #publishSharedMapMarker(SharedMapMarkerMessage, Runnable)} */
+    public boolean publishSharedMapMarkerDeletion(
+            SharedMapMarkerMessage tombstone, Runnable onFailed) {
         if (!started || ditto == null || tombstone == null
                 || tombstone.getMarkerUid().length() == 0)
             return false;
         return queueInsert(SHARED_MARKER_COLLECTION, "marker",
                 tombstone.toDeletionDocument(getOperationId()),
-                "marker delete", null);
+                "marker delete", null, onFailed);
     }
 
     public boolean publishAlert(SearchAlertMessage message) {
@@ -1033,11 +1049,20 @@ public class DittoSyncManager {
      * yet is replaced, not repeated.
      *
      * @return false if nothing was queued; a write that fails later is
-     *         reported through the status line and the log, as before
+     *         reported through the status line and the log, and to
+     *         {@code onFailed} when given
      */
     private boolean queueInsert(final String collection,
             final String argumentName, Map<String, Object> document,
             final String failureLabel, final Runnable onWritten) {
+        return queueInsert(collection, argumentName, document, failureLabel,
+                onWritten, null);
+    }
+
+    private boolean queueInsert(final String collection,
+            final String argumentName, Map<String, Object> document,
+            final String failureLabel, final Runnable onWritten,
+            final Runnable onFailed) {
         final Ditto target = ditto;
         if (target == null)
             return false;
@@ -1062,6 +1087,8 @@ public class DittoSyncManager {
                         } catch (Throwable throwable) {
                             reportWriteFailure(target, failureLabel,
                                     throwable);
+                            if (onFailed != null)
+                                onFailed.run();
                             return;
                         }
                         if (onWritten != null)

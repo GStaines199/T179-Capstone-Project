@@ -996,9 +996,9 @@ public class SARTakMapController {
         return routeSelectionPreview != null;
     }
 
-    public String getRouteSelectionPreviewSummary() {
-        return routeSelectionPreview == null ? ""
-                : routeSelectionPreview.describe();
+    public String getRouteSelectionPreviewConfirmLabel() {
+        return routeSelectionPreview == null ? "Confirm"
+                : routeSelectionPreview.confirmLabel();
     }
 
     /** Adds the previewed lane or box to the route. */
@@ -1172,10 +1172,6 @@ public class SARTakMapController {
         return assignment == null
                 ? "No HQ search area assigned to this team yet."
                 : "HQ assigned area:\n" + assignment.getDisplaySummary();
-    }
-
-    public List<SearchGridCell> getGridReviewCells() {
-        return gridManager.getReviewCells();
     }
 
     public void selectGridCell(String cellId) {

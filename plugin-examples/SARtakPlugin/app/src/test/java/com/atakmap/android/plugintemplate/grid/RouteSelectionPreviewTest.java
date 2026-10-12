@@ -110,6 +110,19 @@ public class RouteSelectionPreviewTest {
         assertEquals(3, preview.getNewCellCount());
         assertEquals("Lane preview: 5 cells (2 already on route)",
                 preview.describe());
+        assertEquals("Add 3 new cells", preview.confirmLabel());
+    }
+
+    @Test
+    public void confirmLabel_staysShort() {
+        assertEquals("Add 20 new cells", preview(cell(500000, 6960000),
+                cell(500300, 6960400), null).confirmLabel());
+        assertEquals("Add 1 new cell", preview(cell(500000, 6960000),
+                cell(500000, 6960000), null).confirmLabel());
+        assertEquals("Nothing new to add", preview(cell(500000, 6960000),
+                cell(500000, 6960100), new HashSet<>(Arrays.asList(
+                        id(500000, 6960000), id(500000, 6960100))))
+                .confirmLabel());
     }
 
     @Test

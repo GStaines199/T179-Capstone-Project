@@ -827,8 +827,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         routePreviewControls.setVisibility(routePreview ? View.VISIBLE
                 : View.GONE);
         if (routePreview)
-            confirmRoutePreviewButton.setText("Confirm: " + mapController
-                    .getRouteSelectionPreviewSummary());
+            confirmRoutePreviewButton.setText(mapController
+                    .getRouteSelectionPreviewConfirmLabel());
         toggleRouteButton.setText(mapController.isRouteOverlayVisible()
                 ? "Hide Route" : "Show Route");
         setInputTextIfIdle(teamNameInput, mapController.getTeamName());

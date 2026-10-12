@@ -86,7 +86,19 @@ public final class RouteSelectionPreview {
         return isLane() ? "Lane" : "Box";
     }
 
-    /** One line for the route summary and the confirm button. */
+    /**
+     * Short text for the confirm button, which shares a row in a half-width
+     * panel; {@link #describe()} wrapped there. The full description stays
+     * in the route summary line.
+     */
+    public String confirmLabel() {
+        int added = Math.max(0, getNewCellCount());
+        if (added == 0)
+            return "Nothing new to add";
+        return "Add " + added + (added == 1 ? " new cell" : " new cells");
+    }
+
+    /** One line for the route summary. */
     public String describe() {
         StringBuilder builder = new StringBuilder();
         builder.append(getLabel()).append(" preview: ").append(cells.size())

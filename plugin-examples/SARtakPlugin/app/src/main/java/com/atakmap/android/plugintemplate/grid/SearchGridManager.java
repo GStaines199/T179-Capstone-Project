@@ -467,27 +467,6 @@ public class SearchGridManager {
         return cells;
     }
 
-    public List<SearchGridCell> getReviewCells() {
-        List<SearchGridCell> cells = new ArrayList<>();
-        for (SearchGridCell cell : reviewedCells.values()) {
-            cell.setStatus(stateStore.getStatus(cell.getId()));
-            if (cell.getStatus() == SearchGridStatus.PARTIAL
-                    || cell.getStatus() == SearchGridStatus.COMPLETE)
-                cells.add(cell);
-            if (cells.size() >= MAX_REVIEW_CELLS)
-                break;
-        }
-        if (cells.isEmpty() && !hasPlannedArea()) {
-            for (SearchGridCell cell : getSelectedAggregateCells()) {
-                SearchGridStatus status = cell.getStatus();
-                if (status == SearchGridStatus.PARTIAL
-                        || status == SearchGridStatus.COMPLETE)
-                    cells.add(cell);
-            }
-        }
-        return cells;
-    }
-
     public SearchGridCell selectCellById(String cellId) {
         SearchGridCell cell = knownOrParsedCell(cellId);
         if (cell == null)

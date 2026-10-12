@@ -4,10 +4,12 @@ import android.graphics.Color;
 
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.plugintemplate.runtime.RouteCellRuns;
 import com.atakmap.android.plugintemplate.runtime.SearchRoutePlan;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class SearchTeamAssignmentOverlay {
@@ -85,15 +87,8 @@ public class SearchTeamAssignmentOverlay {
         int color = plan.getTeamColorArgb() == 0
                 ? Color.rgb(138, 143, 152)
                 : plan.getTeamColorArgb();
-        List<GridCellRuns.Cell> cells = new ArrayList<>();
         double size = GridCoordinateConverter.BASE_CELL_SIZE_METERS;
-        for (SearchGridCell cell : gridManager.cellsForIds(plan
-                .getCellIds())) {
-            cells.add(new GridCellRuns.Cell(
-                    (int) Math.floor(cell.getWest() / size + 1e-6),
-                    (int) Math.floor(cell.getSouth() / size + 1e-6),
-                    cell.getZoneDescriptor()));
-        }
+        List<GridCellRuns.Cell> cells = planCells(plan, gridManager);
         for (GridCellRuns.Rect block : GridCellRuns.merge(cells)) {
             if (specs.size() >= MAX_ASSIGNMENT_BLOCKS)
                 return;
@@ -116,6 +111,56 @@ public class SearchTeamAssignmentOverlay {
                             .meta("sartak.teamId", plan.getTeamId())
                             .meta("sartak.teamName", plan.getTeamName()));
         }
+    }
+
+    /**
+     * The plan's cells as grid positions, worked out from the ends of each
+     * straight run rather than by resolving every cell id: resolving all
+     * 40,401 cells of a large-area route cost about 0.4 s per draw.
+     */
+    static List<GridCellRuns.Cell> planCells(SearchRoutePlan plan,
+            SearchGridManager gridManager) {
+        List<GridCellRuns.Cell> cells = new ArrayList<>();
+        for (String run : plan.getCellRuns()) {
+            List<SearchGridCell> ends = gridManager.cellsForIds(
+                    RouteCellRuns.endpoints(Collections.singletonList(run)));
+            if (ends.isEmpty())
+                continue;
+            SearchGridCell first = ends.get(0);
+            SearchGridCell last = ends.get(ends.size() - 1);
+            int column = column(first);
+            int row = row(first);
+            int lastColumn = column(last);
+            int lastRow = row(last);
+            String zone = first.getZoneDescriptor();
+            if (!zone.equals(last.getZoneDescriptor())) {
+                // Runs never cross zones; resolve both ends on their own.
+                cells.add(new GridCellRuns.Cell(column, row, zone));
+                cells.add(new GridCellRuns.Cell(lastColumn, lastRow,
+                        last.getZoneDescriptor()));
+                continue;
+            }
+            int stepColumn = Integer.signum(lastColumn - column);
+            int stepRow = Integer.signum(lastRow - row);
+            while (true) {
+                cells.add(new GridCellRuns.Cell(column, row, zone));
+                if (column == lastColumn && row == lastRow)
+                    break;
+                column += stepColumn;
+                row += stepRow;
+            }
+        }
+        return cells;
+    }
+
+    private static int column(SearchGridCell cell) {
+        return (int) Math.floor(cell.getWest()
+                / GridCoordinateConverter.BASE_CELL_SIZE_METERS + 1e-6);
+    }
+
+    private static int row(SearchGridCell cell) {
+        return (int) Math.floor(cell.getSouth()
+                / GridCoordinateConverter.BASE_CELL_SIZE_METERS + 1e-6);
     }
 
     private String buildRenderKey(List<SearchRoutePlan> routePlans) {

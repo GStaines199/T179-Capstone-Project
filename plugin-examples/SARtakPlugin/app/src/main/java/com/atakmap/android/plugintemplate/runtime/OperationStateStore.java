@@ -66,6 +66,42 @@ public class OperationStateStore {
         preferences.edit().remove(KEY_ACTIVE_PROFILE).apply();
     }
 
+    /**
+     * Forgets a saved operation on this device so it no longer appears under
+     * Switch Operation. The active operation can't be removed; leave it
+     * first. Only this device's list changes: the operation's Ditto data and
+     * other devices are untouched, and it can be joined again with its code.
+     *
+     * @return true when the operation was in the list and has been removed
+     */
+    public boolean removeSavedProfile(String operationId) {
+        if (operationId == null || operationId.trim().length() == 0)
+            return false;
+        String id = operationId.trim();
+        OperationProfile active = load();
+        if (active != null && id.equals(active.getOperationId()))
+            return false;
+        List<OperationProfile> remaining = new ArrayList<>();
+        boolean removed = false;
+        for (OperationProfile saved : loadSavedProfiles()) {
+            if (id.equals(saved.getOperationId()))
+                removed = true;
+            else
+                remaining.add(saved);
+        }
+        if (!removed)
+            return false;
+        try {
+            preferences.edit()
+                    .putString(KEY_SAVED_PROFILES, encodeProfiles(remaining))
+                    .apply();
+            return true;
+        } catch (JSONException exception) {
+            Log.w(TAG, "Failed to remove saved operation profile", exception);
+            return false;
+        }
+    }
+
     public List<OperationProfile> loadSavedProfiles() {
         String json = preferences.getString(KEY_SAVED_PROFILES, "");
         Map<String, OperationProfile> byId = new LinkedHashMap<>();

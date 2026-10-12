@@ -56,6 +56,31 @@ public class IdentityManager {
     private final SearcherRepository searcherRepository;
     private final DeviceIdentityStore identityStore;
     private Identity currentIdentity;
+    private final RememberThrottle rememberThrottle = new RememberThrottle();
+
+    /**
+     * Decides when the self row needs writing again. resolveIdentity() runs
+     * on every refresh and from many other places, and each write was three
+     * SQLite statements on the main thread; now the row is written when the
+     * identity changes, after a failed write, or at most once a minute.
+     */
+    static final class RememberThrottle {
+        static final long INTERVAL_MS = 60_000L;
+        private String lastKey;
+        private long lastAt;
+
+        boolean isDue(Identity identity, String deviceModel, long now) {
+            String key = identity.getUid() + "|" + identity.getCallsign()
+                    + "|" + deviceModel;
+            return !key.equals(lastKey) || now - lastAt >= INTERVAL_MS;
+        }
+
+        void saved(Identity identity, String deviceModel, long now) {
+            lastKey = identity.getUid() + "|" + identity.getCallsign() + "|"
+                    + deviceModel;
+            lastAt = now;
+        }
+    }
 
     private final DeviceFallback deviceFallback = new DeviceFallback() {
         @Override
@@ -90,9 +115,12 @@ public class IdentityManager {
         currentIdentity = resolve(MapView.getDeviceUid(),
                 mapView.getDeviceCallsign(), selfUid, selfCallsign,
                 deviceFallback);
-        if (currentIdentity.isResolved())
-            remember(searcherRepository, currentIdentity, Build.MODEL,
-                    System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        if (currentIdentity.isResolved()
+                && rememberThrottle.isDue(currentIdentity, Build.MODEL, now)
+                && remember(searcherRepository, currentIdentity, Build.MODEL,
+                        now))
+            rememberThrottle.saved(currentIdentity, Build.MODEL, now);
         return currentIdentity;
     }
 

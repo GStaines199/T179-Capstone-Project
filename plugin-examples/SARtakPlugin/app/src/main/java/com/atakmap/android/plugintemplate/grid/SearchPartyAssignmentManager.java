@@ -3,9 +3,11 @@ package com.atakmap.android.plugintemplate.grid;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
@@ -61,9 +63,48 @@ public class SearchPartyAssignmentManager {
 
     private final SearcherRepository searcherRepository;
 
+    /**
+     * How often a peer's searcher_identity row is rewritten while it stays
+     * the same. Every refresh used to write each peer's row up to three
+     * times, each a separate SQLite transaction on the main thread: most of
+     * the 20-40 ms each 9.7 s refresh cost, with two devices.
+     */
+    static final long SEARCHER_WRITE_INTERVAL_MS = 60_000L;
+    private final Map<String, Long> searcherSavedAt =
+            new HashMap<>();
+    private final Map<String, String> searcherSavedCallsign =
+            new HashMap<>();
+    private final Map<String, Long> lastSeenSavedAt =
+            new HashMap<>();
 
     public SearchPartyAssignmentManager(SearcherRepository searcherRepository) {
         this.searcherRepository = searcherRepository;
+    }
+
+    /** Records a peer seen through presence or Ditto, throttled. */
+    private void saveSearcherSeen(String uid, String callsign, long now) {
+        if (searcherRepository == null || uid == null)
+            return;
+        Long savedAt = searcherSavedAt.get(uid);
+        String safeCallsign = callsign == null ? "" : callsign;
+        if (savedAt != null && now - savedAt < SEARCHER_WRITE_INTERVAL_MS
+                && safeCallsign.equals(searcherSavedCallsign.get(uid)))
+            return;
+        searcherRepository.insertOrUpdate(uid, safeCallsign, "", now, now,
+                false);
+        searcherSavedAt.put(uid, now);
+        searcherSavedCallsign.put(uid, safeCallsign);
+    }
+
+    /** Updates a peer's last_seen from its ATAK contact, at most once a minute. */
+    private void saveSearcherLastSeen(String uid, long now) {
+        if (searcherRepository == null || uid == null)
+            return;
+        Long savedAt = lastSeenSavedAt.get(uid);
+        if (savedAt != null && now - savedAt < SEARCHER_WRITE_INTERVAL_MS)
+            return;
+        searcherRepository.updateLastSeen(uid, now);
+        lastSeenSavedAt.put(uid, now);
     }
 
     public String getTeamId() {
@@ -94,6 +135,21 @@ public class SearchPartyAssignmentManager {
     public String getLeaderCallsign() {
         SearchTeamMember leader = getLeaderMember();
         return leader == null ? "" : leader.getCallsign();
+    }
+
+    /**
+     * Whether the current team is the one this device created, given the id
+     * this device gives its own team.
+     *
+     * <p>Decided by the team id, not by the ATAK role or the roster's leader
+     * flag: both follow the role, and a lead can switch to HQ after creating
+     * the team. Leaving then has to act as the team's owner, not as a member
+     * walking out of its own team.
+     */
+    public boolean isOwnTeam(String ownTeamId) {
+        return teamCreated && ownTeamId != null
+                && ownTeamId.trim().length() > 0
+                && ownTeamId.trim().equals(teamId);
     }
 
     public int getLastAtakMatchedMembers() {
@@ -440,10 +496,8 @@ public class SearchPartyAssignmentManager {
 
             lastAtakMatchedMembers++;
             updateMemberFromContact(member, contact, selfPoint, converter);
-            searcherRepository.updateLastSeen(
-                    contact.getUid(),
-                    System.currentTimeMillis()
-            );
+            saveSearcherLastSeen(contact.getUid(),
+                    System.currentTimeMillis());
         }
     }
 
@@ -512,15 +566,10 @@ public class SearchPartyAssignmentManager {
                 applyMemberStyle(member);
             member.markPresenceSeenAt(formatLastPing(presence.getCreated()),
                     presence.getCreated());
-            long now = System.currentTimeMillis();
-            searcherRepository.insertOrUpdate(
-                    presence.getSenderUid(),
-                    presence.getSenderCallsign(),
-                    "",          // device model unknown from CoT
-                    now,         // first_seen — CONFLICT_REPLACE keeps original if already exists
-                    now,         // last_seen always updated
-                    false        // not self
-            );
+            // Device model is unknown from CoT; insertOrUpdate keeps the
+            // original first_seen.
+            saveSearcherSeen(presence.getSenderUid(),
+                    presence.getSenderCallsign(), System.currentTimeMillis());
             changed = true;
         }
         return changed;
@@ -578,9 +627,8 @@ public class SearchPartyAssignmentManager {
             } else {
                 member.markLocationUnavailable("Ditto location unavailable");
             }
-            long now = System.currentTimeMillis();
-            searcherRepository.insertOrUpdate(snapshot.getUid(),
-                    snapshot.getCallsign(), "", now, now, false);
+            saveSearcherSeen(snapshot.getUid(), snapshot.getCallsign(),
+                    System.currentTimeMillis());
             changed = true;
         }
         return changed;

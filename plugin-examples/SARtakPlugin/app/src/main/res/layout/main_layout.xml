@@ -270,6 +270,14 @@
                     android:text="@string/grid_no_cell" />
 
                 <TextView
+                    android:id="@+id/home_remaining_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Area left: no planned area" />
+
+                <TextView
                     style="@style/SARtakLabel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -325,6 +333,7 @@
                             android:text="@string/spacing_heading" />
 
                         <TextView
+                            android:id="@+id/home_spacing_value"
                             style="@style/SARtakValue"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -340,6 +349,7 @@
                     android:text="@string/line_heading" />
 
                 <TextView
+                    android:id="@+id/home_search_line_members_value"
                     style="@style/SARtakValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -650,6 +660,32 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Select Route Cells" />
+
+                    <LinearLayout
+                        android:id="@+id/route_preview_controls"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <Button
+                            android:id="@+id/confirm_route_preview_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="2"
+                            android:text="Confirm Cells" />
+
+                        <Button
+                            android:id="@+id/cancel_route_preview_button"
+                            style="@style/SARtakActionButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="6dp"
+                            android:layout_weight="1"
+                            android:text="Cancel" />
+                    </LinearLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -1302,6 +1338,28 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:orientation="vertical" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/sartak_panel"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/SARtakSectionTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/shared_markers_heading" />
+
+                <TextView
+                    android:id="@+id/alerts_shared_markers_value"
+                    style="@style/SARtakValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/no_shared_markers" />
             </LinearLayout>
         </LinearLayout>
 

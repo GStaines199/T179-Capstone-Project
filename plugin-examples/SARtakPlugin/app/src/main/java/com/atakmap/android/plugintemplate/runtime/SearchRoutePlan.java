@@ -6,9 +6,17 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public class SearchRoutePlan {
+
+    /**
+     * Routes up to this size also carry the plain {@code cellIds} list, so a
+     * device on a build that predates {@code cellRuns} still sees them. Larger
+     * routes only send runs: that older code could not have handled them.
+     */
+    public static final int LEGACY_CELL_ID_LIMIT = 2000;
 
     private final String planId;
     private final String operationId;
@@ -20,6 +28,9 @@ public class SearchRoutePlan {
     private final String createdByCallsign;
     private final long updatedAt;
     private final List<String> cellIds;
+    // cellIds as runs; computed on first use, or taken from the synced
+    // document when it describes cellIds exactly.
+    private List<String> cellRuns;
 
     public SearchRoutePlan(String planId, String operationId, String teamId,
             String teamName, String teamColorName, int teamColorArgb,
@@ -34,14 +45,18 @@ public class SearchRoutePlan {
         this.createdByUid = safe(createdByUid);
         this.createdByCallsign = safe(createdByCallsign);
         this.updatedAt = updatedAt;
-        this.cellIds = new ArrayList<>();
+        // A set keeps first-seen order and drops repeats in one pass. A list
+        // contains() check here is quadratic, which a large-area route
+        // cannot afford.
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
         if (cellIds != null) {
             for (String cellId : cellIds) {
                 String value = safe(cellId);
-                if (value.length() > 0 && !this.cellIds.contains(value))
-                    this.cellIds.add(value);
+                if (value.length() > 0)
+                    unique.add(value);
             }
         }
+        this.cellIds = new ArrayList<>(unique);
     }
 
     public static SearchRoutePlan empty(String operationId, String teamId,
@@ -55,17 +70,20 @@ public class SearchRoutePlan {
 
     public static SearchRoutePlan fromJson(String json) throws JSONException {
         JSONObject object = new JSONObject(json);
-        JSONArray array = object.optJSONArray("cellIds");
-        List<String> cells = new ArrayList<>();
-        if (array != null) {
-            for (int i = 0; i < array.length(); i++) {
-                String cellId = array.optString(i, "");
-                if (cellId.length() > 0)
-                    cells.add(cellId);
-            }
-        }
-        return new SearchRoutePlan(object.optString("planId", object
-                .optString("_id", "")),
+        // Runs are only trusted when written with this version of the plan.
+        // A build that predates them updates cellIds and updatedAt but leaves
+        // the previous cellRuns in place.
+        JSONArray runs = object.optJSONArray("cellRuns");
+        boolean runsCurrent = runs != null && object.has("cellRunsUpdatedAt")
+                && object.optLong("cellRunsUpdatedAt")
+                        == object.optLong("updatedAt", 0L);
+        List<String> runList = runsCurrent ? strings(runs) : null;
+        List<String> acceptedRuns = new ArrayList<>();
+        List<String> cells = runsCurrent
+                ? RouteCellRuns.decode(runList, acceptedRuns)
+                : strings(object.optJSONArray("cellIds"));
+        SearchRoutePlan plan = new SearchRoutePlan(object.optString("planId",
+                object.optString("_id", "")),
                 object.optString("operationId", ""),
                 object.optString("teamId", ""),
                 object.optString("teamName", ""),
@@ -74,6 +92,12 @@ public class SearchRoutePlan {
                 object.optString("createdByUid", ""),
                 object.optString("createdByCallsign", ""),
                 object.optLong("updatedAt", 0L), cells);
+        // Reuse the received runs only if nothing was skipped as damaged or
+        // dropped as a repeat; otherwise they no longer describe the plan.
+        if (runsCurrent && acceptedRuns.size() == runList.size()
+                && cells.size() == plan.size())
+            plan.cellRuns = acceptedRuns;
+        return plan;
     }
 
     public JSONObject toJsonObject() throws JSONException {
@@ -88,11 +112,53 @@ public class SearchRoutePlan {
         object.put("createdByUid", createdByUid);
         object.put("createdByCallsign", createdByCallsign);
         object.put("updatedAt", updatedAt);
-        JSONArray array = new JSONArray();
-        for (String cellId : cellIds)
-            array.put(cellId);
-        object.put("cellIds", array);
+        object.put("cellRuns", getCellRunsJson());
+        object.put("cellRunsUpdatedAt", updatedAt);
+        object.put("cellIds", getLegacyCellIdsJson());
         return object;
+    }
+
+    public synchronized List<String> getCellRuns() {
+        if (cellRuns == null)
+            cellRuns = RouteCellRuns.encode(cellIds);
+        return Collections.unmodifiableList(cellRuns);
+    }
+
+    /** The cells a drawn route line has to pass through, in order. */
+    public List<String> getRouteVertexIds() {
+        return RouteCellRuns.endpoints(getCellRuns());
+    }
+
+    public JSONArray getCellRunsJson() {
+        JSONArray array = new JSONArray();
+        for (String run : getCellRuns())
+            array.put(run);
+        return array;
+    }
+
+    /**
+     * Every cell id for routes up to {@link #LEGACY_CELL_ID_LIMIT}, otherwise
+     * empty, so an older build shows no route rather than a stale one.
+     */
+    public JSONArray getLegacyCellIdsJson() {
+        JSONArray array = new JSONArray();
+        if (cellIds.size() <= LEGACY_CELL_ID_LIMIT) {
+            for (String cellId : cellIds)
+                array.put(cellId);
+        }
+        return array;
+    }
+
+    private static List<String> strings(JSONArray array) {
+        List<String> values = new ArrayList<>();
+        if (array == null)
+            return values;
+        for (int i = 0; i < array.length(); i++) {
+            String value = array.optString(i, "");
+            if (value.length() > 0)
+                values.add(value);
+        }
+        return values;
     }
 
     public SearchRoutePlan withAddedCell(String cellId, String uid,

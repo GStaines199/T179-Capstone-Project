@@ -6,6 +6,7 @@ import android.location.Location;
 
 import com.atakmap.android.plugintemplate.database.DatabaseHelper;
 import com.atakmap.android.plugintemplate.database.LocationRepository;
+import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 
 import org.junit.After;
@@ -31,11 +32,11 @@ import static org.junit.Assert.assertTrue;
 /**
  * Unit tests for raw GNSS capture: RawGnssCaptureManager#handleLocation - the
  * orchestration around a raw GNSS fix (resolving identity, respecting the
- * recording toggle, correlating with the active track session, persisting
- * the capture, notifying listeners) - plus an end-to-end check that the
- * accuracy metadata it hands to LocationRepository survives a real SQLite
- * round trip unmodified, per the Sprint 1 "preserve accuracy metadata
- * without modification" requirement.
+ * recording toggle, handing the fix to the track manager, notifying
+ * listeners) - plus end-to-end checks against a real SearchTrackManager and
+ * SQLite database: accuracy metadata survives the round trip unmodified, per
+ * the Sprint 1 "preserve accuracy metadata without modification" requirement,
+ * and the Track tab's distance follows the raw fixes as they arrive.
  * <p>
  * The LocationManager registration in start()/stop() is not covered here -
  * it depends on runtime permission grants that are awkward to fake under
@@ -50,10 +51,10 @@ public class RawGnssCaptureManagerTest {
             new IdentityManager.Identity("uid1", "Alpha", "Identity: Alpha", true);
     private static final IdentityManager.Identity UNRESOLVED_IDENTITY =
             new IdentityManager.Identity(null, null, "Identity unavailable", false);
+    private static final String OPERATION_ID = "op-raw";
 
     private IdentityManager identityManager;
     private SearchTrackManager trackManager;
-    private LocationRepository locationRepository;
     private RawGnssCaptureManager manager;
 
     @Before
@@ -61,10 +62,9 @@ public class RawGnssCaptureManagerTest {
         Context context = RuntimeEnvironment.getApplication();
         identityManager = mock(IdentityManager.class);
         trackManager = mock(SearchTrackManager.class);
-        locationRepository = mock(LocationRepository.class);
         when(trackManager.isRecording()).thenReturn(true);
         manager = new RawGnssCaptureManager(context, identityManager, trackManager,
-                locationRepository, null);
+                null);
     }
 
     // -------------------------------------------------------------------
@@ -72,27 +72,13 @@ public class RawGnssCaptureManagerTest {
     // -------------------------------------------------------------------
 
     @Test
-    public void handleLocation_withActiveSession_insertsUnderThatSession() {
+    public void handleLocation_recordsTheFixThroughTheTrackManager() {
         when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
-        when(trackManager.getActiveSessionId()).thenReturn("session1");
 
         manager.handleLocation(gpsFix());
 
-        verify(locationRepository).insertRaw(eq("uid1"), eq("Alpha"),
-                eq("session1"), any(RawGnssCapture.class));
-        verify(trackManager, never()).startOrResume(any(), any());
-    }
-
-    @Test
-    public void handleLocation_withNoActiveSession_startsSessionBeforeInserting() {
-        when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
-        when(trackManager.getActiveSessionId()).thenReturn(null, "session2");
-
-        manager.handleLocation(gpsFix());
-
-        verify(trackManager).startOrResume("uid1", "Alpha");
-        verify(locationRepository).insertRaw(eq("uid1"), eq("Alpha"),
-                eq("session2"), any(RawGnssCapture.class));
+        verify(trackManager).recordRawCapture(eq("uid1"), eq("Alpha"),
+                any(RawGnssCapture.class));
     }
 
     @Test
@@ -101,9 +87,7 @@ public class RawGnssCaptureManagerTest {
 
         manager.handleLocation(gpsFix());
 
-        verify(trackManager, never()).startOrResume(any(), any());
-        verify(locationRepository, never())
-                .insertRaw(any(), any(), any(), any());
+        verify(trackManager, never()).recordRawCapture(any(), any(), any());
     }
 
     @Test
@@ -113,20 +97,17 @@ public class RawGnssCaptureManagerTest {
 
         manager.handleLocation(gpsFix());
 
-        verify(trackManager, never()).startOrResume(any(), any());
-        verify(locationRepository, never())
-                .insertRaw(any(), any(), any(), any());
+        verify(trackManager, never()).recordRawCapture(any(), any(), any());
     }
 
     @Test
     public void handleLocation_notifiesListenerWithTheCapturedSnapshot() {
         when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
-        when(trackManager.getActiveSessionId()).thenReturn("session1");
 
         RawGnssCaptureManager.Listener listener = mock(RawGnssCaptureManager.Listener.class);
         RawGnssCaptureManager listeningManager = new RawGnssCaptureManager(
                 RuntimeEnvironment.getApplication(), identityManager, trackManager,
-                locationRepository, listener);
+                listener);
 
         listeningManager.handleLocation(gpsFix());
 
@@ -142,12 +123,12 @@ public class RawGnssCaptureManagerTest {
     }
 
     // -------------------------------------------------------------------
-    // Persistence round trip (real LocationRepository/DatabaseHelper) -
-    // confirms accuracy metadata reaches the location_points table
-    // unmodified for the full handleLocation() -> insertRaw() pipeline.
+    // Persistence round trip (real SearchTrackManager, LocationRepository
+    // and DatabaseHelper) for the full handleLocation() pipeline.
     // -------------------------------------------------------------------
 
     private DatabaseHelper dbHelper;
+    private SearchTrackManager realTrackManager;
 
     @After
     public void tearDown() {
@@ -157,9 +138,8 @@ public class RawGnssCaptureManagerTest {
 
     @Test
     public void handleLocation_persistsRawAccuracyMetadataUnmodified() {
-        RawGnssCaptureManager realManager = managerWithRealRepository();
+        RawGnssCaptureManager realManager = managerWithRealTrackManager();
         when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
-        when(trackManager.getActiveSessionId()).thenReturn("sessionRaw1");
 
         Location location = gpsFix();
         location.setVerticalAccuracyMeters(2.5f);
@@ -168,7 +148,7 @@ public class RawGnssCaptureManagerTest {
 
         realManager.handleLocation(location);
 
-        RawAccuracyRow row = queryRawColumns("sessionRaw1");
+        RawAccuracyRow row = queryRawColumns(realTrackManager.getActiveSessionId());
         assertEquals("gps", row.provider);
         assertEquals(2.5, row.verticalAccuracy, 0.0001);
         assertEquals(3.5, row.bearingAccuracy, 0.0001);
@@ -177,9 +157,8 @@ public class RawGnssCaptureManagerTest {
 
     @Test
     public void handleLocation_withUnavailableAccuracyExtras_persistsThemAsNull() {
-        RawGnssCaptureManager realManager = managerWithRealRepository();
+        RawGnssCaptureManager realManager = managerWithRealTrackManager();
         when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
-        when(trackManager.getActiveSessionId()).thenReturn("sessionRaw2");
 
         Location location = new Location("network");
         location.setLatitude(-27.47);
@@ -189,7 +168,7 @@ public class RawGnssCaptureManagerTest {
 
         realManager.handleLocation(location);
 
-        RawAccuracyRow row = queryRawColumns("sessionRaw2");
+        RawAccuracyRow row = queryRawColumns(realTrackManager.getActiveSessionId());
         assertEquals("network", row.provider);
         assertNull(row.verticalAccuracy);
         assertNull(row.bearingAccuracy);
@@ -203,9 +182,8 @@ public class RawGnssCaptureManagerTest {
      */
     @Test
     public void handleLocation_storesOneRowPerFixAndNothingInBetween() {
-        RawGnssCaptureManager realManager = managerWithRealRepository();
+        RawGnssCaptureManager realManager = managerWithRealTrackManager();
         when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
-        when(trackManager.getActiveSessionId()).thenReturn("sessionRaw3");
 
         Location first = gpsFix();
         first.setTime(1000L);
@@ -219,8 +197,8 @@ public class RawGnssCaptureManagerTest {
 
         Cursor cursor = dbHelper.getReadableDatabase().query(
                 "location_points", new String[]{"latitude", "timestamp"},
-                "session_id = ?", new String[]{"sessionRaw3"}, null, null,
-                "timestamp ASC");
+                "session_id = ?", new String[]{realTrackManager.getActiveSessionId()},
+                null, null, "timestamp ASC");
         assertEquals(2, cursor.getCount());
         assertTrue(cursor.moveToFirst());
         assertEquals(-27.4705, cursor.getDouble(0), 0.000001);
@@ -229,11 +207,78 @@ public class RawGnssCaptureManagerTest {
         cursor.close();
     }
 
-    private RawGnssCaptureManager managerWithRealRepository() {
+    /**
+     * The field bug: once the Track tab had been drawn, raw fixes went into
+     * the database but the distance never moved, because the track manager's
+     * cache never heard about them.
+     */
+    @Test
+    public void handleLocation_afterTheTrackTabHasLoaded_stillAdvancesTheDistance() {
+        RawGnssCaptureManager realManager = managerWithRealTrackManager();
+        when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
+
+        realManager.handleLocation(fixAt(-27.4698, 153.0250, 1000L));
+        assertEquals(0.0, realTrackManager.getDistanceMeters(), 0.001);
+        realTrackManager.getDetailsSummary(); // what the Track tab does
+
+        realManager.handleLocation(fixAt(-27.4698, 153.0280, 6000L));
+        realManager.handleLocation(fixAt(-27.4698, 153.0310, 11000L));
+
+        double expected = 2 * SearchTrackManager.haversineDistance(
+                -27.4698, 153.0250, -27.4698, 153.0280);
+        assertEquals(expected, realTrackManager.getDistanceMeters(), 0.01);
+        assertTrue(realTrackManager.getDetailsSummary().contains(
+                String.format(java.util.Locale.US, "Distance: %.2f km",
+                        expected / 1000.0)));
+    }
+
+    @Test
+    public void handleLocation_countsEachFixAgainstTheSession() {
+        RawGnssCaptureManager realManager = managerWithRealTrackManager();
+        when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
+
+        realManager.handleLocation(fixAt(-27.4698, 153.0250, 1000L));
+        realManager.handleLocation(fixAt(-27.4698, 153.0260, 6000L));
+
+        Cursor cursor = dbHelper.getReadableDatabase().query("track_sessions",
+                new String[]{"point_count"}, "session_id = ?",
+                new String[]{realTrackManager.getActiveSessionId()}, null, null,
+                null);
+        assertTrue(cursor.moveToFirst());
+        assertEquals(2, cursor.getInt(0));
+        cursor.close();
+    }
+
+    /**
+     * Without an operation there is no track session. Fixes used to be
+     * written anyway with a NULL session id, which nothing ever read.
+     */
+    @Test
+    public void handleLocation_withoutAnOperation_storesNothing() {
+        RawGnssCaptureManager realManager = managerWithRealTrackManager();
+        realTrackManager.setOperationId("");
+        when(identityManager.resolveIdentity()).thenReturn(RESOLVED_IDENTITY);
+
+        realManager.handleLocation(gpsFix());
+
+        Cursor cursor = dbHelper.getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM location_points", null);
+        assertTrue(cursor.moveToFirst());
+        assertEquals(0, cursor.getInt(0));
+        cursor.close();
+        assertNull(realTrackManager.getActiveSessionId());
+    }
+
+    private RawGnssCaptureManager managerWithRealTrackManager() {
         dbHelper = new DatabaseHelper(RuntimeEnvironment.getApplication());
-        LocationRepository realLocationRepository = new LocationRepository(dbHelper);
-        return new RawGnssCaptureManager(RuntimeEnvironment.getApplication(),
-                identityManager, trackManager, realLocationRepository, null);
+        realTrackManager = new SearchTrackManager(
+                new TrackSessionRepository(dbHelper),
+                new LocationRepository(dbHelper));
+        realTrackManager.setOperationId(OPERATION_ID);
+        RawGnssCaptureManager realManager = new RawGnssCaptureManager(
+                RuntimeEnvironment.getApplication(), identityManager,
+                realTrackManager, null);
+        return realManager;
     }
 
     private RawAccuracyRow queryRawColumns(String sessionId) {
@@ -267,6 +312,14 @@ public class RawGnssCaptureManagerTest {
         location.setAltitude(42.0);
         location.setAccuracy(5.0f);
         location.setTime(1700000000000L);
+        return location;
+    }
+
+    private static Location fixAt(double latitude, double longitude, long time) {
+        Location location = gpsFix();
+        location.setLatitude(latitude);
+        location.setLongitude(longitude);
+        location.setTime(time);
         return location;
     }
 }

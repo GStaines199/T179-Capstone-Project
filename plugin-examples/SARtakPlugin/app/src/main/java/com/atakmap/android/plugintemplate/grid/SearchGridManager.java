@@ -5,6 +5,7 @@ import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +78,6 @@ public class SearchGridManager {
         }
     }
 
-    private static final int MAX_RENDER_CELLS = 600;
     private static final int MAX_REVIEW_CELLS = 200;
 
     private final GridCoordinateConverter converter;
@@ -85,12 +85,25 @@ public class SearchGridManager {
     private SearchGridCell selectedCell;
     private String selectedAggregateId;
     private SearchGridCell pendingReviewCell;
+    /** The cell the device's GPS was in at the last location update. */
+    private SearchGridCell lastGpsCell;
     private final Map<String, SearchGridCell> reviewedCells =
             new LinkedHashMap<>();
+    private static final int MAX_MARKED_CHANGES = 4096;
+
     private List<SearchGridCell> cachedMarkedCells =
             new ArrayList<SearchGridCell>();
     private AreaProgress cachedAreaProgress;
-    private String cachedAreaVersion;
+    private String cachedAreaScope;
+    private int cachedRevision = -1;
+    /** Counted statuses (complete, partial, in progress) inside the area. */
+    private final Map<String, SearchGridStatus> cachedAreaStatuses =
+            new HashMap<>();
+    private final Map<String, SearchGridCell> markedById =
+            new LinkedHashMap<>();
+    private boolean markedListStale;
+    private int markedGeneration;
+    private final List<SearchGridCell> markedChanges = new ArrayList<>();
 
     private PlannedAreaShape plannedShape = PlannedAreaShape.NONE;
     private String plannedZone = "";
@@ -349,31 +362,76 @@ public class SearchGridManager {
                 + " km";
     }
 
+    /**
+     * Every planned cell, column by column, alternating north and south. Not
+     * capped: the route used to stop after the column that crossed 600 cells,
+     * so on a large area most of the area was silently left off it.
+     */
     public List<SearchGridCell> getSerpentineRouteCells() {
+        return getSerpentineRouteCells(getPlannedAreaRecord(),
+                SearchLineDirection.NORTH);
+    }
+
+    /**
+     * Every cell of {@code area}, snaking along the search direction.
+     * North/South lines walk columns (west to east), East/West lines walk
+     * rows (south to north). The first leg always heads the way the line
+     * travels, so the route starts in the corner the line starts from:
+     * North south-west, South north-west, East south-west, West south-east.
+     */
+    public List<SearchGridCell> getSerpentineRouteCells(
+            SearchGridStateStore.PlannedAreaRecord area,
+            SearchLineDirection direction) {
         List<SearchGridCell> cells = new ArrayList<>();
-        if (!hasPlannedArea())
+        if (area == null || area.zone == null || area.zone.length() == 0
+                || area.east <= area.west || area.north <= area.south)
             return cells;
-        boolean northbound = true;
-        for (double x = plannedWest; x < plannedEast; x +=
-                GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
-            List<SearchGridCell> column = new ArrayList<>();
-            for (double y = plannedSouth; y < plannedNorth; y +=
-                    GridCoordinateConverter.BASE_CELL_SIZE_METERS) {
-                SearchGridCell cell = createPlannedCell(x, y);
-                if (cell != null && isInsidePlannedArea(cell))
-                    column.add(cell);
+        if (direction == null)
+            direction = SearchLineDirection.NORTH;
+        double size = GridCoordinateConverter.BASE_CELL_SIZE_METERS;
+        int columns = (int) Math.round((area.east - area.west) / size);
+        int rows = (int) Math.round((area.north - area.south) / size);
+        boolean byColumn = direction.isNorthSouth();
+        int lanes = byColumn ? columns : rows;
+        int steps = byColumn ? rows : columns;
+        // Whether the first leg runs towards increasing northing/easting.
+        boolean forward = direction == SearchLineDirection.NORTH
+                || direction == SearchLineDirection.EAST;
+        List<SearchGridCell> lane = new ArrayList<>(steps);
+        for (int laneIndex = 0; laneIndex < lanes; laneIndex++) {
+            lane.clear();
+            for (int step = 0; step < steps; step++) {
+                int column = byColumn ? laneIndex : step;
+                int row = byColumn ? step : laneIndex;
+                SearchGridCell cell = createCellForZone(area.zone,
+                        area.west + column * size, area.south + row * size);
+                if (cell != null && isInsideArea(area, cell))
+                    lane.add(cell);
             }
-            if (northbound) {
-                cells.addAll(column);
+            if (forward) {
+                cells.addAll(lane);
             } else {
-                for (int i = column.size() - 1; i >= 0; i--)
-                    cells.add(column.get(i));
+                for (int i = lane.size() - 1; i >= 0; i--)
+                    cells.add(lane.get(i));
             }
-            northbound = !northbound;
-            if (cells.size() >= MAX_RENDER_CELLS)
-                break;
+            forward = !forward;
         }
         return cells;
+    }
+
+    /** Whether {@code cell}'s centre lies inside the box or circle. */
+    static boolean isInsideArea(SearchGridStateStore.PlannedAreaRecord area,
+            SearchGridCell cell) {
+        double centerEasting = (cell.getWest() + cell.getEast()) / 2.0;
+        double centerNorthing = (cell.getSouth() + cell.getNorth()) / 2.0;
+        if (centerEasting < area.west || centerEasting > area.east
+                || centerNorthing < area.south || centerNorthing > area.north)
+            return false;
+        if (!PlannedAreaShape.CIRCLE.name().equals(area.shape))
+            return true;
+        double dx = centerEasting - area.centerEasting;
+        double dy = centerNorthing - area.centerNorthing;
+        return dx * dx + dy * dy <= area.radiusMeters * area.radiusMeters;
     }
 
     public List<SearchGridCell> cellsForIds(List<String> cellIds) {
@@ -421,27 +479,6 @@ public class SearchGridManager {
         return cells;
     }
 
-    public List<SearchGridCell> getReviewCells() {
-        List<SearchGridCell> cells = new ArrayList<>();
-        for (SearchGridCell cell : reviewedCells.values()) {
-            cell.setStatus(stateStore.getStatus(cell.getId()));
-            if (cell.getStatus() == SearchGridStatus.PARTIAL
-                    || cell.getStatus() == SearchGridStatus.COMPLETE)
-                cells.add(cell);
-            if (cells.size() >= MAX_REVIEW_CELLS)
-                break;
-        }
-        if (cells.isEmpty() && !hasPlannedArea()) {
-            for (SearchGridCell cell : getSelectedAggregateCells()) {
-                SearchGridStatus status = cell.getStatus();
-                if (status == SearchGridStatus.PARTIAL
-                        || status == SearchGridStatus.COMPLETE)
-                    cells.add(cell);
-            }
-        }
-        return cells;
-    }
-
     public SearchGridCell selectCellById(String cellId) {
         SearchGridCell cell = knownOrParsedCell(cellId);
         if (cell == null)
@@ -470,23 +507,42 @@ public class SearchGridManager {
         return null;
     }
 
+    /**
+     * Follows the device's GPS cell.
+     *
+     * <p>The selection only moves when the device moves into another cell.
+     * Comparing with the selected cell instead snapped a cell the user had
+     * picked from the Grid tab list back to the GPS cell on the next refresh,
+     * even with the device standing still. For the same reason the cell
+     * marked partial when a running line moves on is the cell the device
+     * walked out of, not whichever cell happened to be selected.
+     */
     public SearchGridCell updateCurrentCellAt(GeoPoint point,
             boolean markPreviousPartial) {
         SearchGridCell current = converter.cellForPoint(point, stateStore);
+        SearchGridCell previousGps = lastGpsCell;
+        lastGpsCell = current;
         if (selectedCell == null)
             return selectCell(current);
-        if (selectedCell.getId().equals(current.getId())) {
+        boolean gpsCellChanged = previousGps == null
+                || !previousGps.getId().equals(current.getId());
+        if (!gpsCellChanged
+                || selectedCell.getId().equals(current.getId())) {
             selectedCell.setStatus(stateStore.getStatus(selectedCell.getId()));
             return selectedCell;
         }
 
-        SearchGridCell previous = selectedCell;
+        // Before the first fix there is no GPS cell to go by, so the
+        // selection (restored from before a restart) stands in for it.
+        SearchGridCell walkedOutOf = previousGps == null ? selectedCell
+                : previousGps;
+        walkedOutOf.setStatus(stateStore.getStatus(walkedOutOf.getId()));
         selectCell(current);
         if (markPreviousPartial
-                && previous.getStatus() != SearchGridStatus.COMPLETE
-                && previous.getStatus() != SearchGridStatus.PARTIAL) {
-            setCellStatus(previous.getId(), SearchGridStatus.PARTIAL);
-            pendingReviewCell = previous;
+                && walkedOutOf.getStatus() != SearchGridStatus.COMPLETE
+                && walkedOutOf.getStatus() != SearchGridStatus.PARTIAL) {
+            setCellStatus(walkedOutOf.getId(), SearchGridStatus.PARTIAL);
+            pendingReviewCell = walkedOutOf;
         }
         return selectedCell;
     }
@@ -626,7 +682,38 @@ public class SearchGridManager {
      */
     public List<SearchGridCell> getMarkedCellsInArea() {
         refreshAreaCache();
+        if (markedListStale) {
+            cachedMarkedCells = new ArrayList<>(markedById.values());
+            markedListStale = false;
+        }
         return cachedMarkedCells;
+    }
+
+    /**
+     * Changes whenever the marked cells were rebuilt from scratch instead of
+     * updated; {@link #getMarkedChanges(int)} only covers one generation.
+     */
+    public int getMarkedGeneration() {
+        refreshAreaCache();
+        return markedGeneration;
+    }
+
+    /** How many marked-cell changes this generation has so far. */
+    public int getMarkedChangeCount() {
+        refreshAreaCache();
+        return markedChanges.size();
+    }
+
+    /**
+     * Cells that became or stopped being PARTIAL/COMPLETE in this generation,
+     * from change number {@code from} on. Each carries its new status, so a
+     * cell with any other status has left the marked cells.
+     */
+    public List<SearchGridCell> getMarkedChanges(int from) {
+        refreshAreaCache();
+        int start = Math.max(0, Math.min(from, markedChanges.size()));
+        return new ArrayList<>(markedChanges.subList(start,
+                markedChanges.size()));
     }
 
     public AreaProgress getAreaProgress() {
@@ -636,10 +723,13 @@ public class SearchGridManager {
 
     /** Store revision plus area scope; changes whenever marked cells may. */
     public String getAreaVersion() {
+        return stateStore.getRevision() + "@" + getAreaScope();
+    }
+
+    private String getAreaScope() {
         GridExtent area = getAreaExtent();
-        return stateStore.getRevision() + "@" + (area == null ? ""
-                : area.key() + ":" + plannedShape + ":"
-                        + Math.round(plannedRadiusMeters));
+        return area == null ? "" : area.key() + ":" + plannedShape + ":"
+                + Math.round(plannedRadiusMeters);
     }
 
     /** Exact number of 100 m cells whose centre lies inside the area. */
@@ -672,12 +762,33 @@ public class SearchGridManager {
         return count;
     }
 
+    /**
+     * Brings the area counts and marked cells up to date. A status change on
+     * a large searched area used to re-read and re-parse every stored status
+     * (30,000+), costing ~100 ms of main thread per cell change; now only the
+     * cells the store reports as changed are looked at, and everything is
+     * rebuilt only when the area or operation changes or too much changed.
+     */
     private void refreshAreaCache() {
-        String version = getAreaVersion();
-        if (cachedAreaProgress != null && version.equals(cachedAreaVersion))
-            return;
+        String scope = getAreaScope();
+        int revision = stateStore.getRevision();
+        if (cachedAreaProgress != null && scope.equals(cachedAreaScope)) {
+            if (revision == cachedRevision)
+                return;
+            List<String> changed = stateStore.changedSince(cachedRevision);
+            if (changed != null) {
+                applyStatusChanges(changed);
+                cachedRevision = revision;
+                return;
+            }
+        }
+        rebuildAreaCache(scope, revision);
+    }
+
+    private void rebuildAreaCache(String scope, int revision) {
         GridExtent area = getAreaExtent();
-        List<SearchGridCell> marked = new ArrayList<>();
+        cachedAreaStatuses.clear();
+        markedById.clear();
         int complete = 0;
         int partial = 0;
         int inProgress = 0;
@@ -692,19 +803,90 @@ public class SearchGridManager {
                 SearchGridStatus status = entry.getValue();
                 if (status == SearchGridStatus.COMPLETE) {
                     complete++;
-                    marked.add(cell);
+                    markedById.put(cell.getId(), cell);
                 } else if (status == SearchGridStatus.PARTIAL) {
                     partial++;
-                    marked.add(cell);
+                    markedById.put(cell.getId(), cell);
                 } else if (status == SearchGridStatus.IN_PROGRESS) {
                     inProgress++;
+                } else {
+                    continue;
                 }
+                cachedAreaStatuses.put(cell.getId(), status);
             }
         }
-        cachedMarkedCells = marked;
+        cachedMarkedCells = new ArrayList<>(markedById.values());
+        markedListStale = false;
         cachedAreaProgress = new AreaProgress(complete, partial, inProgress,
                 getAreaCellCount());
-        cachedAreaVersion = version;
+        cachedAreaScope = scope;
+        cachedRevision = revision;
+        markedGeneration++;
+        markedChanges.clear();
+    }
+
+    private void applyStatusChanges(List<String> cellIds) {
+        GridExtent area = getAreaExtent();
+        int[] counts = new int[] {cachedAreaProgress.complete,
+                cachedAreaProgress.partial, cachedAreaProgress.inProgress};
+        Map<String, SearchGridStatus> known = stateStore.getKnownStatuses();
+        for (String cellId : cellIds) {
+            SearchGridStatus now = known.get(cellId);
+            if (!isCounted(now))
+                now = null;
+            SearchGridStatus before = cachedAreaStatuses.get(cellId);
+            if (now == before || area == null)
+                continue;
+            SearchGridCell cell = converter.parseCell(cellId, now == null
+                    ? SearchGridStatus.NOT_STARTED : now);
+            if (cell == null || !area.zone.equals(cell.getZoneDescriptor())
+                    || !isInsideArea(cell, area))
+                continue;
+            count(counts, before, -1);
+            count(counts, now, 1);
+            if (now == null)
+                cachedAreaStatuses.remove(cellId);
+            else
+                cachedAreaStatuses.put(cellId, now);
+            boolean wasMarked = isMarked(before);
+            boolean marked = isMarked(now);
+            if (marked)
+                markedById.put(cellId, cell);
+            else
+                markedById.remove(cellId);
+            if (wasMarked || marked) {
+                markedListStale = true;
+                markedChanges.add(cell);
+            }
+        }
+        if (markedChanges.size() > MAX_MARKED_CHANGES) {
+            // Readers of the change list rebuild instead.
+            markedGeneration++;
+            markedChanges.clear();
+        }
+        cachedAreaProgress = new AreaProgress(counts[0], counts[1],
+                counts[2], cachedAreaProgress.totalCells);
+    }
+
+    private static boolean isCounted(SearchGridStatus status) {
+        return status == SearchGridStatus.COMPLETE
+                || status == SearchGridStatus.PARTIAL
+                || status == SearchGridStatus.IN_PROGRESS;
+    }
+
+    private static boolean isMarked(SearchGridStatus status) {
+        return status == SearchGridStatus.COMPLETE
+                || status == SearchGridStatus.PARTIAL;
+    }
+
+    private static void count(int[] counts, SearchGridStatus status,
+            int delta) {
+        if (status == SearchGridStatus.COMPLETE)
+            counts[0] += delta;
+        else if (status == SearchGridStatus.PARTIAL)
+            counts[1] += delta;
+        else if (status == SearchGridStatus.IN_PROGRESS)
+            counts[2] += delta;
     }
 
     private boolean isInsideArea(SearchGridCell cell, GridExtent area) {
@@ -806,6 +988,7 @@ public class SearchGridManager {
         selectedCell = null;
         selectedAggregateId = null;
         pendingReviewCell = null;
+        lastGpsCell = null;
     }
 
     private void loadReviewedCellsFromStore() {

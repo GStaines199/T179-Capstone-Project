@@ -137,7 +137,7 @@ public class DittoSyncManager {
     private volatile boolean authAttemptInFlight;
     private volatile String status = "Ditto: not started";
     private volatile long lastPublishTime;
-    private volatile long lastReceiveTime;
+    private final PeerHeartbeats peerHeartbeats = new PeerHeartbeats();
     private long lastAuthAttemptTime;
     private volatile String lastAuthFailure = "";
     private volatile OperationProfile operationProfile;
@@ -514,6 +514,11 @@ public class DittoSyncManager {
                 selfMember, selectedCell, location, now);
     }
 
+    /** Other devices heard from in the last 30 s, not just still stored. */
+    public int getRecentPeerCount() {
+        return peerHeartbeats.freshCount(System.currentTimeMillis());
+    }
+
     public List<DittoDeviceSnapshot> getDeviceSnapshots() {
         synchronized (devices) {
             return new ArrayList<>(devices.values());
@@ -814,7 +819,7 @@ public class DittoSyncManager {
         synchronized (alerts) {
             alerts.clear();
         }
-        lastReceiveTime = 0L;
+        peerHeartbeats.clear();
         lastPublishTime = 0L;
     }
 
@@ -1012,11 +1017,11 @@ public class DittoSyncManager {
                 auth = "unknown";
             }
         }
-        int peers = Math.max(0, getDeviceSnapshots().size() - 1);
+        int peers = getRecentPeerCount();
         return status + " (" + active + ") | peers " + peers
                 + " | auth " + auth
                 + " | sent " + formatAge(lastPublishTime)
-                + " | received " + formatAge(lastReceiveTime);
+                + " | peer heard " + formatAge(peerHeartbeats.lastHeard());
     }
 
     private void publishDeviceState(boolean teamCreated, String teamId,
@@ -1185,8 +1190,6 @@ public class DittoSyncManager {
     private void updateTeamEvents(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchTeamCotMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1206,12 +1209,6 @@ public class DittoSyncManager {
         synchronized (teamEvents) {
             teamEvents.clear();
             teamEvents.putAll(next);
-        }
-        for (SearchTeamCotMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
         }
     }
 
@@ -1238,8 +1235,6 @@ public class DittoSyncManager {
             operationStatuses.clear();
             operationStatuses.putAll(next);
         }
-        if (!next.isEmpty())
-            lastReceiveTime = System.currentTimeMillis();
     }
 
     private SearchTeamCotMessage teamEventFromJson(String json)
@@ -1268,8 +1263,6 @@ public class DittoSyncManager {
     private void updateTeamMemberships(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, DittoTeamMembershipSnapshot> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1292,19 +1285,11 @@ public class DittoSyncManager {
             teamMemberships.clear();
             teamMemberships.putAll(next);
         }
-        for (DittoTeamMembershipSnapshot membership : next.values()) {
-            if (!membership.getUpdatedByUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
     }
 
     private void updateGridStatuses(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchGridCotMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1325,12 +1310,6 @@ public class DittoSyncManager {
             gridStatuses.clear();
             gridStatuses.putAll(next);
         }
-        for (SearchGridCotMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
     }
 
     private SearchGridCotMessage gridStatusFromJson(String json)
@@ -1350,8 +1329,6 @@ public class DittoSyncManager {
     private void updateSearchLines(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchLineCotMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1372,19 +1349,11 @@ public class DittoSyncManager {
             searchLines.clear();
             searchLines.putAll(next);
         }
-        for (SearchLineCotMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
     }
 
     private void updateRoutePlans(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchRoutePlan> next = new LinkedHashMap<>();
         for (String json : jsonDocuments) {
             try {
@@ -1404,19 +1373,11 @@ public class DittoSyncManager {
             routePlans.clear();
             routePlans.putAll(next);
         }
-        for (SearchRoutePlan plan : next.values()) {
-            if (!plan.getCreatedByUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
     }
 
     private void updateAreaAssignments(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchAreaAssignment> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1437,12 +1398,6 @@ public class DittoSyncManager {
         synchronized (areaAssignments) {
             areaAssignments.clear();
             areaAssignments.putAll(next);
-        }
-        for (SearchAreaAssignment assignment : next.values()) {
-            if (!assignment.getAssignedByUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
         }
     }
 
@@ -1477,8 +1432,6 @@ public class DittoSyncManager {
     private void updateSharedMapMarkers(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SharedMapMarkerMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1499,14 +1452,6 @@ public class DittoSyncManager {
             sharedMapMarkers.putAll(next);
         }
         sharedMarkerSnapshotLoaded = true;
-        for (SharedMapMarkerMessage message : next.values()) {
-            String sender = message.isDeleted() ? message.getDeletedByUid()
-                    : message.getSenderUid();
-            if (!sender.equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
     }
 
     private SharedMapMarkerMessage sharedMapMarkerFromJson(String json)
@@ -1517,8 +1462,6 @@ public class DittoSyncManager {
     private void updateAlerts(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchAlertMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1538,13 +1481,6 @@ public class DittoSyncManager {
         synchronized (alerts) {
             alerts.clear();
             alerts.putAll(next);
-        }
-        for (SearchAlertMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)
-                    && !message.getAckUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
         }
     }
 
@@ -1612,11 +1548,11 @@ public class DittoSyncManager {
             devices.clear();
             devices.putAll(next);
         }
+        long now = System.currentTimeMillis();
         for (DittoDeviceSnapshot snapshot : next.values()) {
-            if (!snapshot.getUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
+            if (!snapshot.getUid().equals(selfUid))
+                peerHeartbeats.observe(snapshot.getUid(),
+                        snapshot.getUpdatedAt(), now);
         }
     }
 

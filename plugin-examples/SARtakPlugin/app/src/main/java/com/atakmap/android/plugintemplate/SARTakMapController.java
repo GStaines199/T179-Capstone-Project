@@ -1364,7 +1364,10 @@ public class SARTakMapController {
                         + (isOperationArchived() ? " (archived)" : "")
                         : "Create or join an operation");
         appendReadinessLine(builder, dittoState, "Ditto sync",
-                dittoSyncManager.getSummary());
+                isOfflineWithNoPeers()
+                        ? "Offline: no network and no SARtak device heard from"
+                                + " in 30 sec | " + dittoSyncManager.getSummary()
+                        : dittoSyncManager.getSummary());
         appendReadinessLine(builder,
                 hqRole || teamReady ? READINESS_READY : READINESS_WAITING,
                 "SAR team",
@@ -3149,6 +3152,8 @@ public class SARTakMapController {
                 || summary.contains("(inactive)")
                 || summary.contains("(unknown)"))
             return READINESS_WAITING;
+        if (isOfflineWithNoPeers())
+            return READINESS_WAITING;
         return READINESS_READY;
     }
 
@@ -4033,6 +4038,28 @@ public class SARTakMapController {
             if (teamId.length() > 0)
                 return teamId;
             return "Unassigned";
+        }
+    }
+
+    /**
+     * Ditto can only be syncing if it has a network or a nearby peer it is
+     * still hearing from. Either alone is enough: Ditto also syncs device to
+     * device with no internet.
+     */
+    private boolean isOfflineWithNoPeers() {
+        return dittoSyncManager.getRecentPeerCount() == 0
+                && !isNetworkConnected();
+    }
+
+    private boolean isNetworkConnected() {
+        try {
+            ConnectivityManager manager = (ConnectivityManager) mapView
+                    .getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo active = manager == null ? null
+                    : manager.getActiveNetworkInfo();
+            return active != null && active.isConnected();
+        } catch (Exception exception) {
+            return true;
         }
     }
 

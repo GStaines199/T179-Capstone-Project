@@ -2404,9 +2404,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     java.util.Locale.US, "Sender location: %.6f, %.6f",
                     alert.getLatitude(), alert.getLongitude()), 12, false));
 
+        card.addView(createCardText(
+                mapController.getAlertAckStatus(alert).detail(), 12, false));
         if (fromMe) {
-            card.addView(createCardText(mapController.getAlertAckSummary(alert),
-                    12, false));
             card.addView(createCancelButton("Clear alert / resume",
                     new View.OnClickListener() {
                         @Override

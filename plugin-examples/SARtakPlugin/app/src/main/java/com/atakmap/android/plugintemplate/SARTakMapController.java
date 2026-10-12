@@ -50,6 +50,7 @@ import com.atakmap.android.plugintemplate.grid.SearchTeamStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 import com.atakmap.android.plugintemplate.grid.SearchTrackOverlay;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
+import com.atakmap.android.plugintemplate.runtime.AlertAckStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakLocationStatus;
 import com.atakmap.android.plugintemplate.runtime.AtakRoleResolver;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
@@ -675,41 +676,24 @@ public class SARTakMapController {
     public String getAlertAckSummary(SearchAlertMessage alert) {
         if (alert == null)
             return "No alert selected";
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
-        String selfCallsign = identity == null ? "" : identity.getCallsign();
-        java.util.Set<String> expected = new java.util.LinkedHashSet<>();
-        java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+        return getAlertAckStatus(alert).summary();
+    }
+
+    /** Every team member the alert was meant for, other than its sender. */
+    public AlertAckStatus getAlertAckStatus(SearchAlertMessage alert) {
+        java.util.Map<String, String> recipients =
+                new java.util.LinkedHashMap<>();
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
-            if (matchesMember(member.getUniqueId(), member.getCallsign(),
-                    alert.getSenderUid(), alert.getSenderCallsign())
-                    || matchesMember(member.getUniqueId(), member.getCallsign(),
-                            selfUid, selfCallsign))
+            if (member.getUniqueId() == null
+                    || member.getUniqueId().trim().length() == 0
+                    || matchesMember(member.getUniqueId(),
+                            member.getCallsign(), alert.getSenderUid(),
+                            alert.getSenderCallsign()))
                 continue;
-            expected.add(member.getUniqueId());
-            names.put(member.getUniqueId(), member.getCallsign());
+            recipients.put(member.getUniqueId(), member.getCallsign());
         }
-        java.util.Set<String> acknowledged = new java.util.LinkedHashSet<>();
-        for (SearchAlertMessage message : dittoSyncManager.getAlertMessages()) {
-            if (message.getAlertId().equals(alert.getAlertId())
-                    && SearchAlertMessage.ACTION_ACK.equals(message
-                            .getAction())
-                    && message.getCreated() >= alert.getCreated()
-                    && expected.contains(message.getAckUid()))
-                acknowledged.add(message.getAckUid());
-        }
-        StringBuilder missing = new StringBuilder();
-        for (String uid : expected) {
-            if (!acknowledged.contains(uid)) {
-                if (missing.length() > 0)
-                    missing.append(", ");
-                missing.append(names.get(uid));
-            }
-        }
-        String summary = acknowledged.size() + "/" + expected.size()
-                + " acknowledged";
-        return missing.length() == 0 ? summary : summary + " | Waiting: "
-                + missing;
+        return AlertAckStatus.of(alert, dittoSyncManager.getAlertMessages(),
+                recipients, getSelfMemberId());
     }
 
     public boolean toggleTeamCallsigns() {

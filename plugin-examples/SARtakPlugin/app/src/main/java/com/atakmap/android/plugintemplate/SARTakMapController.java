@@ -147,6 +147,7 @@ public class SARTakMapController {
     private final SearchLineCotWorkflow searchLineCotWorkflow;
     private final DittoSyncManager dittoSyncManager;
     private final DittoCredentialStore dittoCredentialStore;
+    private String dittoProfileNotice;
     private final DittoAtakContactBridge dittoAtakContactBridge;
     private final SharedMapMarkerSyncManager sharedMapMarkerSyncManager;
     private final SearchTeamStateStore teamStateStore;
@@ -3835,35 +3836,26 @@ public class SARTakMapController {
     private void saveCredentialsFromOperationProfile(OperationProfile profile) {
         if (profile == null || !profile.hasDittoCredentials())
             return;
-        DittoCredentialProfile existing =
-                findDittoCredentialProfileByConnection(profile
-                        .getDittoDatabaseId(), profile.getDittoAuthUrl());
         String label = profile.getOperationName().length() == 0
                 ? "Imported Operation Profile"
                 : profile.getOperationName();
-        DittoCredentialProfile credentialProfile = existing == null
-                ? DittoCredentialProfile.create(label,
-                        DittoCredentialProfile.CONNECTION_SDK,
-                        profile.getDittoDatabaseId(),
+        DittoCredentialStore.ImportResult result = dittoCredentialStore
+                .importFromOperation(label, profile.getDittoDatabaseId(),
                         profile.getDittoAuthUrl(),
-                        profile.getDittoDevelopmentToken())
-                : existing.updated(label, DittoCredentialProfile.CONNECTION_SDK,
-                        profile.getDittoDatabaseId(), profile.getDittoAuthUrl(),
                         profile.getDittoDevelopmentToken());
-        dittoCredentialStore.saveProfile(credentialProfile);
+        if (result == DittoCredentialStore.ImportResult.TOKEN_UPDATED)
+            dittoProfileNotice = "Updated the token of the saved Ditto profile"
+                    + " for this operation";
     }
 
-    private DittoCredentialProfile findDittoCredentialProfileByConnection(
-            String databaseId, String authUrl) {
-        String targetDatabaseId = databaseId == null ? "" : databaseId.trim();
-        String targetAuthUrl = authUrl == null ? "" : authUrl.trim();
-        for (DittoCredentialProfile profile : dittoCredentialStore
-                .getProfiles()) {
-            if (profile.getDatabaseId().equals(targetDatabaseId)
-                    && profile.getAuthUrl().equals(targetAuthUrl))
-                return profile;
-        }
-        return null;
+    /**
+     * Returns, once, a message about what joining or switching did to the
+     * saved Ditto profiles, or null when there is nothing to say.
+     */
+    public String takeDittoProfileNotice() {
+        String notice = dittoProfileNotice;
+        dittoProfileNotice = null;
+        return notice;
     }
 
     private boolean handleRouteSelectionMapEvent(MapEvent event) {

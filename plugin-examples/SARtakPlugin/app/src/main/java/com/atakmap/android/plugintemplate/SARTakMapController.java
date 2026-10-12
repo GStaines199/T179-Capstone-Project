@@ -30,6 +30,7 @@ import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchGridDisplayFormatter;
 import com.atakmap.android.plugintemplate.grid.SearchGridManager;
 import com.atakmap.android.plugintemplate.grid.SearchGridOverlay;
+import com.atakmap.android.plugintemplate.grid.AssignableTeams;
 import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchDirectionStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
@@ -1885,6 +1886,30 @@ public class SARTakMapController {
             publishDittoDeviceStateNow();
         }
         return added;
+    }
+
+    /** Teams HQ can assign an area to, including this device's own team. */
+    public List<SearchTeamCotMessage> getAssignableTeams() {
+        SearchTeamCotMessage ownTeam = null;
+        if (hasActiveOperation() && assignmentManager.isTeamCreated()) {
+            boolean ownsTeam = assignmentManager.isOwnTeam(
+                    getFixedLeaderTeamId());
+            IdentityManager.Identity identity =
+                    identityManager.getCurrentIdentity();
+            String leaderUid = ownsTeam && identity != null
+                    ? identity.getUid() : assignmentManager.getLeaderUid();
+            String leaderCallsign = ownsTeam && identity != null
+                    ? identity.getCallsign()
+                    : assignmentManager.getLeaderCallsign();
+            ownTeam = new SearchTeamCotMessage(
+                    "sartak-team-own-" + assignmentManager.getTeamId(),
+                    SearchTeamCotMessage.ACTION_ADVERTISE,
+                    assignmentManager.getTeamId(),
+                    assignmentManager.getTeamName(), leaderUid,
+                    leaderCallsign, leaderUid, leaderCallsign, "", "");
+        }
+        return AssignableTeams.withOwnTeam(getActiveTeamAdvertisements(),
+                ownTeam);
     }
 
     public List<SearchTeamCotMessage> getActiveTeamAdvertisements() {

@@ -1043,7 +1043,7 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
             return;
         }
         final java.util.List<SearchTeamCotMessage> teams = mapController
-                .getActiveTeamAdvertisements();
+                .getAssignableTeams();
         if (teams.isEmpty()) {
             Toast.makeText(getMapView().getContext(),
                     "No SARtak teams visible to assign yet",
@@ -1057,8 +1057,9 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                     + team.getLeaderCallsign();
         }
         new AlertDialog.Builder(getMapView().getContext())
-                .setTitle("Assign Search Area")
-                .setMessage("Assign the current planned search area to a team.")
+                // No setMessage(): an AlertDialog with a message doesn't
+                // show its item list, so the teams were never visible.
+                .setTitle("Assign planned area to team")
                 .setItems(labels, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {

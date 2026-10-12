@@ -6,14 +6,44 @@ public final class RemainingCellsFormatter {
     private RemainingCellsFormatter() {
     }
 
+    /** What the Grid tab counts when no planned area is set. */
+    static final String SELECTED_SQUARE_LABEL =
+            "1 km square of selected cell";
+
     public static String areaRemaining(SearchGridManager.AreaProgress progress) {
         if (progress == null || progress.totalCells <= 0)
             return "Area left: no planned area";
+        return remaining("Area left: ", progress);
+    }
+
+    /**
+     * Grid tab progress for the planned area, or, with none planned, for the
+     * 1 km square the selected cell sits in. Calling that square the planned
+     * area made it look as if a 100-cell area had been planned.
+     */
+    public static String areaProgress(SearchGridManager.AreaProgress progress,
+            boolean plannedArea) {
+        if (progress == null)
+            return plannedArea ? "Planned area: no cells"
+                    : SELECTED_SQUARE_LABEL + ": no cells";
+        String counts = progress.complete + " complete, " + progress.partial
+                + " partial, " + progress.inProgress + " in progress, "
+                + progress.totalCells + " cells total";
+        if (plannedArea)
+            return "Planned area: " + counts + "\n"
+                    + areaRemaining(progress);
+        return SELECTED_SQUARE_LABEL + " (no planned area): " + counts
+                + "\n" + (progress.totalCells <= 0 ? "Square left: no cells"
+                        : remaining("Square left: ", progress));
+    }
+
+    private static String remaining(String prefix,
+            SearchGridManager.AreaProgress progress) {
         int remaining = Math.max(0, progress.totalCells - progress.complete);
         if (remaining == 0)
-            return "Area left: all " + progress.totalCells
+            return prefix + "all " + progress.totalCells
                     + " cells complete";
-        StringBuilder builder = new StringBuilder("Area left: ")
+        StringBuilder builder = new StringBuilder(prefix)
                 .append(remaining).append(" of ")
                 .append(progress.totalCells).append(" cells not complete");
         if (progress.partial > 0)

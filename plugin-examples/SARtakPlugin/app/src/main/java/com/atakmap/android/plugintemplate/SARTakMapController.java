@@ -2333,11 +2333,8 @@ public class SARTakMapController {
         SearchGridCell firstCell = converter.cellForUtmPoint(area.zone,
                 area.west, area.south, gridStateStore);
         return "UTM: " + SearchGridDisplayFormatter.formatParentUtm(
-                firstCell) + "\nPlanned area: " + progress.complete
-                + " complete, " + progress.partial + " partial, "
-                + progress.inProgress + " in progress, "
-                + progress.totalCells + " cells total\n"
-                + RemainingCellsFormatter.areaRemaining(progress) + "\n"
+                firstCell) + "\n" + RemainingCellsFormatter.areaProgress(
+                        progress, gridManager.hasPlannedArea()) + "\n"
                 + getNextCellDisplaySummary() + "\n"
                 + gridOverlay.getLastDiagnostics();
     }

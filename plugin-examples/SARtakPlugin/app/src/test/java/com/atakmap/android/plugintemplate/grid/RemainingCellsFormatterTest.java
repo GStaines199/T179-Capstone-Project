@@ -3,6 +3,7 @@ package com.atakmap.android.plugintemplate.grid;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 /** The remaining-cells lines on the Home and Grid tabs. */
 public class RemainingCellsFormatterTest {
@@ -65,5 +66,30 @@ public class RemainingCellsFormatterTest {
     public void route_missing_saysThereIsNoRoute() {
         assertEquals("Route left: no route planned",
                 RemainingCellsFormatter.routeRemaining(null, null));
+    }
+
+    @Test
+    public void gridProgress_withPlannedArea_namesThePlannedArea() {
+        assertEquals("Planned area: 5401 complete, 401 partial,"
+                        + " 2 in progress, 40401 cells total\n"
+                        + "Area left: 35000 of 40401 cells not complete"
+                        + " (401 partial)",
+                RemainingCellsFormatter.areaProgress(
+                        new SearchGridManager.AreaProgress(5401, 401, 2,
+                                40401), true));
+    }
+
+    @Test
+    public void gridProgress_withoutPlannedArea_namesTheSelectedSquare() {
+        String text = RemainingCellsFormatter.areaProgress(
+                new SearchGridManager.AreaProgress(3, 1, 0, 100), false);
+
+        assertEquals("1 km square of selected cell (no planned area):"
+                        + " 3 complete, 1 partial, 0 in progress,"
+                        + " 100 cells total\n"
+                        + "Square left: 97 of 100 cells not complete"
+                        + " (1 partial)", text);
+        assertFalse(text.contains("Planned area"));
+        assertFalse(text.contains("Area left"));
     }
 }

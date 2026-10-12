@@ -79,6 +79,7 @@ import com.atakmap.android.plugintemplate.runtime.SearchRoutePlan;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SharedMapMarkerSyncManager;
+import com.atakmap.android.plugintemplate.runtime.StepTimer;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.coords.GeoBounds;
@@ -2680,49 +2681,56 @@ public class SARTakMapController {
     }
 
     private void runBackgroundTeamRefresh() {
-        long started = SystemClock.elapsedRealtimeNanos();
+        // Every step is timed so a slow tick names its slow step; steps
+        // under 0.1 ms are left out of the log line.
+        StepTimer timer = new StepTimer();
         if (!loggedSyncedRecoverySnapshot) {
             loggedSyncedRecoverySnapshot = true;
             applyRemoteRoutePlanIfAvailable();
             logRecoverySnapshot("synced");
+            timer.mark("snapshot");
         }
         dittoSyncManager.maintainConnection();
+        timer.mark("connect");
         publishPersistedAreaIfNeeded();
-        long advertiseStarted = SystemClock.elapsedRealtimeNanos();
+        timer.mark("area");
         advertiseTeamIfDue();
-        long advertiseDone = SystemClock.elapsedRealtimeNanos();
+        timer.mark("advertise");
         applyTeamLifecycleMessages();
+        timer.mark("lifecycle");
         applyDittoMembershipSnapshots();
-        long markersStarted = SystemClock.elapsedRealtimeNanos();
+        timer.mark("membership");
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
-        long markersDone = SystemClock.elapsedRealtimeNanos();
+        timer.mark("markers");
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
+        timer.mark("contacts");
         applyRemoteSearchLineIfAvailable();
         applyRemoteRoutePlanIfAvailable();
+        timer.mark("lineRoute");
         applyRemoteGridStatusMessages();
+        timer.mark("gridStatus");
         applyRemoteAreaAssignmentIfAvailable();
         applyRemoteOperationStatusIfAvailable();
         applyAlertSearchLineSideEffects();
+        timer.mark("areaAlerts");
         refreshLocationAvailability();
         syncSelfTeamMemberFromAtak();
+        timer.mark("self");
         updateCurrentGridCellFromLocation();
-        long deviceStarted = SystemClock.elapsedRealtimeNanos();
+        timer.mark("cell");
         publishDittoDeviceStateIfDue();
-        long deviceDone = SystemClock.elapsedRealtimeNanos();
+        timer.mark("device");
         applyDittoDeviceSnapshots();
+        timer.mark("devices");
         arrangeTeamMembers();
+        timer.mark("arrange");
         scheduleOverlayRefresh();
-        long lineStarted = SystemClock.elapsedRealtimeNanos();
         publishSearchLineUpdateIfDue();
-        long done = SystemClock.elapsedRealtimeNanos();
+        timer.mark("line");
         if (BuildConfig.DEBUG)
-            Log.d(PERF_TAG, "background refresh ms=" + millis(started, done)
-                    + " advertise=" + millis(advertiseStarted, advertiseDone)
-                    + " markers=" + millis(markersStarted, markersDone)
-                    + " device=" + millis(deviceStarted, deviceDone)
-                    + " line=" + millis(lineStarted, done)
-                    + " " + dittoSyncManager.getWriteQueueSummary());
+            Log.d(PERF_TAG, "background refresh " + timer.summary() + " "
+                    + dittoSyncManager.getWriteQueueSummary());
     }
 
     private void updateCurrentGridCellFromLocation() {

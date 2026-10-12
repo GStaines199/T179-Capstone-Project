@@ -14,6 +14,13 @@ public class SearchLineManager {
     public static final double SLOW_DOWN_THRESHOLD_METERS = 8.0;
     /** Length of the arrow drawn from the line toward the direction of travel. */
     private static final double DIRECTION_ARROW_METERS = 14.0;
+    /**
+     * How old the leader's last update may be before a member's copy of the
+     * line is shown as out of date. The same age at which the line workflow
+     * stops accepting the leader's messages, so past it nothing newer can
+     * arrive until the leader publishes again.
+     */
+    public static final long REMOTE_STALE_AFTER_MS = 30_000L;
     private final GridCoordinateConverter converter;
     private final SearchPartyAssignmentManager assignmentManager;
     private SearchLineState state = SearchLineState.NOT_STARTED;
@@ -383,14 +390,41 @@ public class SearchLineManager {
         return statuses;
     }
 
+    /**
+     * When the leader last sent this line, by the leader's clock, or 0 when
+     * this device runs its own line.
+     */
+    public long getLastRemoteUpdate() {
+        return lastRemoteUpdate;
+    }
+
+    /**
+     * Whether a line copied from the leader has stopped being updated.
+     *
+     * <p>The leader republishes every few seconds while a line runs. If that
+     * stops -- ATAK crashed, the radio dropped out, the leader left on a build
+     * that sends no END -- the member keeps the last line it was given. That
+     * is deliberate, so a short dropout doesn't wipe the line, but the member
+     * must not keep calling that line current.
+     */
+    public boolean isRemoteStale(long nowMillis) {
+        return remoteControlled && state != SearchLineState.NOT_STARTED
+                && lastRemoteUpdate > 0L
+                && nowMillis - lastRemoteUpdate > REMOTE_STALE_AFTER_MS;
+    }
+
     public String getSummary() {
+        return getSummary(System.currentTimeMillis());
+    }
+
+    public String getSummary(long nowMillis) {
         if (state == SearchLineState.NOT_STARTED)
             return remoteControlled && remoteLeaderCallsign.length() > 0
                     ? "Leader line not started"
                     : "Line not started";
         String prefix = remoteControlled
-                ? "Leader line " + state.name() + " | "
-                        + remoteLeaderCallsign
+                ? "Leader line " + state.name() + staleSuffix(nowMillis)
+                        + " | " + remoteLeaderCallsign
                 : "Line " + state.name();
         return prefix
                 + " | Heading: " + getDirectionLabel()
@@ -489,10 +523,21 @@ public class SearchLineManager {
     }
 
     public String getWarningSummary() {
+        return getWarningSummary(System.currentTimeMillis());
+    }
+
+    public String getWarningSummary(long nowMillis) {
         if (state == SearchLineState.NOT_STARTED)
             return "No search line warnings";
 
         StringBuilder builder = new StringBuilder();
+        if (isRemoteStale(nowMillis))
+            builder.append("NO UPDATE: ")
+                    .append(remoteLeaderCallsign.length() > 0
+                            ? remoteLeaderCallsign : "The team leader")
+                    .append(" has not updated the line for ")
+                    .append(formatAge(nowMillis - lastRemoteUpdate))
+                    .append(". It may be out of date.\n");
         for (SearchLineMemberStatus status : getMemberStatuses()) {
             // Both directions. A searcher who drops behind leaves unswept
             // ground just as surely as one who runs ahead, and used to be
@@ -651,6 +696,21 @@ public class SearchLineManager {
                 return member;
         }
         return null;
+    }
+
+    private String staleSuffix(long nowMillis) {
+        if (!isRemoteStale(nowMillis))
+            return "";
+        return " (no update for " + formatAge(nowMillis - lastRemoteUpdate)
+                + ")";
+    }
+
+    /** "45 s" under a minute, then whole minutes: "2 min". */
+    static String formatAge(long ageMillis) {
+        long seconds = Math.max(0L, ageMillis / 1000L);
+        if (seconds < 60L)
+            return seconds + " s";
+        return (seconds / 60L) + " min";
     }
 
     private String formatPace(double pace) {

@@ -1,6 +1,8 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import android.app.AlertDialog;
 import android.os.SystemClock;
+import android.widget.Toast;
 
 import com.atakmap.android.maps.MapGroup;
 import com.atakmap.android.maps.MapItem;
@@ -13,7 +15,10 @@ import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 
 /**
@@ -49,15 +54,22 @@ public class SharedMapMarkerSyncManager {
     private final SharedMapMarkerReconciler reconciler =
             new SharedMapMarkerReconciler();
     private final AtakLocalMap localMap = new AtakLocalMap();
+    private final SharedMarkerStateStore stateStore;
 
     private String operationId = "";
     private long lastScanTime;
+    // Markers imported for other operations, by operation, still to take
+    // off the map. ATAK may reload saved ones a while after startup.
+    private Map<String, Set<String>> foreignImports = new HashMap<>();
+    private AlertDialog existingMarkersPrompt;
 
     public SharedMapMarkerSyncManager(MapView mapView,
-            IdentityManager identityManager, DittoSyncManager dittoSyncManager) {
+            IdentityManager identityManager, DittoSyncManager dittoSyncManager,
+            SharedMarkerStateStore stateStore) {
         this.mapView = mapView;
         this.identityManager = identityManager;
         this.dittoSyncManager = dittoSyncManager;
+        this.stateStore = stateStore;
     }
 
     public void setOperationId(String operationId) {
@@ -66,11 +78,62 @@ public class SharedMapMarkerSyncManager {
                 && next.equals(reconciler.getOperationId()))
             return;
         this.operationId = next;
-        reconciler.reset(next, System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        reconciler.reset(next, now);
         lastScanTime = 0L;
+        if (existingMarkersPrompt != null && existingMarkersPrompt.isShowing())
+            existingMarkersPrompt.dismiss();
+        existingMarkersPrompt = null;
+        if (stateStore == null)
+            return;
+        if (next.length() > 0) {
+            reconciler.setOperationJoinedAt(stateStore.getOrRecordJoinedAt(
+                    next, now));
+            reconciler.setExistingMarkers(stateStore.getExistingMarkers(next));
+            reconciler.restorePresent(stateStore.getPresent(next));
+        }
+        foreignImports = SharedMarkerStateStore.foreignImports(
+                stateStore.getImportedByOperation(), next);
+        removeForeignImports();
     }
 
-    public void sync(String teamId) {
+    /**
+     * Takes markers imported for other operations off the map (finding
+     * T4-2), so leaving or switching operation doesn't leave the old one's
+     * markers behind. They come back from Ditto on returning to it.
+     */
+    private void removeForeignImports() {
+        if (foreignImports.isEmpty() || mapView == null
+                || mapView.getRootGroup() == null)
+            return;
+        for (Map.Entry<String, Set<String>> entry : foreignImports.entrySet()) {
+            List<String> removed = new ArrayList<>();
+            for (String uid : entry.getValue()) {
+                MapItem item = findItem(uid);
+                if (item == null)
+                    continue;
+                try {
+                    item.removeFromGroup();
+                    removed.add(uid);
+                } catch (Exception exception) {
+                    Log.w(TAG, "Unable to remove another operation's marker",
+                            exception);
+                }
+            }
+            if (!removed.isEmpty()) {
+                stateStore.forgetPresent(entry.getKey(), removed);
+                Log.i(TAG, "removed " + removed.size()
+                        + " markers of another operation");
+            }
+        }
+    }
+
+    /**
+     * @param canDeleteOthersMarkers true for leaders and HQ; a searcher may
+     *            only delete shared markers they created (finding T4-6)
+     */
+    public void sync(String teamId, boolean canDeleteOthersMarkers) {
+        reconciler.setCanDeleteOthersMarkers(canDeleteOthersMarkers);
         if (operationId.length() == 0 || dittoSyncManager == null
                 || mapView == null || mapView.getRootGroup() == null)
             return;
@@ -91,9 +154,21 @@ public class SharedMapMarkerSyncManager {
         SharedMapMarkerReconciler.Result result;
         if (scanDue) {
             lastScanTime = now;
+            removeForeignImports();
             result = reconciler.sync(documents, localMap, publisher,
                     selfUid, identity.getCallsign(), MapView.getDeviceUid(),
                     teamId, now);
+            if (stateStore != null) {
+                stateStore.savePresent(operationId,
+                        reconciler.getPresentForRestart());
+                // Includes imports ATAK saved itself (any the user edited),
+                // which come back after a restart without being imported.
+                stateStore.addImported(operationId,
+                        reconciler.getOthersPresent());
+            }
+            tellAboutRefusedDeletes(result.refusedDeletes);
+            if (result.existingWaiting > 0)
+                askAboutExistingMarkers(operationId, result.existingWaiting);
         } else {
             result = reconciler.applyRemote(documents, localMap, selfUid);
         }
@@ -104,6 +179,55 @@ public class SharedMapMarkerSyncManager {
         if (BuildConfig.DEBUG && (scanDue || elapsed >= 16L))
             Log.d(PERF_TAG, "shared markers ms=" + elapsed + " scan="
                     + scanDue + " docs=" + documents.size() + " " + result);
+    }
+
+    private void tellAboutRefusedDeletes(List<String> titles) {
+        if (titles.isEmpty())
+            return;
+        String what = titles.size() == 1 ? "\"" + titles.get(0) + "\""
+                : titles.size() + " shared markers";
+        Toast.makeText(mapView.getContext(), "Only the creator, a team leader"
+                + " or HQ can delete " + what + ". It has been put back.",
+                Toast.LENGTH_LONG).show();
+    }
+
+    /**
+     * Asks once per operation whether to share the user's own markers from
+     * before they joined (finding T4-7). Until they answer, those markers
+     * stay on this device only.
+     */
+    private void askAboutExistingMarkers(final String forOperation,
+            int count) {
+        if (existingMarkersPrompt != null || stateStore == null
+                || mapView == null)
+            return;
+        existingMarkersPrompt = new AlertDialog.Builder(mapView.getContext())
+                .setTitle("Shared markers")
+                .setMessage("Share " + count + (count == 1
+                        ? " existing marker" : " existing markers")
+                        + " with this operation?\n\nThese are markers you made"
+                        + " on this device before joining it. Markers you make"
+                        + " from now on are shared either way.")
+                .setCancelable(false)
+                .setPositiveButton("Share", (dialog, which) -> answerExisting(
+                        forOperation,
+                        SharedMapMarkerReconciler.ExistingMarkers.SHARE))
+                .setNegativeButton("Keep on this device",
+                        (dialog, which) -> answerExisting(forOperation,
+                                SharedMapMarkerReconciler.ExistingMarkers
+                                        .KEEP_PRIVATE))
+                .show();
+    }
+
+    private void answerExisting(String forOperation,
+            SharedMapMarkerReconciler.ExistingMarkers answer) {
+        stateStore.setExistingMarkers(forOperation, answer);
+        if (!forOperation.equals(operationId))
+            return;
+        existingMarkersPrompt = null;
+        reconciler.setExistingMarkers(answer);
+        // Share straight away rather than on the next 9.7 s refresh.
+        lastScanTime = 0L;
     }
 
     /** Live shared markers of this operation, newest edit first. */
@@ -282,6 +406,9 @@ public class SharedMapMarkerSyncManager {
                 marker = new Marker(point, message.getMarkerUid());
                 tagImportedMarker(marker, message);
                 group.addItem(marker);
+                if (stateStore != null)
+                    stateStore.addImported(operationId,
+                            message.getMarkerUid());
             }
             marker.setPoint(point);
             marker.setType(message.getMarkerType().length() == 0

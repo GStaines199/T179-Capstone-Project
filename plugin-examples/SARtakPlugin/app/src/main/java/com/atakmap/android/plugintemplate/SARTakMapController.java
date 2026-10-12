@@ -79,6 +79,7 @@ import com.atakmap.android.plugintemplate.runtime.SearchRoutePlan;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SharedMapMarkerSyncManager;
+import com.atakmap.android.plugintemplate.runtime.SharedMarkerStateStore;
 import com.atakmap.android.plugintemplate.runtime.StepTimer;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
@@ -249,7 +250,8 @@ public class SARTakMapController {
         this.dittoSyncManager = new DittoSyncManager(mapView, identityManager);
         this.dittoAtakContactBridge = new DittoAtakContactBridge(mapView);
         this.sharedMapMarkerSyncManager = new SharedMapMarkerSyncManager(
-                mapView, identityManager, dittoSyncManager);
+                mapView, identityManager, dittoSyncManager,
+                new SharedMarkerStateStore(runtimeContext));
         // Merely restoring an operation must not start Ditto while ATAK is
         // still constructing plugins on its main thread.
         this.dittoSyncManager.prepareOperationProfile(activeOperationProfile);
@@ -2712,7 +2714,8 @@ public class SARTakMapController {
         timer.mark("lifecycle");
         applyDittoMembershipSnapshots();
         timer.mark("membership");
-        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
+        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId(),
+                isLeaderRole() || isHqRole());
         timer.mark("markers");
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
@@ -3065,7 +3068,8 @@ public class SARTakMapController {
         restoreSearchDirection();
         publishDittoDeviceStateNow();
         syncDittoDevicesToAtakMarkers();
-        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId());
+        sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId(),
+                isLeaderRole() || isHqRole());
         refreshTeamContactsInternal();
         refreshOverlay();
     }

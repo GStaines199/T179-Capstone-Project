@@ -1688,7 +1688,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         }
         AlertDialog.Builder builder = new AlertDialog.Builder(
                 getMapView().getContext())
-                .setTitle("Switch Operation")
+                .setTitle(available.isEmpty() ? "Switch Operation"
+                        : "Switch Operation (long-press to remove)")
                 .setNeutralButton("Join Another",
                         new DialogInterface.OnClickListener() {
                             @Override
@@ -1720,7 +1721,55 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                         }
                     });
         }
-        builder.show();
+        final AlertDialog dialog = builder.show();
+        if (available.isEmpty() || dialog.getListView() == null)
+            return;
+        dialog.getListView().setOnItemLongClickListener(
+                new AdapterView.OnItemLongClickListener() {
+                    @Override
+                    public boolean onItemLongClick(AdapterView<?> parent,
+                            View view, int position, long id) {
+                        if (position < 0 || position >= available.size())
+                            return false;
+                        dialog.dismiss();
+                        confirmRemoveSavedOperation(available.get(position));
+                        return true;
+                    }
+                });
+    }
+
+    private void confirmRemoveSavedOperation(final OperationProfile profile) {
+        new AlertDialog.Builder(getMapView().getContext())
+                .setTitle("Remove from this device?")
+                .setMessage("Remove " + profile.getOperationName()
+                        + " from this device's operation list? Other devices"
+                        + " and the operation's synced data are not affected."
+                        + " You can join it again with its code.")
+                .setPositiveButton("Remove",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface ignored,
+                                    int which) {
+                                boolean removed = mapController
+                                        .removeSavedOperation(profile
+                                                .getOperationId());
+                                Toast.makeText(getMapView().getContext(),
+                                        removed ? "Removed "
+                                                + profile.getOperationName()
+                                                : "Operation could not be removed",
+                                        Toast.LENGTH_SHORT).show();
+                                showSwitchOperationDialog();
+                            }
+                        })
+                .setNegativeButton("Cancel",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface ignored,
+                                    int which) {
+                                showSwitchOperationDialog();
+                            }
+                        })
+                .show();
     }
 
     private void showPasteOperationJoinCodeDialog() {

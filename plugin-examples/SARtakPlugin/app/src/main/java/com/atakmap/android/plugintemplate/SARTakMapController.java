@@ -1606,6 +1606,15 @@ public class SARTakMapController {
         return operationStateStore.loadSavedProfiles();
     }
 
+    /** Removes an inactive operation from this device's Switch Operation list. */
+    public boolean removeSavedOperation(String operationId) {
+        if (activeOperationProfile != null && operationId != null
+                && operationId.trim().equals(activeOperationProfile
+                        .getOperationId()))
+            return false;
+        return operationStateStore.removeSavedProfile(operationId);
+    }
+
     public boolean switchOperation(String operationId) {
         if (operationId == null || operationId.trim().length() == 0)
             return false;

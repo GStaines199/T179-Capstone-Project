@@ -84,6 +84,8 @@ public class SearchGridManager {
     private SearchGridCell selectedCell;
     private String selectedAggregateId;
     private SearchGridCell pendingReviewCell;
+    /** The cell the device's GPS was in at the last location update. */
+    private SearchGridCell lastGpsCell;
     private final Map<String, SearchGridCell> reviewedCells =
             new LinkedHashMap<>();
     private List<SearchGridCell> cachedMarkedCells =
@@ -514,23 +516,42 @@ public class SearchGridManager {
         return null;
     }
 
+    /**
+     * Follows the device's GPS cell.
+     *
+     * <p>The selection only moves when the device moves into another cell.
+     * Comparing with the selected cell instead snapped a cell the user had
+     * picked from the Grid tab list back to the GPS cell on the next refresh,
+     * even with the device standing still. For the same reason the cell
+     * marked partial when a running line moves on is the cell the device
+     * walked out of, not whichever cell happened to be selected.
+     */
     public SearchGridCell updateCurrentCellAt(GeoPoint point,
             boolean markPreviousPartial) {
         SearchGridCell current = converter.cellForPoint(point, stateStore);
+        SearchGridCell previousGps = lastGpsCell;
+        lastGpsCell = current;
         if (selectedCell == null)
             return selectCell(current);
-        if (selectedCell.getId().equals(current.getId())) {
+        boolean gpsCellChanged = previousGps == null
+                || !previousGps.getId().equals(current.getId());
+        if (!gpsCellChanged
+                || selectedCell.getId().equals(current.getId())) {
             selectedCell.setStatus(stateStore.getStatus(selectedCell.getId()));
             return selectedCell;
         }
 
-        SearchGridCell previous = selectedCell;
+        // Before the first fix there is no GPS cell to go by, so the
+        // selection (restored from before a restart) stands in for it.
+        SearchGridCell walkedOutOf = previousGps == null ? selectedCell
+                : previousGps;
+        walkedOutOf.setStatus(stateStore.getStatus(walkedOutOf.getId()));
         selectCell(current);
         if (markPreviousPartial
-                && previous.getStatus() != SearchGridStatus.COMPLETE
-                && previous.getStatus() != SearchGridStatus.PARTIAL) {
-            setCellStatus(previous.getId(), SearchGridStatus.PARTIAL);
-            pendingReviewCell = previous;
+                && walkedOutOf.getStatus() != SearchGridStatus.COMPLETE
+                && walkedOutOf.getStatus() != SearchGridStatus.PARTIAL) {
+            setCellStatus(walkedOutOf.getId(), SearchGridStatus.PARTIAL);
+            pendingReviewCell = walkedOutOf;
         }
         return selectedCell;
     }
@@ -850,6 +871,7 @@ public class SearchGridManager {
         selectedCell = null;
         selectedAggregateId = null;
         pendingReviewCell = null;
+        lastGpsCell = null;
     }
 
     private void loadReviewedCellsFromStore() {

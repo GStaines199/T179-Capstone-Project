@@ -18,6 +18,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
@@ -48,6 +49,8 @@ public class RouteProgressTrackerTest {
         when(store.getKnownStatuses()).thenAnswer(invocation ->
                 new LinkedHashMap<>(statuses));
         when(store.getRevision()).thenAnswer(invocation -> revision);
+        // The mock keeps no change log, so every revision is a full rebuild.
+        when(store.changedSince(anyInt())).thenReturn(null);
         tracker = new RouteProgressTracker();
     }
 

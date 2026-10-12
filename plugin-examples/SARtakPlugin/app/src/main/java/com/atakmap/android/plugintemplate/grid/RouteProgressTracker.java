@@ -2,7 +2,7 @@ package com.atakmap.android.plugintemplate.grid;
 
 import com.atakmap.android.plugintemplate.runtime.SearchRoutePlan;
 
-import java.util.Arrays;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,8 +10,10 @@ import java.util.Map;
 /**
  * How much of the route is left and which route cell comes next. Runs on
  * every panel refresh, so it never walks the route: the route's cell index
- * is built once per plan version, and progress is recomputed from the sparse
- * stored statuses only when a status or the plan changes.
+ * is built once per plan version, and progress is kept as a set of complete
+ * route positions. A status change only updates the cells the store reports
+ * as changed; all stored statuses are only read again when the plan or the
+ * operation changes, or too much changed at once.
  */
 public class RouteProgressTracker {
 
@@ -44,6 +46,8 @@ public class RouteProgressTracker {
     private String cachedPlanVersion;
     private List<String> routeIds;
     private Map<String, Integer> routeIndex;
+    /** Route positions whose cell is complete. */
+    private BitSet complete;
     private int cachedRevision = -1;
     private Progress cachedProgress;
 
@@ -64,7 +68,14 @@ public class RouteProgressTracker {
         int revision = stateStore.getRevision();
         if (cachedProgress != null && revision == cachedRevision)
             return cachedProgress;
-        cachedProgress = compute(stateStore.getKnownStatuses());
+        List<String> changed = cachedProgress == null ? null
+                : stateStore.changedSince(cachedRevision);
+        Map<String, SearchGridStatus> known = stateStore.getKnownStatuses();
+        if (changed == null)
+            markAll(known);
+        else
+            markChanged(changed, known);
+        cachedProgress = progress();
         cachedRevision = revision;
         return cachedProgress;
     }
@@ -73,6 +84,7 @@ public class RouteProgressTracker {
         cachedPlanVersion = null;
         routeIds = null;
         routeIndex = null;
+        complete = null;
         cachedRevision = -1;
         cachedProgress = null;
     }
@@ -84,26 +96,33 @@ public class RouteProgressTracker {
             routeIndex.put(cellIds.get(i), i);
     }
 
-    private Progress compute(Map<String, SearchGridStatus> knownStatuses) {
-        int[] completeIndexes = new int[Math.min(routeIds.size(),
-                knownStatuses.size())];
-        int complete = 0;
+    private void markAll(Map<String, SearchGridStatus> knownStatuses) {
+        complete = new BitSet(routeIds.size());
         for (Map.Entry<String, SearchGridStatus> entry : knownStatuses
                 .entrySet()) {
             if (entry.getValue() != SearchGridStatus.COMPLETE)
                 continue;
             Integer index = routeIndex.get(entry.getKey());
-            if (index != null && complete < completeIndexes.length)
-                completeIndexes[complete++] = index;
+            if (index != null)
+                complete.set(index);
         }
-        // Route ids are unique, so the sorted indexes are distinct and the
-        // first gap is the first route cell that is not complete.
-        Arrays.sort(completeIndexes, 0, complete);
-        int next = 0;
-        for (int i = 0; i < complete && completeIndexes[i] == next; i++)
-            next++;
+    }
+
+    private void markChanged(List<String> cellIds,
+            Map<String, SearchGridStatus> knownStatuses) {
+        for (String cellId : cellIds) {
+            Integer index = routeIndex.get(cellId);
+            if (index != null)
+                complete.set(index, knownStatuses.get(cellId)
+                        == SearchGridStatus.COMPLETE);
+        }
+    }
+
+    private Progress progress() {
+        // The first clear position is the first route cell not complete.
+        int next = complete.nextClearBit(0);
         boolean done = next >= routeIds.size();
-        return new Progress(routeIds.size(), complete,
+        return new Progress(routeIds.size(), complete.cardinality(),
                 done ? null : routeIds.get(next), done ? 0 : next + 1);
     }
 }

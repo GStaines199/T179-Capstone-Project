@@ -72,27 +72,74 @@ public final class CellProgressList {
                             first.getSouth());
                     if (north != 0)
                         return north;
-                    return Double.compare(first.getWest(), second.getWest());
+                    int west = Double.compare(first.getWest(),
+                            second.getWest());
+                    if (west != 0)
+                        return west;
+                    return first.getId().compareTo(second.getId());
                 }
             };
 
-    private List<SearchGridCell> partial =
-            Collections.<SearchGridCell>emptyList();
-    private List<SearchGridCell> complete =
-            Collections.<SearchGridCell>emptyList();
+    private List<SearchGridCell> partial = new ArrayList<>();
+    private List<SearchGridCell> complete = new ArrayList<>();
     private String version;
     private int rebuilds;
+    private int markedGeneration = -1;
+    private int appliedChanges;
 
     /**
      * The requested page of {@code status} cells. The page index is clamped,
      * so a page that emptied after cells were cleared shows the last page.
+     *
+     * <p>After a few status changes the sorted lists are updated in place
+     * from {@link SearchGridManager#getMarkedChanges(int)}; re-sorting
+     * 30,000 marked cells cost 20-70 ms on the emulator for each change.
      */
     public Page page(SearchGridManager gridManager, SearchGridStatus status,
             int pageIndex) {
         String currentVersion = gridManager.getAreaVersion();
-        if (!currentVersion.equals(version))
-            rebuild(gridManager.getMarkedCellsInArea(), currentVersion);
+        if (!currentVersion.equals(version)) {
+            int generation = gridManager.getMarkedGeneration();
+            if (version != null && generation == markedGeneration) {
+                List<SearchGridCell> changes = gridManager
+                        .getMarkedChanges(appliedChanges);
+                for (SearchGridCell cell : changes)
+                    apply(cell);
+                appliedChanges += changes.size();
+                version = currentVersion;
+            } else {
+                rebuild(gridManager.getMarkedCellsInArea(), currentVersion);
+                markedGeneration = generation;
+                appliedChanges = gridManager.getMarkedChangeCount();
+            }
+        }
         return page(status, pageIndex);
+    }
+
+    /** Moves one cell to the list for its new status, keeping both sorted. */
+    void apply(SearchGridCell cell) {
+        remove(partial, cell);
+        remove(complete, cell);
+        if (cell.getStatus() == SearchGridStatus.COMPLETE)
+            insert(complete, cell);
+        else if (cell.getStatus() == SearchGridStatus.PARTIAL)
+            insert(partial, cell);
+    }
+
+    private static void remove(List<SearchGridCell> list,
+            SearchGridCell cell) {
+        int index = Collections.binarySearch(list, cell, READING_ORDER);
+        if (index >= 0)
+            list.remove(index);
+    }
+
+    private static void insert(List<SearchGridCell> list,
+            SearchGridCell cell) {
+        int index = Collections.binarySearch(list, cell, READING_ORDER);
+        if (index >= 0)
+            list.set(index, cell);
+        else
+            list.add(-index - 1, cell);
     }
 
     void rebuild(List<SearchGridCell> marked, String newVersion) {

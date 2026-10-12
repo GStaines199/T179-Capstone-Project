@@ -5,6 +5,7 @@ import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,10 +89,21 @@ public class SearchGridManager {
     private SearchGridCell lastGpsCell;
     private final Map<String, SearchGridCell> reviewedCells =
             new LinkedHashMap<>();
+    private static final int MAX_MARKED_CHANGES = 4096;
+
     private List<SearchGridCell> cachedMarkedCells =
             new ArrayList<SearchGridCell>();
     private AreaProgress cachedAreaProgress;
-    private String cachedAreaVersion;
+    private String cachedAreaScope;
+    private int cachedRevision = -1;
+    /** Counted statuses (complete, partial, in progress) inside the area. */
+    private final Map<String, SearchGridStatus> cachedAreaStatuses =
+            new HashMap<>();
+    private final Map<String, SearchGridCell> markedById =
+            new LinkedHashMap<>();
+    private boolean markedListStale;
+    private int markedGeneration;
+    private final List<SearchGridCell> markedChanges = new ArrayList<>();
 
     private PlannedAreaShape plannedShape = PlannedAreaShape.NONE;
     private String plannedZone = "";
@@ -670,7 +682,38 @@ public class SearchGridManager {
      */
     public List<SearchGridCell> getMarkedCellsInArea() {
         refreshAreaCache();
+        if (markedListStale) {
+            cachedMarkedCells = new ArrayList<>(markedById.values());
+            markedListStale = false;
+        }
         return cachedMarkedCells;
+    }
+
+    /**
+     * Changes whenever the marked cells were rebuilt from scratch instead of
+     * updated; {@link #getMarkedChanges(int)} only covers one generation.
+     */
+    public int getMarkedGeneration() {
+        refreshAreaCache();
+        return markedGeneration;
+    }
+
+    /** How many marked-cell changes this generation has so far. */
+    public int getMarkedChangeCount() {
+        refreshAreaCache();
+        return markedChanges.size();
+    }
+
+    /**
+     * Cells that became or stopped being PARTIAL/COMPLETE in this generation,
+     * from change number {@code from} on. Each carries its new status, so a
+     * cell with any other status has left the marked cells.
+     */
+    public List<SearchGridCell> getMarkedChanges(int from) {
+        refreshAreaCache();
+        int start = Math.max(0, Math.min(from, markedChanges.size()));
+        return new ArrayList<>(markedChanges.subList(start,
+                markedChanges.size()));
     }
 
     public AreaProgress getAreaProgress() {
@@ -680,10 +723,13 @@ public class SearchGridManager {
 
     /** Store revision plus area scope; changes whenever marked cells may. */
     public String getAreaVersion() {
+        return stateStore.getRevision() + "@" + getAreaScope();
+    }
+
+    private String getAreaScope() {
         GridExtent area = getAreaExtent();
-        return stateStore.getRevision() + "@" + (area == null ? ""
-                : area.key() + ":" + plannedShape + ":"
-                        + Math.round(plannedRadiusMeters));
+        return area == null ? "" : area.key() + ":" + plannedShape + ":"
+                + Math.round(plannedRadiusMeters);
     }
 
     /** Exact number of 100 m cells whose centre lies inside the area. */
@@ -716,12 +762,33 @@ public class SearchGridManager {
         return count;
     }
 
+    /**
+     * Brings the area counts and marked cells up to date. A status change on
+     * a large searched area used to re-read and re-parse every stored status
+     * (30,000+), costing ~100 ms of main thread per cell change; now only the
+     * cells the store reports as changed are looked at, and everything is
+     * rebuilt only when the area or operation changes or too much changed.
+     */
     private void refreshAreaCache() {
-        String version = getAreaVersion();
-        if (cachedAreaProgress != null && version.equals(cachedAreaVersion))
-            return;
+        String scope = getAreaScope();
+        int revision = stateStore.getRevision();
+        if (cachedAreaProgress != null && scope.equals(cachedAreaScope)) {
+            if (revision == cachedRevision)
+                return;
+            List<String> changed = stateStore.changedSince(cachedRevision);
+            if (changed != null) {
+                applyStatusChanges(changed);
+                cachedRevision = revision;
+                return;
+            }
+        }
+        rebuildAreaCache(scope, revision);
+    }
+
+    private void rebuildAreaCache(String scope, int revision) {
         GridExtent area = getAreaExtent();
-        List<SearchGridCell> marked = new ArrayList<>();
+        cachedAreaStatuses.clear();
+        markedById.clear();
         int complete = 0;
         int partial = 0;
         int inProgress = 0;
@@ -736,19 +803,90 @@ public class SearchGridManager {
                 SearchGridStatus status = entry.getValue();
                 if (status == SearchGridStatus.COMPLETE) {
                     complete++;
-                    marked.add(cell);
+                    markedById.put(cell.getId(), cell);
                 } else if (status == SearchGridStatus.PARTIAL) {
                     partial++;
-                    marked.add(cell);
+                    markedById.put(cell.getId(), cell);
                 } else if (status == SearchGridStatus.IN_PROGRESS) {
                     inProgress++;
+                } else {
+                    continue;
                 }
+                cachedAreaStatuses.put(cell.getId(), status);
             }
         }
-        cachedMarkedCells = marked;
+        cachedMarkedCells = new ArrayList<>(markedById.values());
+        markedListStale = false;
         cachedAreaProgress = new AreaProgress(complete, partial, inProgress,
                 getAreaCellCount());
-        cachedAreaVersion = version;
+        cachedAreaScope = scope;
+        cachedRevision = revision;
+        markedGeneration++;
+        markedChanges.clear();
+    }
+
+    private void applyStatusChanges(List<String> cellIds) {
+        GridExtent area = getAreaExtent();
+        int[] counts = new int[] {cachedAreaProgress.complete,
+                cachedAreaProgress.partial, cachedAreaProgress.inProgress};
+        Map<String, SearchGridStatus> known = stateStore.getKnownStatuses();
+        for (String cellId : cellIds) {
+            SearchGridStatus now = known.get(cellId);
+            if (!isCounted(now))
+                now = null;
+            SearchGridStatus before = cachedAreaStatuses.get(cellId);
+            if (now == before || area == null)
+                continue;
+            SearchGridCell cell = converter.parseCell(cellId, now == null
+                    ? SearchGridStatus.NOT_STARTED : now);
+            if (cell == null || !area.zone.equals(cell.getZoneDescriptor())
+                    || !isInsideArea(cell, area))
+                continue;
+            count(counts, before, -1);
+            count(counts, now, 1);
+            if (now == null)
+                cachedAreaStatuses.remove(cellId);
+            else
+                cachedAreaStatuses.put(cellId, now);
+            boolean wasMarked = isMarked(before);
+            boolean marked = isMarked(now);
+            if (marked)
+                markedById.put(cellId, cell);
+            else
+                markedById.remove(cellId);
+            if (wasMarked || marked) {
+                markedListStale = true;
+                markedChanges.add(cell);
+            }
+        }
+        if (markedChanges.size() > MAX_MARKED_CHANGES) {
+            // Readers of the change list rebuild instead.
+            markedGeneration++;
+            markedChanges.clear();
+        }
+        cachedAreaProgress = new AreaProgress(counts[0], counts[1],
+                counts[2], cachedAreaProgress.totalCells);
+    }
+
+    private static boolean isCounted(SearchGridStatus status) {
+        return status == SearchGridStatus.COMPLETE
+                || status == SearchGridStatus.PARTIAL
+                || status == SearchGridStatus.IN_PROGRESS;
+    }
+
+    private static boolean isMarked(SearchGridStatus status) {
+        return status == SearchGridStatus.COMPLETE
+                || status == SearchGridStatus.PARTIAL;
+    }
+
+    private static void count(int[] counts, SearchGridStatus status,
+            int delta) {
+        if (status == SearchGridStatus.COMPLETE)
+            counts[0] += delta;
+        else if (status == SearchGridStatus.PARTIAL)
+            counts[1] += delta;
+        else if (status == SearchGridStatus.IN_PROGRESS)
+            counts[2] += delta;
     }
 
     private boolean isInsideArea(SearchGridCell cell, GridExtent area) {

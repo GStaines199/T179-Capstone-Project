@@ -695,6 +695,16 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
     private void refreshGridUi() {
+        long started = android.os.SystemClock.elapsedRealtime();
+        refreshGridUiNow();
+        long took = android.os.SystemClock.elapsedRealtime() - started;
+        // Only slow refreshes are logged; a frame is 16 ms.
+        if (BuildConfig.DEBUG && took >= 16L)
+            Log.d("SARtakPerf", "panel refresh tab=" + currentTab + " took="
+                    + took + " ms");
+    }
+
+    private void refreshGridUiNow() {
         consumePendingOperationQrScan();
         refreshRoleUi();
         boolean teamCreated = mapController.isTeamCreated();

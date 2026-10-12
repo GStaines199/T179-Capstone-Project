@@ -1381,7 +1381,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
         new AlertDialog.Builder(getMapView().getContext())
                 .setTitle(existing == null ? "Add Ditto Profile"
                         : "Update Ditto Profile")
-                .setMessage("SDK profiles are used for current SARtak offline mesh sync. HTTP profiles can be saved for later server/API workflows.")
+                .setMessage("SDK profiles are used for current SARtak offline mesh sync. HTTP profiles can be saved for later server/API workflows."
+                        + "\n\nChanges apply to operations created after this. The active operation keeps the credentials it was created with.")
                 .setView(content)
                 .setPositiveButton("Save",
                         new DialogInterface.OnClickListener() {

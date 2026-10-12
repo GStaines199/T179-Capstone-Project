@@ -25,6 +25,28 @@ public class DeviceConnectivitySnapshot {
         this.self = self;
     }
 
+    private static final String UNASSIGNED = "Unassigned";
+
+    /**
+     * The map group to show for a device seen over both ATAK and Ditto.
+     *
+     * <p>A peer's ATAK contact often carries no group, which reads as
+     * "Unassigned". That used to win over the SARtak team the peer reports
+     * through Ditto, because only an empty ATAK value was replaced, so the
+     * Devices tab called a teammate "Unassigned".
+     */
+    public static String preferredMapGroup(String atakGroup,
+            String dittoGroup) {
+        String atak = safe(atakGroup);
+        String sartak = safe(dittoGroup);
+        if (atak.length() == 0)
+            return sartak;
+        if (UNASSIGNED.equalsIgnoreCase(atak) && sartak.length() > 0
+                && !UNASSIGNED.equalsIgnoreCase(sartak))
+            return sartak;
+        return atak;
+    }
+
     public String getUid() {
         return uid;
     }

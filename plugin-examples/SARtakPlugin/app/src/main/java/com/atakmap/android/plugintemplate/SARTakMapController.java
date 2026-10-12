@@ -2232,10 +2232,10 @@ public class SARTakMapController {
             if (dittoRole != null && dittoRole.trim().length() > 0)
                 builder.role = dittoRole.trim();
             builder.lastDittoUpdate = snapshot.getUpdatedAt();
-            if (builder.atakGroupName.length() == 0)
-                builder.atakGroupName = AtakTeamContactDataSource
-                        .ContactSnapshot.fromDitto(snapshot)
-                        .getAtakGroupName();
+            builder.atakGroupName = DeviceConnectivitySnapshot
+                    .preferredMapGroup(builder.atakGroupName,
+                            AtakTeamContactDataSource.ContactSnapshot
+                                    .fromDitto(snapshot).getAtakGroupName());
         }
 
         List<DeviceConnectivitySnapshot> snapshots = new ArrayList<>();

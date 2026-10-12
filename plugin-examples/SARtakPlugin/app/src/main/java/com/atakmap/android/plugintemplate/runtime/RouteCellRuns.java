@@ -1,5 +1,7 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import com.atakmap.android.plugintemplate.grid.CellIdParser;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,11 +23,6 @@ public final class RouteCellRuns {
     /** Refuses to expand a damaged or hostile document into millions of ids. */
     static final int MAX_DECODED_CELLS = 250_000;
 
-    private static final String ID_PREFIX = "utm-";
-    private static final String SIZE_AND_EASTING = "-c100-e";
-    private static final String NORTHING = "-n";
-    /** Longer digit strings could overflow a long; no real cell is near it. */
-    private static final int MAX_DIGITS = 18;
     private static final long CELL_SIZE_METERS = 100L;
 
     private RouteCellRuns() {
@@ -38,18 +35,19 @@ public final class RouteCellRuns {
         int i = 0;
         while (i < cellIds.size()) {
             String first = cellIds.get(i);
-            ParsedId start = ParsedId.parse(first);
+            CellIdParser.Parsed start = parseCanonical(first);
             int end = i;
             if (start != null && i + 1 < cellIds.size()) {
-                ParsedId next = ParsedId.parse(cellIds.get(i + 1));
+                CellIdParser.Parsed next = parseCanonical(
+                        cellIds.get(i + 1));
                 long stepE = next == null ? 0 : next.easting - start.easting;
                 long stepN = next == null ? 0 : next.northing - start.northing;
                 if (next != null && next.zone.equals(start.zone)
                         && isUnitStep(stepE, stepN)) {
-                    ParsedId previous = next;
+                    CellIdParser.Parsed previous = next;
                     end = i + 1;
                     while (end + 1 < cellIds.size()) {
-                        ParsedId candidate = ParsedId.parse(
+                        CellIdParser.Parsed candidate = parseCanonical(
                                 cellIds.get(end + 1));
                         if (candidate == null
                                 || !candidate.zone.equals(start.zone)
@@ -95,8 +93,10 @@ public final class RouteCellRuns {
                     acceptedRuns.add(run);
                 continue;
             }
-            ParsedId start = ParsedId.parse(run.substring(0, separator));
-            ParsedId end = ParsedId.parse(run.substring(separator + 1));
+            CellIdParser.Parsed start = parseCanonical(
+                    run.substring(0, separator));
+            CellIdParser.Parsed end = parseCanonical(
+                    run.substring(separator + 1));
             if (start == null || end == null || !start.zone.equals(end.zone))
                 continue;
             long deltaE = end.easting - start.easting;
@@ -148,69 +148,9 @@ public final class RouteCellRuns {
         return "utm-" + zone + "-c100-e" + easting + "-n" + northing;
     }
 
-    private static final class ParsedId {
-        final String zone;
-        final long easting;
-        final long northing;
-
-        private ParsedId(String zone, long easting, long northing) {
-            this.zone = zone;
-            this.easting = easting;
-            this.northing = northing;
-        }
-
-        /**
-         * Parses {@code utm-<zone>-c100-e<easting>-n<northing>} by hand.
-         *
-         * <p>This runs once per cell of a route, 40,401 times for a 20 km
-         * Auto Route, on the main thread, where a regex match plus
-         * rebuilding the id to compare it was too slow.
-         */
-        static ParsedId parse(String cellId) {
-            if (cellId == null || !cellId.startsWith(ID_PREFIX))
-                return null;
-            int zoneEnd = cellId.indexOf('-', ID_PREFIX.length());
-            if (zoneEnd <= ID_PREFIX.length()
-                    || !cellId.startsWith(SIZE_AND_EASTING, zoneEnd))
-                return null;
-            int eastingStart = zoneEnd + SIZE_AND_EASTING.length();
-            int eastingEnd = digitsEnd(cellId, eastingStart);
-            if (!cellId.startsWith(NORTHING, eastingEnd))
-                return null;
-            int northingStart = eastingEnd + NORTHING.length();
-            if (digitsEnd(cellId, northingStart) != cellId.length())
-                return null;
-            long easting = canonicalNumber(cellId, eastingStart, eastingEnd);
-            long northing = canonicalNumber(cellId, northingStart,
-                    cellId.length());
-            if (easting < 0 || northing < 0)
-                return null;
-            return new ParsedId(cellId.substring(ID_PREFIX.length(),
-                    zoneEnd), easting, northing);
-        }
-
-        private static int digitsEnd(String text, int from) {
-            int index = from;
-            while (index < text.length() && text.charAt(index) >= '0'
-                    && text.charAt(index) <= '9')
-                index++;
-            return index;
-        }
-
-        /**
-         * The digits as a number, or -1 when there are none, too many, or a
-         * leading zero. Only ids that rebuild to exactly themselves can be
-         * folded into a run; "e0502000" would come back as "e502000".
-         */
-        private static long canonicalNumber(String text, int from, int to) {
-            int length = to - from;
-            if (length <= 0 || length > MAX_DIGITS
-                    || (length > 1 && text.charAt(from) == '0'))
-                return -1;
-            long value = 0;
-            for (int index = from; index < to; index++)
-                value = value * 10 + (text.charAt(index) - '0');
-            return value;
-        }
+    // Only ids that rebuild to exactly themselves can be folded into a run.
+    private static CellIdParser.Parsed parseCanonical(String cellId) {
+        CellIdParser.Parsed parsed = CellIdParser.parse(cellId);
+        return parsed != null && parsed.canonical ? parsed : null;
     }
 }

@@ -3,9 +3,6 @@ package com.atakmap.android.plugintemplate.grid;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.coords.UTMPoint;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 /**
  * Converts between geographic points and ATAK's UTM metre coordinates.
  *
@@ -20,8 +17,6 @@ public class GridCoordinateConverter {
     public static final double BASE_CELL_SIZE_METERS = 100.0;
     public static final double AGGREGATE_GRID_SIZE_METERS = 1000.0;
     public static final int AGGREGATE_CELLS_PER_SIDE = 10;
-    private static final Pattern CELL_ID_PATTERN = Pattern.compile(
-            "^utm-([^-]+)-c100-e(\\d+)-n(\\d+)$");
 
     public SearchGridCell cellForPoint(GeoPoint point,
             SearchGridStateStore stateStore) {
@@ -159,18 +154,12 @@ public class GridCoordinateConverter {
     }
 
     private ParsedCellId parseCellId(String cellId) {
-        if (cellId == null)
+        // By hand rather than a regex: this runs once per stored status when
+        // the area cache is rebuilt; see CellIdParser.
+        CellIdParser.Parsed parsed = CellIdParser.parse(cellId);
+        if (parsed == null)
             return null;
-        Matcher matcher = CELL_ID_PATTERN.matcher(cellId);
-        if (!matcher.matches())
-            return null;
-        try {
-            return new ParsedCellId(matcher.group(1),
-                    Double.parseDouble(matcher.group(2)),
-                    Double.parseDouble(matcher.group(3)));
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
+        return new ParsedCellId(parsed.zone, parsed.easting, parsed.northing);
     }
 
     private static final class ParsedCellId {

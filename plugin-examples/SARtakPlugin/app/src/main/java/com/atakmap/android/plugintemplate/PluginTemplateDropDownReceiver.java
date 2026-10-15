@@ -12,9 +12,13 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.text.Editable;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -44,7 +48,9 @@ import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
 import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.grid.TeamMarkerVisibilityMode;
+import com.atakmap.android.plugintemplate.runtime.AlertVibrationPolicy;
 import com.atakmap.android.plugintemplate.runtime.AtakTeamContactDataSource;
+import com.atakmap.android.plugintemplate.runtime.ConnectionWarningPolicy;
 import com.atakmap.android.plugintemplate.runtime.DeviceConnectivitySnapshot;
 import com.atakmap.android.plugintemplate.runtime.DittoCredentialProfile;
 import com.atakmap.android.plugintemplate.runtime.OperationQrCodeGenerator;
@@ -60,9 +66,11 @@ import com.atakmap.android.dropdown.DropDownReceiver;
 
 import com.atakmap.coremap.log.Log;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
@@ -203,6 +211,8 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     private final Set<String> handledTeamMessages = new HashSet<>();
     private final Set<String> resolvedTeamMessages = new HashSet<>();
     private final Set<String> handledAlertMessages = new HashSet<>();
+    private final Map<String, SearchTeamMember.ConnectionStatus>
+            lastKnownConnectionStatus = new HashMap<>();
     private final Runnable uiRefreshRunnable = new Runnable() {
         @Override
         public void run() {
@@ -2024,8 +2034,56 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
 
         for (SearchAlertMessage alert : mapController
                 .getUnacknowledgedAlertsForMe()) {
-            if (handledAlertMessages.add(alert.getAlertId()))
+            if (handledAlertMessages.add(alert.getAlertId())) {
+                vibrateForAlert(alert);
                 showTeamAlertDialog(alert);
+            }
+        }
+
+        warnOnConnectionDrops();
+    }
+
+    private void warnOnConnectionDrops() {
+        for (SearchTeamMember member : mapController.getTeamMembers()) {
+            SearchTeamMember.ConnectionStatus current = member
+                    .getConnectionStatus();
+            SearchTeamMember.ConnectionStatus previous =
+                    lastKnownConnectionStatus.put(member.getUniqueId(),
+                            current);
+            if (ConnectionWarningPolicy.shouldWarn(previous, current))
+                Toast.makeText(getMapView().getContext(),
+                        ConnectionWarningPolicy.messageFor(
+                                member.getCallsign(), current),
+                        Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void vibrateForAlert(SearchAlertMessage alert) {
+        long[] pattern = AlertVibrationPolicy.patternFor(
+                alert.getAlertType());
+        if (pattern.length == 0)
+            return;
+        try {
+            Context context = getMapView().getContext();
+            Vibrator vibrator;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                VibratorManager manager = (VibratorManager) context
+                        .getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                vibrator = manager == null ? null
+                        : manager.getDefaultVibrator();
+            } else {
+                vibrator = (Vibrator) context.getSystemService(
+                        Context.VIBRATOR_SERVICE);
+            }
+            if (vibrator == null || !vibrator.hasVibrator())
+                return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+            else
+                vibrator.vibrate(pattern, -1);
+        } catch (Exception ignored) {
+            // Vibration is best-effort feedback; never let it block alert
+            // delivery.
         }
     }
 

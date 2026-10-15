@@ -12,6 +12,7 @@ import com.atakmap.coremap.cot.event.CotEvent;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,7 +20,7 @@ import java.util.Map;
 
 public class SearchGridCotWorkflow {
 
-    private static final String DETAIL_NAME = "__sartak_grid";
+    static final String DETAIL_NAME = "__sartak_grid";
     private static final long GRID_MESSAGE_MAX_AGE_MS = 10 * 60 * 1000L;
 
     private final MapView mapView;
@@ -95,32 +96,16 @@ public class SearchGridCotWorkflow {
         if (teamId == null || teamId.length() == 0)
             return result;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        synchronized (messages) {
-            for (SearchGridCotMessage message : messages.values()) {
-                if (!matchesOperation(message.getOperationId()))
-                    continue;
-                if (!isTeamOrOperationWide(message, teamId)
-                        || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
-        }
-        if (dittoSyncManager != null) {
-            for (SearchGridCotMessage message
-                    : dittoSyncManager.getSearchGridMessages()) {
-                if (!matchesOperation(message.getOperationId()))
-                    continue;
-                if (!isTeamOrOperationWide(message, teamId)
-                        || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
+        for (SearchGridCotMessage message : mergedMessages().values()) {
+            if (!matchesOperation(message.getOperationId()))
+                continue;
+            if (!isTeamOrOperationWide(message, teamId)
+                    || isExpired(message))
+                continue;
+            if (identity != null && identity.getUid().equals(
+                    message.getSenderUid()))
+                continue;
+            result.add(message);
         }
         return result;
     }
@@ -128,45 +113,63 @@ public class SearchGridCotWorkflow {
     public List<SearchGridCotMessage> consumeMessagesForOperation() {
         List<SearchGridCotMessage> result = new ArrayList<>();
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        synchronized (messages) {
-            for (SearchGridCotMessage message : messages.values()) {
-                if (!matchesOperation(message.getOperationId())
-                        || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
-        }
-        if (dittoSyncManager != null) {
-            for (SearchGridCotMessage message
-                    : dittoSyncManager.getSearchGridMessages()) {
-                if (!matchesOperation(message.getOperationId())
-                        || isExpired(message))
-                    continue;
-                if (identity != null && identity.getUid().equals(
-                        message.getSenderUid()))
-                    continue;
-                result.add(message);
-            }
+        for (SearchGridCotMessage message : mergedMessages().values()) {
+            if (!matchesOperation(message.getOperationId())
+                    || isExpired(message))
+                continue;
+            if (identity != null && identity.getUid().equals(
+                    message.getSenderUid()))
+                continue;
+            result.add(message);
         }
         return result;
+    }
+
+    /**
+     * Combines the locally CoT-received messages with whatever Ditto has
+     * synced, deduped by message UID. publishStatus sends every message
+     * through both transports using the same UID, so without this a device
+     * receiving a status change over both CoT and Ditto would see it twice -
+     * this is the one place both consumer methods read from so that can only
+     * happen once.
+     */
+    private Map<String, SearchGridCotMessage> mergedMessages() {
+        List<SearchGridCotMessage> local;
+        synchronized (messages) {
+            local = new ArrayList<>(messages.values());
+        }
+        List<SearchGridCotMessage> ditto = dittoSyncManager == null
+                ? Collections.<SearchGridCotMessage>emptyList()
+                : dittoSyncManager.getSearchGridMessages();
+        return dedupeByUid(local, ditto);
+    }
+
+    /**
+     * Merges two message collections keyed by UID, keeping the primary
+     * collection's copy when the same UID appears in both. Pure and
+     * ATAK-type-free (SearchGridCotMessage carries no ATAK types) so the
+     * dedup rule is unit-testable directly - see
+     * SearchGridCotWorkflowSchemaTest.
+     */
+    static Map<String, SearchGridCotMessage> dedupeByUid(
+            Collection<SearchGridCotMessage> primary,
+            Collection<SearchGridCotMessage> secondary) {
+        Map<String, SearchGridCotMessage> merged = new LinkedHashMap<>();
+        for (SearchGridCotMessage message : primary)
+            merged.put(message.getUid(), message);
+        for (SearchGridCotMessage message : secondary)
+            if (!merged.containsKey(message.getUid()))
+                merged.put(message.getUid(), message);
+        return merged;
     }
 
     private CotEvent createCotEvent(SearchGridCotMessage message) {
         CoordinatedTime now = new CoordinatedTime();
         CotDetail root = new CotDetail();
         CotDetail detail = new CotDetail(DETAIL_NAME);
-        detail.setAttribute("messageUid", message.getUid());
-        detail.setAttribute("action", SearchGridCotMessage.ACTION_GRID_STATUS);
-        detail.setAttribute("operationId", message.getOperationId());
-        detail.setAttribute("teamId", message.getTeamId());
-        detail.setAttribute("senderUid", message.getSenderUid());
-        detail.setAttribute("senderCallsign", message.getSenderCallsign());
-        detail.setAttribute("cellId", message.getCellId());
-        detail.setAttribute("status", message.getStatus().name());
-        detail.setAttribute("created", String.valueOf(message.getCreated()));
+        for (Map.Entry<String, String> attribute : toAttributes(message)
+                .entrySet())
+            detail.setAttribute(attribute.getKey(), attribute.getValue());
         root.addChild(detail);
 
         CotEvent event = new CotEvent();
@@ -180,6 +183,27 @@ public class SearchGridCotWorkflow {
                 AtakLocationStatus.from(mapView)));
         event.setDetail(root);
         return event;
+    }
+
+    /**
+     * Maps a message onto the exact set of CotDetail attribute name/value
+     * pairs that createCotEvent writes into the "__sartak_grid" detail
+     * element. Kept ATAK-type-free (plain Map<String, String>, no CotDetail)
+     * so the CoT schema mapping is unit-testable outside Android - see
+     * SearchGridCotWorkflowSchemaTest.
+     */
+    static Map<String, String> toAttributes(SearchGridCotMessage message) {
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("messageUid", message.getUid());
+        attributes.put("action", SearchGridCotMessage.ACTION_GRID_STATUS);
+        attributes.put("operationId", message.getOperationId());
+        attributes.put("teamId", message.getTeamId());
+        attributes.put("senderUid", message.getSenderUid());
+        attributes.put("senderCallsign", message.getSenderCallsign());
+        attributes.put("cellId", message.getCellId());
+        attributes.put("status", message.getStatus().name());
+        attributes.put("created", String.valueOf(message.getCreated()));
+        return attributes;
     }
 
     private void registerDirectCotProcessor() {
@@ -216,14 +240,37 @@ public class SearchGridCotWorkflow {
         CotDetail detail = event.findDetail(DETAIL_NAME);
         if (detail == null)
             return null;
-        long created = longValue(detail, "created", System.currentTimeMillis());
-        String messageUid = value(detail, "messageUid");
+        Map<String, String> attributes = new LinkedHashMap<>();
+        for (String key : new String[] { "messageUid", "action",
+                "operationId", "teamId", "senderUid", "senderCallsign",
+                "cellId", "status", "created" }) {
+            String value = detail.getAttribute(key);
+            if (value != null)
+                attributes.put(key, value);
+        }
+        return fromAttributes(attributes, event.getUID());
+    }
+
+    /**
+     * Inverse of toAttributes: reconstructs a message from the CotDetail
+     * attribute name/value pairs read off a received event, applying the
+     * same defensive fallbacks fromCotEvent always has (missing messageUid,
+     * unparsable numbers, unknown status). ATAK-type-free and unit-tested in
+     * SearchGridCotWorkflowSchemaTest.
+     */
+    static SearchGridCotMessage fromAttributes(Map<String, String> attributes,
+            String eventUid) {
+        long created = longValue(attributes, "created",
+                System.currentTimeMillis());
+        String messageUid = value(attributes, "messageUid");
         if (messageUid.length() == 0)
-            messageUid = event.getUID() + "-grid-" + created;
-        return new SearchGridCotMessage(messageUid, value(detail, "teamId"),
-                value(detail, "senderUid"), value(detail, "senderCallsign"),
-                value(detail, "cellId"), statusValue(value(detail, "status")),
-                created, value(detail, "operationId"));
+            messageUid = eventUid + "-grid-" + created;
+        return new SearchGridCotMessage(messageUid,
+                value(attributes, "teamId"), value(attributes, "senderUid"),
+                value(attributes, "senderCallsign"),
+                value(attributes, "cellId"),
+                statusValue(value(attributes, "status")), created,
+                value(attributes, "operationId"));
     }
 
     private boolean isExpired(SearchGridCotMessage message) {
@@ -231,7 +278,7 @@ public class SearchGridCotWorkflow {
                 > GRID_MESSAGE_MAX_AGE_MS;
     }
 
-    private SearchGridStatus statusValue(String value) {
+    static SearchGridStatus statusValue(String value) {
         try {
             return SearchGridStatus.valueOf(value);
         } catch (Exception ignored) {
@@ -239,8 +286,8 @@ public class SearchGridCotWorkflow {
         }
     }
 
-    private String value(CotDetail detail, String key) {
-        String value = detail.getAttribute(key);
+    static String value(Map<String, String> attributes, String key) {
+        String value = attributes.get(key);
         return value == null ? "" : value;
     }
 
@@ -259,9 +306,10 @@ public class SearchGridCotWorkflow {
         return value == null ? "" : value.trim();
     }
 
-    private long longValue(CotDetail detail, String key, long fallback) {
+    static long longValue(Map<String, String> attributes, String key,
+            long fallback) {
         try {
-            return Long.parseLong(value(detail, key));
+            return Long.parseLong(value(attributes, key));
         } catch (NumberFormatException ignored) {
             return fallback;
         }

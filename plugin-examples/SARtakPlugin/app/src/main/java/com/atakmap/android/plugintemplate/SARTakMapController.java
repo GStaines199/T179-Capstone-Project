@@ -310,6 +310,14 @@ public class SARTakMapController {
             @Override
             public void run() {
                 runBackgroundTeamRefresh();
+                // Deliberately not the same 5000ms interval
+                // PluginTemplateDropDownReceiver's uiRefreshHandler uses.
+                // Both run on the main thread (see the note on
+                // BACKGROUND_REFRESH_INTERVAL_MS - "background" is a misnomer
+                // here), so if the two cycles ever land close together they
+                // compound into one longer stall; a different period means
+                // they cannot stay phase-locked for the rest of the session,
+                // they will always drift apart again.
                 backgroundHandler.postDelayed(this,
                         BACKGROUND_REFRESH_INTERVAL_MS);
             }

@@ -58,6 +58,48 @@ public class GridCoordinateConverter {
                 south, east, north, stateStore.getStatus(id));
     }
 
+    /**
+     * Parses a cell id into a cell with a known status, without reading the
+     * state store. Used when walking every stored status at once.
+     */
+    public SearchGridCell parseCell(String cellId, SearchGridStatus status) {
+        ParsedCellId parsed = parseCellId(cellId);
+        if (parsed == null)
+            return null;
+        double aggregateWest = floorToGrid(parsed.west,
+                AGGREGATE_GRID_SIZE_METERS);
+        double aggregateSouth = floorToGrid(parsed.south,
+                AGGREGATE_GRID_SIZE_METERS);
+        int column = clamp((int) Math.floor((parsed.west - aggregateWest)
+                / BASE_CELL_SIZE_METERS), 0, AGGREGATE_CELLS_PER_SIDE - 1);
+        int row = clamp((int) Math.floor((parsed.south - aggregateSouth)
+                / BASE_CELL_SIZE_METERS), 0, AGGREGATE_CELLS_PER_SIDE - 1);
+        return new SearchGridCell(aggregateId(parsed.zone, aggregateWest,
+                aggregateSouth), cellId, row, column, parsed.zone,
+                parsed.west, parsed.south,
+                parsed.west + BASE_CELL_SIZE_METERS,
+                parsed.south + BASE_CELL_SIZE_METERS,
+                status == null ? SearchGridStatus.NOT_STARTED : status);
+    }
+
+    public SearchGridCell cellForId(String cellId,
+            SearchGridStateStore stateStore) {
+        ParsedCellId parsed = parseCellId(cellId);
+        if (parsed == null)
+            return null;
+        double aggregateWest = floorToGrid(parsed.west,
+                AGGREGATE_GRID_SIZE_METERS);
+        double aggregateSouth = floorToGrid(parsed.south,
+                AGGREGATE_GRID_SIZE_METERS);
+        int column = clamp((int) Math.floor((parsed.west - aggregateWest)
+                / BASE_CELL_SIZE_METERS), 0, AGGREGATE_CELLS_PER_SIDE - 1);
+        int row = clamp((int) Math.floor((parsed.south - aggregateSouth)
+                / BASE_CELL_SIZE_METERS), 0, AGGREGATE_CELLS_PER_SIDE - 1);
+        return createCell(aggregateId(parsed.zone, aggregateWest,
+                aggregateSouth), parsed.zone, parsed.west, parsed.south, row,
+                column, stateStore);
+    }
+
     public GeoPoint toGeoPoint(String zone, double easting, double northing) {
         return new UTMPoint(zone, easting, northing).toGeoPoint();
     }
@@ -109,5 +151,26 @@ public class GridCoordinateConverter {
 
     private int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private ParsedCellId parseCellId(String cellId) {
+        // By hand rather than a regex: this runs once per stored status when
+        // the area cache is rebuilt; see CellIdParser.
+        CellIdParser.Parsed parsed = CellIdParser.parse(cellId);
+        if (parsed == null)
+            return null;
+        return new ParsedCellId(parsed.zone, parsed.easting, parsed.northing);
+    }
+
+    private static final class ParsedCellId {
+        final String zone;
+        final double west;
+        final double south;
+
+        ParsedCellId(String zone, double west, double south) {
+            this.zone = zone;
+            this.west = west;
+            this.south = south;
+        }
     }
 }

@@ -25,7 +25,7 @@ public class SearchTeamMember {
     }
 
     private final String uniqueId;
-    private final String callsign;
+    private String callsign;
     private TeamRole role;
     private String colorName;
     private int displayColor;
@@ -81,6 +81,11 @@ public class SearchTeamMember {
 
     public String getCallsign() {
         return callsign;
+    }
+
+    public void setCallsign(String callsign) {
+        if (callsign != null && callsign.trim().length() > 0)
+            this.callsign = callsign.trim();
     }
 
     public TeamRole getRole() {
@@ -276,9 +281,16 @@ public class SearchTeamMember {
     }
 
     public void markPresenceSeen(String lastPingMessage) {
+        markPresenceSeenAt(lastPingMessage, System.currentTimeMillis());
+    }
+
+    public void markPresenceSeenAt(String lastPingMessage,
+            long presenceTimestamp) {
         connectionStatus = ConnectionStatus.CONNECTED;
         lastPing = lastPingMessage;
-        lastPresenceTimestamp = System.currentTimeMillis();
+        long now = System.currentTimeMillis();
+        lastPresenceTimestamp = presenceTimestamp > 0L
+                ? Math.min(presenceTimestamp, now) : now;
         if (!liveAtakContact) {
             gpsCoordinates = "Location unavailable";
             altitude = "Location unavailable";
@@ -289,7 +301,7 @@ public class SearchTeamMember {
     }
 
     public String getRoleLabel() {
-        return isTeamLeader() ? "Team Leader" : "Searcher";
+        return isTeamLeader() ? "Team Lead" : "Team Member";
     }
 
     public String getLaneLabel() {

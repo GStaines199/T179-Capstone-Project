@@ -1,0 +1,17 @@
+10-06 13:12:25.336 32191  8999 I Ditto   : diagnostics_logger: outbound_diff_count_per_update mean=101.24705882352941 count=85 delta_from_previous=None
+10-06 13:12:25.336 32191  8999 I Ditto   : diagnostics_logger: outbound_create_update_delay mean=32.721564ms count=85 delta_from_previous=None
+10-06 13:12:25.337 32191  8999 I Ditto   : diagnostics_logger: outbound_cycle_duration mean=669.212551ms count=86 delta_from_previous=None
+10-06 13:14:00.117 32191 32191 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c
+10-06 13:14:00.117 32191 32191 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c
+10-06 13:14:00.117 32191 32191 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c size: 0.5x1.0
+10-06 13:14:05.915  1627  4468 I MediaProvider: Begin Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-131407.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:14:05.927  1627  4468 W ModernMediaScanner: Failed to visit /sdcard/sartak-20261006-131407.png: java.nio.file.AccessDeniedException: /sdcard/sartak-20261006-131407.png
+10-06 13:14:05.931  1627  4468 I MediaProvider: End Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-131407.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:14:39.297 32191 32191 D DropDownManager: closing a right side drop down that is visible: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c
+10-06 13:14:39.297 32191 32191 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c with backstack count: 0
+10-06 13:14:39.304 32191 32191 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c
+10-06 13:14:39.304 32191 32191 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c
+10-06 13:14:39.304 32191 32191 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@25aa53c size: 0.5x1.0
+10-06 13:14:45.563  1627  4468 I MediaProvider: Begin Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-131446.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }
+10-06 13:14:45.566  1627  4468 W ModernMediaScanner: Failed to visit /sdcard/sartak-20261006-131446.png: java.nio.file.AccessDeniedException: /sdcard/sartak-20261006-131446.png
+10-06 13:14:45.569  1627  4468 I MediaProvider: End Intent { act=android.intent.action.MEDIA_SCANNER_SCAN_FILE dat=file:///sdcard/sartak-20261006-131446.png flg=0x1400010 cmp=com.google.android.providers.media.module/com.android.providers.media.MediaService }

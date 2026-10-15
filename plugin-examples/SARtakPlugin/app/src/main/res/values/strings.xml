@@ -42,6 +42,11 @@
     <string name="grid_no_cell">No cell selected</string>
     <string name="grid_assignment">Assignments</string>
     <string name="grid_select_cell">Select Current GPS Cell</string>
+    <string name="grid_plan_area">Plan Search Area</string>
+    <string name="grid_clear_planned_area">Clear Planned Search Area</string>
+    <string name="grid_planned_area_empty">No planned search area</string>
+    <string name="grid_next_cell_empty">Next cell: not planned</string>
+    <string name="grid_review_heading">Partial / Completed Cells</string>
     <string name="grid_mark_partial">Mark Partial</string>
     <string name="grid_mark_complete">Mark Complete</string>
     <string name="grid_clear_status">Clear Status</string>
@@ -116,6 +121,7 @@
     <string name="search_line_resume">Resume</string>
     <string name="search_line_force">Force Resume</string>
     <string name="search_line_colour">Line Colour</string>
+    <string name="search_line_direction">Search Direction</string>
     <string name="search_line_tolerance">Restart Tolerance (m)</string>
     <string name="grid_progress_empty">Select the current GPS cell to show grid progress.</string>
     <string name="hide_callsigns">Hide Callsigns</string>
@@ -127,6 +133,8 @@
     <string name="alerts_heading">Team Alerts</string>
     <string name="no_active_alerts">No active SARtak alerts</string>
     <string name="active_alerts">Active Alerts / Acknowledgements</string>
+    <string name="shared_markers_heading">Shared Markers</string>
+    <string name="no_shared_markers">No shared markers in this operation yet</string>
     <string name="alert_hold_position">Hold Position</string>
     <string name="alert_request_leader">Request Team Leader</string>
     <string name="alert_emergency_stop">Emergency Stop</string>

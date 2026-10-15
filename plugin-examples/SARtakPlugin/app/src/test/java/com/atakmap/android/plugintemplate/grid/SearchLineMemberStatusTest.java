@@ -72,6 +72,7 @@ public class SearchLineMemberStatusTest {
     @Test
     public void unmeasuredMember_isNeverTooFarAhead() {
         assertFalse(unmeasured().isTooFarAhead(THRESHOLD));
+        assertFalse(unmeasured().isTooFarBehind(THRESHOLD));
     }
 
     @Test
@@ -101,6 +102,12 @@ public class SearchLineMemberStatusTest {
         assertTrue("a real position must still raise a real warning",
                 measured(12.0, 0.0).isTooFarAhead(THRESHOLD));
         assertTrue(measured(0.0, 25.0).isOffReturnMark(10.0));
+    }
+
+    @Test
+    public void measuredMember_reportsBeingTooFarBehind() {
+        assertTrue(measured(-12.0, 0.0).isTooFarBehind(THRESHOLD));
+        assertFalse(measured(12.0, 0.0).isTooFarBehind(THRESHOLD));
     }
 
     @Test

@@ -1,9 +1,13 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import android.os.SystemClock;
+
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
+import com.atakmap.android.plugintemplate.grid.SearchGridStateStore;
 import com.atakmap.android.plugintemplate.grid.SearchGridStatus;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
+import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchTeamMember;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
@@ -12,6 +16,7 @@ import com.ditto.kotlin.Ditto;
 import com.ditto.kotlin.DittoStoreObserver;
 import com.ditto.kotlin.DittoSyncSubscription;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -25,6 +30,7 @@ import java.util.Map;
 public class DittoSyncManager {
 
     private static final String TAG = "SARtakDittoSync";
+    private static final String PERF_TAG = "SARtakPerf";
     private static final long PUBLISH_INTERVAL_MS = 5000L;
     private static final long AUTH_RETRY_INTERVAL_MS = 30000L;
     private static final double MIN_HEADING_SPEED_METERS_PER_SECOND = 0.4;
@@ -33,6 +39,10 @@ public class DittoSyncManager {
     private static final String DEVICE_COLLECTION = "sartak_devices";
     private static final String DEVICE_QUERY = "SELECT * FROM "
             + DEVICE_COLLECTION;
+    private static final String OPERATION_STATUS_COLLECTION =
+            "sartak_operation_status";
+    private static final String OPERATION_STATUS_QUERY = "SELECT * FROM "
+            + OPERATION_STATUS_COLLECTION;
     private static final String TEAM_EVENT_COLLECTION = "sartak_team_events";
     private static final String TEAM_EVENT_QUERY = "SELECT * FROM "
             + TEAM_EVENT_COLLECTION;
@@ -48,6 +58,10 @@ public class DittoSyncManager {
             "sartak_search_lines";
     private static final String SEARCH_LINE_QUERY = "SELECT * FROM "
             + SEARCH_LINE_COLLECTION;
+    private static final String ROUTE_PLAN_COLLECTION =
+            "sartak_route_plans";
+    private static final String ROUTE_PLAN_QUERY = "SELECT * FROM "
+            + ROUTE_PLAN_COLLECTION;
     private static final String SHARED_MARKER_COLLECTION =
             "sartak_shared_markers";
     private static final String SHARED_MARKER_QUERY = "SELECT * FROM "
@@ -55,6 +69,10 @@ public class DittoSyncManager {
     private static final String ALERT_COLLECTION = "sartak_alerts";
     private static final String ALERT_QUERY = "SELECT * FROM "
             + ALERT_COLLECTION;
+    private static final String AREA_ASSIGNMENT_COLLECTION =
+            "sartak_area_assignments";
+    private static final String AREA_ASSIGNMENT_QUERY = "SELECT * FROM "
+            + AREA_ASSIGNMENT_COLLECTION;
 
     private final MapView mapView;
     private final IdentityManager identityManager;
@@ -73,37 +91,56 @@ public class DittoSyncManager {
     private final Map<String, SearchLineCotMessage> searchLines =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SearchLineCotMessage>());
+    private final Map<String, SearchRoutePlan> routePlans =
+            Collections.synchronizedMap(new LinkedHashMap<String,
+                    SearchRoutePlan>());
     private final Map<String, SharedMapMarkerMessage> sharedMapMarkers =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SharedMapMarkerMessage>());
     private final Map<String, SearchAlertMessage> alerts =
             Collections.synchronizedMap(new LinkedHashMap<String,
                     SearchAlertMessage>());
+    private final Map<String, SearchAreaAssignment> areaAssignments =
+            Collections.synchronizedMap(new LinkedHashMap<String,
+                    SearchAreaAssignment>());
+    private final Map<String, String> operationStatuses =
+            Collections.synchronizedMap(new LinkedHashMap<String, String>());
+    private final DittoWriteQueue.FailureListener writeFailureListener =
+            new DittoWriteQueue.FailureListener() {
+                @Override
+                public void onWriteFailed(Throwable throwable) {
+                    Log.w(TAG, "Ditto write task failed", throwable);
+                }
+            };
 
-    private Ditto ditto;
-    private DittoSyncSubscription deviceSubscription;
-    private DittoSyncSubscription teamEventSubscription;
-    private DittoSyncSubscription teamMembershipSubscription;
-    private DittoSyncSubscription gridStatusSubscription;
-    private DittoSyncSubscription searchLineSubscription;
-    private DittoSyncSubscription sharedMarkerSubscription;
-    private DittoSyncSubscription alertSubscription;
-    private DittoStoreObserver deviceObserver;
-    private DittoStoreObserver teamEventObserver;
-    private DittoStoreObserver teamMembershipObserver;
-    private DittoStoreObserver gridStatusObserver;
-    private DittoStoreObserver searchLineObserver;
-    private DittoStoreObserver sharedMarkerObserver;
-    private DittoStoreObserver alertObserver;
+    /** An open store and the subscriptions and observers registered on it. */
+    private static final class Connection {
+        final Ditto ditto;
+        final List<DittoSyncSubscription> subscriptions = new ArrayList<>();
+        final List<DittoStoreObserver> observers = new ArrayList<>();
+
+        Connection(Ditto ditto) {
+            this.ditto = ditto;
+        }
+    }
+
+    // Opening the store, every write to it and closing it all run on the
+    // session's writer thread, so none of it blocks the main thread.
+    private final Object lifecycleLock = new Object();
+    private volatile DittoSession<Connection> session;
+    private volatile DittoSession<Connection> previousSession;
+    // The open store. Null while it is still opening after a switch.
+    private volatile Ditto ditto;
     private volatile boolean started;
+    private volatile boolean sharedMarkerSnapshotLoaded;
     private volatile boolean configured;
     private volatile boolean authAttemptInFlight;
     private volatile String status = "Ditto: not started";
-    private long lastPublishTime;
-    private long lastReceiveTime;
+    private volatile long lastPublishTime;
+    private final PeerHeartbeats peerHeartbeats = new PeerHeartbeats();
     private long lastAuthAttemptTime;
-    private String lastAuthFailure = "";
-    private OperationProfile operationProfile;
+    private volatile String lastAuthFailure = "";
+    private volatile OperationProfile operationProfile;
 
     public DittoSyncManager(MapView mapView,
             IdentityManager identityManager) {
@@ -111,6 +148,12 @@ public class DittoSyncManager {
         this.identityManager = identityManager;
     }
 
+    /**
+     * Starts sync for the current operation. Returns straight away: the store
+     * opens on the session's writer thread once the previous operation's
+     * store has closed, so {@link #isStarted()} is true while it is still
+     * opening, and writes queued meanwhile wait for it.
+     */
     public void start() {
         if (started)
             return;
@@ -123,152 +166,282 @@ public class DittoSyncManager {
             return;
         }
 
+        final OperationProfile profile = operationProfile;
         try {
             DittoSdkBridge.initialize(mapView.getContext());
-            ditto = DittoSdkBridge.createDitto(operationProfile
-                    .getDittoDatabaseId(), operationProfile.getDittoAuthUrl());
-            DittoSdkBridge.setupAuthHandler(ditto,
-                    operationProfile.getDittoDevelopmentToken());
-            String strictModeFailure = DittoSdkBridge.disableStrictModeSafely(
-                    ditto);
+        } catch (Throwable throwable) {
+            Log.w(TAG, "Ditto startup failed", throwable);
+            reportStartFailure(throwable);
+            return;
+        }
+        final long queuedAt = SystemClock.elapsedRealtime();
+        final DittoSession<Connection> opening =
+                new DittoSession<>(writeFailureListener);
+        DittoSession<Connection> previous;
+        synchronized (lifecycleLock) {
+            previous = previousSession;
+            session = opening;
+            started = true;
+        }
+        status = "Ditto: waiting to start for " + profile.getOperationName();
+        opening.open(previous, new DittoSession.Opener<Connection>() {
+            @Override
+            public Connection open() throws Throwable {
+                return openConnection(opening, profile, queuedAt);
+            }
+        }, new DittoSession.OpenListener<Connection>() {
+            @Override
+            public void onOpened(Connection connection) {
+                onConnectionOpened(opening, connection);
+            }
+
+            @Override
+            public void onOpenFailed(Throwable throwable) {
+                onConnectionFailed(opening, throwable);
+            }
+        });
+    }
+
+    /** Runs on the session's writer thread. */
+    private Connection openConnection(DittoSession<Connection> owner,
+            OperationProfile profile, long queuedAt) throws Throwable {
+        long openingAt = SystemClock.elapsedRealtime();
+        Ditto created = DittoSdkBridge.createDitto(profile.getDittoDatabaseId(),
+                profile.getDittoAuthUrl());
+        long createdAt = SystemClock.elapsedRealtime();
+        Connection connection = new Connection(created);
+        try {
+            DittoSdkBridge.setupAuthHandler(created,
+                    profile.getDittoDevelopmentToken());
+            // Before any insert; they all run on this thread after it.
+            String strictModeFailure = DittoSdkBridge
+                    .disableStrictModeSafely(created);
             if (strictModeFailure.length() > 0)
                 Log.w(TAG, "Ditto strict mode setup failed: "
                         + strictModeFailure);
-            deviceSubscription = DittoSdkBridge.registerSubscription(ditto,
-                    DEVICE_QUERY);
-            deviceObserver = DittoSdkBridge.registerJsonObserver(ditto,
-                    DEVICE_QUERY, new java.util.function.Consumer<List<String>>() {
+            register(owner, connection, OPERATION_STATUS_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateOperationStatuses(jsonDocuments);
+                        }
+                    });
+            register(owner, connection, DEVICE_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
                         @Override
                         public void accept(List<String> jsonDocuments) {
                             updateSnapshots(jsonDocuments);
                         }
                     });
-            teamEventSubscription = DittoSdkBridge.registerSubscription(ditto,
-                    TEAM_EVENT_QUERY);
-            teamEventObserver = DittoSdkBridge.registerJsonObserver(ditto,
-                    TEAM_EVENT_QUERY,
+            register(owner, connection, TEAM_EVENT_QUERY,
                     new java.util.function.Consumer<List<String>>() {
                         @Override
                         public void accept(List<String> jsonDocuments) {
                             updateTeamEvents(jsonDocuments);
                         }
                     });
-            teamMembershipSubscription = DittoSdkBridge.registerSubscription(
-                    ditto, TEAM_MEMBERSHIP_QUERY);
-            teamMembershipObserver = DittoSdkBridge.registerJsonObserver(ditto,
-                    TEAM_MEMBERSHIP_QUERY,
+            register(owner, connection, TEAM_MEMBERSHIP_QUERY,
                     new java.util.function.Consumer<List<String>>() {
                         @Override
                         public void accept(List<String> jsonDocuments) {
                             updateTeamMemberships(jsonDocuments);
                         }
                     });
-            gridStatusSubscription = DittoSdkBridge.registerSubscription(ditto,
-                    GRID_STATUS_QUERY);
-            gridStatusObserver = DittoSdkBridge.registerJsonObserver(ditto,
-                    GRID_STATUS_QUERY,
+            register(owner, connection, GRID_STATUS_QUERY,
                     new java.util.function.Consumer<List<String>>() {
                         @Override
                         public void accept(List<String> jsonDocuments) {
                             updateGridStatuses(jsonDocuments);
                         }
                     });
-            searchLineSubscription = DittoSdkBridge.registerSubscription(ditto,
-                    SEARCH_LINE_QUERY);
-            searchLineObserver = DittoSdkBridge.registerJsonObserver(ditto,
-                    SEARCH_LINE_QUERY,
+            register(owner, connection, SEARCH_LINE_QUERY,
                     new java.util.function.Consumer<List<String>>() {
                         @Override
                         public void accept(List<String> jsonDocuments) {
                             updateSearchLines(jsonDocuments);
                         }
                     });
-            sharedMarkerSubscription = DittoSdkBridge.registerSubscription(
-                    ditto, SHARED_MARKER_QUERY);
-            sharedMarkerObserver = DittoSdkBridge.registerJsonObserver(ditto,
-                    SHARED_MARKER_QUERY,
+            register(owner, connection, ROUTE_PLAN_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateRoutePlans(jsonDocuments);
+                        }
+                    });
+            register(owner, connection, SHARED_MARKER_QUERY,
                     new java.util.function.Consumer<List<String>>() {
                         @Override
                         public void accept(List<String> jsonDocuments) {
                             updateSharedMapMarkers(jsonDocuments);
                         }
                     });
-            alertSubscription = DittoSdkBridge.registerSubscription(ditto,
-                    ALERT_QUERY);
-            alertObserver = DittoSdkBridge.registerJsonObserver(ditto,
-                    ALERT_QUERY,
+            register(owner, connection, ALERT_QUERY,
                     new java.util.function.Consumer<List<String>>() {
                         @Override
                         public void accept(List<String> jsonDocuments) {
                             updateAlerts(jsonDocuments);
                         }
                     });
-            started = true;
-            status = "Ditto: starting for " + operationProfile
-                    .getOperationName();
-            attemptAuthNow();
-            String syncFailure = DittoSdkBridge.startSyncSafely(ditto);
-            if (syncFailure.length() > 0)
-                status = "Ditto: waiting to start sync - " + syncFailure;
-            else
-                updateReadyStatus();
+            register(owner, connection, AREA_ASSIGNMENT_QUERY,
+                    new java.util.function.Consumer<List<String>>() {
+                        @Override
+                        public void accept(List<String> jsonDocuments) {
+                            updateAreaAssignments(jsonDocuments);
+                        }
+                    });
         } catch (Throwable throwable) {
-            status = "Ditto: unavailable - " + describeFailure(throwable);
-            cleanupDittoResources();
-            Log.w(TAG, "Ditto startup failed", throwable);
+            closeConnection(connection, SystemClock.elapsedRealtime());
+            throw throwable;
         }
+        if (BuildConfig.DEBUG)
+            Log.d(PERF_TAG, "ditto start ms waited=" + (openingAt - queuedAt)
+                    + " create=" + (createdAt - openingAt)
+                    + " observers=" + (SystemClock.elapsedRealtime()
+                            - createdAt)
+                    + " thread=" + Thread.currentThread().getName());
+        return connection;
     }
 
-    public void stop() {
-        if (ditto == null) {
-            started = false;
-            status = configured ? "Ditto: stopped"
-                    : (operationProfile == null
-                            ? "Ditto: no operation selected"
-                            : "Ditto: not configured ("
-                                    + missingCredentialSummary() + ")");
-            return;
+    /**
+     * Registers a subscription and observer for {@code query}. The observers
+     * of an operation being switched away from can still fire until its
+     * session closes, so their documents are ignored once it isn't current.
+     */
+    private void register(final DittoSession<Connection> owner,
+            Connection connection, String query,
+            final java.util.function.Consumer<List<String>> consumer) {
+        connection.subscriptions.add(DittoSdkBridge.registerSubscription(
+                connection.ditto, query));
+        connection.observers.add(DittoSdkBridge.registerJsonObserver(
+                connection.ditto, query,
+                new java.util.function.Consumer<List<String>>() {
+                    @Override
+                    public void accept(List<String> jsonDocuments) {
+                        if (owner == session)
+                            consumer.accept(jsonDocuments);
+                    }
+                }));
+    }
+
+    /** Runs on the session's writer thread. */
+    private void onConnectionOpened(DittoSession<Connection> owner,
+            Connection connection) {
+        synchronized (lifecycleLock) {
+            // Stopped while opening: the queued close releases it.
+            if (owner != session)
+                return;
+            ditto = connection.ditto;
         }
-        cleanupDittoResources();
-        started = false;
+        status = "Ditto: starting for " + operationName();
+        attemptAuthNow();
+        String syncFailure = DittoSdkBridge.startSyncSafely(connection.ditto);
+        if (owner != session)
+            return;
+        if (syncFailure.length() > 0)
+            status = "Ditto: waiting to start sync - " + syncFailure;
+        else
+            updateReadyStatus();
+    }
+
+    /** Runs on the session's writer thread. */
+    private void onConnectionFailed(DittoSession<Connection> owner,
+            Throwable throwable) {
+        Log.w(TAG, "Ditto startup failed", throwable);
+        synchronized (lifecycleLock) {
+            if (owner != session)
+                return;
+            session = null;
+            ditto = null;
+            started = false;
+            previousSession = owner;
+        }
+        reportStartFailure(throwable);
+        // Nothing is open; this just lets the next start stop waiting on it.
+        owner.close(new DittoSession.Closer<Connection>() {
+            @Override
+            public void close(Connection connection) {
+            }
+        });
+    }
+
+    private void reportStartFailure(Throwable throwable) {
+        if (isNativePluginReloadFailure(throwable))
+            status = "Ditto: restart ATAK required after plugin reload";
+        else
+            status = "Ditto: unavailable - " + describeFailure(throwable);
+    }
+
+    private String operationName() {
+        OperationProfile profile = operationProfile;
+        return profile == null ? "" : profile.getOperationName();
+    }
+
+    private boolean isNativePluginReloadFailure(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (current instanceof UnsatisfiedLinkError
+                    || (message != null && message.contains("already opened by ClassLoader")))
+                return true;
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * Stops sync and queues closing the store. Returns straight away: writes
+     * already queued finish first, then the store closes on its writer
+     * thread. It took up to ~2.7 s on the main thread (finding T2-1).
+     */
+    public void stop() {
+        DittoSession<Connection> closing;
+        synchronized (lifecycleLock) {
+            closing = session;
+            session = null;
+            ditto = null;
+            started = false;
+            if (closing != null)
+                previousSession = closing;
+        }
+        sharedMarkerSnapshotLoaded = false;
+        if (closing != null) {
+            final long queuedAt = SystemClock.elapsedRealtime();
+            closing.close(new DittoSession.Closer<Connection>() {
+                @Override
+                public void close(Connection connection) {
+                    closeConnection(connection, queuedAt);
+                }
+            });
+        }
         status = configured ? "Ditto: stopped"
                 : (operationProfile == null ? "Ditto: no operation selected"
                         : "Ditto: not configured ("
                                 + missingCredentialSummary() + ")");
     }
 
-    private void cleanupDittoResources() {
-        DittoSdkBridge.closeObserver(deviceObserver);
-        DittoSdkBridge.closeObserver(teamEventObserver);
-        DittoSdkBridge.closeObserver(teamMembershipObserver);
-        DittoSdkBridge.closeObserver(gridStatusObserver);
-        DittoSdkBridge.closeObserver(searchLineObserver);
-        DittoSdkBridge.closeObserver(sharedMarkerObserver);
-        DittoSdkBridge.closeObserver(alertObserver);
-        DittoSdkBridge.closeSubscription(deviceSubscription);
-        DittoSdkBridge.closeSubscription(teamEventSubscription);
-        DittoSdkBridge.closeSubscription(teamMembershipSubscription);
-        DittoSdkBridge.closeSubscription(gridStatusSubscription);
-        DittoSdkBridge.closeSubscription(searchLineSubscription);
-        DittoSdkBridge.closeSubscription(sharedMarkerSubscription);
-        DittoSdkBridge.closeSubscription(alertSubscription);
-        if (ditto != null)
-            DittoSdkBridge.releaseDitto(ditto);
-        deviceObserver = null;
-        deviceSubscription = null;
-        teamEventObserver = null;
-        teamEventSubscription = null;
-        teamMembershipObserver = null;
-        teamMembershipSubscription = null;
-        gridStatusObserver = null;
-        gridStatusSubscription = null;
-        searchLineObserver = null;
-        searchLineSubscription = null;
-        sharedMarkerObserver = null;
-        sharedMarkerSubscription = null;
-        alertObserver = null;
-        alertSubscription = null;
-        ditto = null;
+    /**
+     * Waits up to {@code timeoutMs} for the last stopped store to finish
+     * closing. Only for plugin unload, where nothing may be left running.
+     */
+    public boolean awaitStopped(long timeoutMs) {
+        DittoSession<Connection> last = previousSession;
+        return last == null || last.awaitClosed(timeoutMs);
+    }
+
+    /** Runs on the session's writer thread, after its queued writes. */
+    private void closeConnection(Connection connection, long queuedAt) {
+        long closingAt = SystemClock.elapsedRealtime();
+        for (DittoStoreObserver observer : connection.observers)
+            DittoSdkBridge.closeObserver(observer);
+        for (DittoSyncSubscription subscription : connection.subscriptions)
+            DittoSdkBridge.closeSubscription(subscription);
+        long closed = SystemClock.elapsedRealtime();
+        DittoSdkBridge.releaseDitto(connection.ditto);
+        if (BuildConfig.DEBUG)
+            Log.d(PERF_TAG, "ditto stop ms waited=" + (closingAt - queuedAt)
+                    + " observers=" + (closed - closingAt)
+                    + " release=" + (SystemClock.elapsedRealtime() - closed)
+                    + " thread=" + Thread.currentThread().getName());
     }
 
     public void useOperationProfile(OperationProfile profile) {
@@ -277,6 +450,7 @@ public class DittoSyncManager {
             stop();
         operationProfile = profile;
         clearLocalCaches();
+        sharedMarkerSnapshotLoaded = false;
         if (shouldStart)
             start();
     }
@@ -291,6 +465,32 @@ public class DittoSyncManager {
      */
     public Ditto getActiveDitto() {
         return started ? ditto : null;
+    }
+
+    /**
+     * Restores operation credentials without touching the native Ditto
+     * runtime. ATAK constructs plugin components on its UI thread, so native
+     * store creation and subscription registration are deferred until core
+     * startup has settled.
+     */
+    public void prepareOperationProfile(OperationProfile profile) {
+        if (started)
+            stop();
+        operationProfile = profile;
+        configured = hasDittoCredentials();
+        clearLocalCaches();
+        sharedMarkerSnapshotLoaded = false;
+        status = profile == null ? "Ditto: no operation selected"
+                : configured ? "Ditto: waiting to start"
+                        : "Ditto: not configured ("
+                                + missingCredentialSummary() + ")";
+    }
+
+    public String getRemoteOperationStatus(String operationId) {
+        synchronized (operationStatuses) {
+            String value = operationStatuses.get(safe(operationId));
+            return value == null ? "" : value;
+        }
     }
 
     public boolean isStarted() {
@@ -312,7 +512,7 @@ public class DittoSyncManager {
             String roleLabel, String teamColorName, int teamColorArgb,
             SearchTeamMember selfMember, SearchGridCell selectedCell,
             AtakLocationStatus.Snapshot location) {
-        if (!started || ditto == null)
+        if (!started || session == null)
             return;
         long now = System.currentTimeMillis();
         if (now - lastPublishTime < PUBLISH_INTERVAL_MS)
@@ -320,6 +520,11 @@ public class DittoSyncManager {
         publishDeviceState(teamCreated, teamId, teamName, leaderUid,
                 leaderCallsign, roleLabel, teamColorName, teamColorArgb,
                 selfMember, selectedCell, location, now);
+    }
+
+    /** Other devices heard from in the last 30 s, not just still stored. */
+    public int getRecentPeerCount() {
+        return peerHeartbeats.freshCount(System.currentTimeMillis());
     }
 
     public List<DittoDeviceSnapshot> getDeviceSnapshots() {
@@ -352,6 +557,27 @@ public class DittoSyncManager {
         }
     }
 
+    public List<SearchRoutePlan> getRoutePlans() {
+        synchronized (routePlans) {
+            return new ArrayList<>(routePlans.values());
+        }
+    }
+
+    public SearchRoutePlan getRoutePlan(String teamId) {
+        synchronized (routePlans) {
+            return routePlans.get(SearchRoutePlan.routePlanId(
+                    getOperationId(), teamId));
+        }
+    }
+
+    /**
+     * True once the shared marker observer has delivered the local store at
+     * least once since Ditto started for this operation.
+     */
+    public boolean hasSharedMapMarkerSnapshot() {
+        return started && sharedMarkerSnapshotLoaded;
+    }
+
     public List<SharedMapMarkerMessage> getSharedMapMarkers() {
         synchronized (sharedMapMarkers) {
             return new ArrayList<>(sharedMapMarkers.values());
@@ -364,12 +590,33 @@ public class DittoSyncManager {
         }
     }
 
+    public List<SearchAreaAssignment> getAreaAssignments() {
+        synchronized (areaAssignments) {
+            return new ArrayList<>(areaAssignments.values());
+        }
+    }
+
+    public void publishOperationStatus(String operationStatus) {
+        if (!started || session == null || operationProfile == null)
+            return;
+        String operationId = getOperationId();
+        if (operationId.length() == 0)
+            return;
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", "operation-status-" + operationId);
+        document.put("operationId", operationId);
+        document.put("status", safe(operationStatus));
+        document.put("updatedAt", System.currentTimeMillis());
+        queueInsert(OPERATION_STATUS_COLLECTION, "operationStatus", document,
+                "operation status publish", null);
+    }
+
     public void publishDeviceStateNow(boolean teamCreated, String teamId,
             String teamName, String leaderUid, String leaderCallsign,
             String roleLabel, String teamColorName, int teamColorArgb,
             SearchTeamMember selfMember, SearchGridCell selectedCell,
             AtakLocationStatus.Snapshot location) {
-        if (!started || ditto == null)
+        if (!started || session == null)
             return;
         publishDeviceState(teamCreated, teamId, teamName, leaderUid,
                 leaderCallsign, roleLabel, teamColorName, teamColorArgb,
@@ -378,7 +625,7 @@ public class DittoSyncManager {
     }
 
     public void publishTeamEvent(SearchTeamCotMessage message) {
-        if (!started || ditto == null || message == null)
+        if (!started || session == null || message == null)
             return;
         Map<String, Object> document = new HashMap<>();
         document.put("_id", documentIdFor(message));
@@ -400,20 +647,14 @@ public class DittoSyncManager {
         document.put("memberColorArgb", message.getMemberColorArgb());
         document.put("memberRole", safe(message.getMemberRole()));
 
-        try {
-            insertDocument(TEAM_EVENT_COLLECTION, "event", document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: team event publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto team event publish failed", throwable);
-        }
+        queueInsert(TEAM_EVENT_COLLECTION, "event", document,
+                "team event publish", null);
     }
 
     public void publishTeamMembership(String teamId, String teamName,
             String leaderUid, String leaderCallsign, String memberUid,
             String memberCallsign, String membershipStatus, String roleLabel) {
-        if (!started || ditto == null)
+        if (!started || session == null)
             return;
         IdentityManager.Identity identity = identityManager.getCurrentIdentity();
         if (identity == null || !identity.isResolved()) {
@@ -437,19 +678,12 @@ public class DittoSyncManager {
         document.put("updatedByCallsign", identity.getCallsign());
         document.put("updatedAt", now);
 
-        try {
-            insertDocument(TEAM_MEMBERSHIP_COLLECTION, "membership",
-                    document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: membership publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto team membership publish failed", throwable);
-        }
+        queueInsert(TEAM_MEMBERSHIP_COLLECTION, "membership", document,
+                "membership publish", null);
     }
 
     public void publishSearchGridStatus(SearchGridCotMessage message) {
-        if (!started || ditto == null || message == null)
+        if (!started || session == null || message == null)
             return;
         Map<String, Object> document = new HashMap<>();
         document.put("_id", "grid-status-" + getOperationId() + "-"
@@ -463,18 +697,12 @@ public class DittoSyncManager {
         document.put("status", message.getStatus().name());
         document.put("created", message.getCreated());
 
-        try {
-            insertDocument(GRID_STATUS_COLLECTION, "grid", document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: grid publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto grid status publish failed", throwable);
-        }
+        queueInsert(GRID_STATUS_COLLECTION, "grid", document,
+                "grid publish", null);
     }
 
     public void publishSearchLine(SearchLineCotMessage message) {
-        if (!started || ditto == null || message == null)
+        if (!started || session == null || message == null)
             return;
         SearchGridCell cell = message.toCell();
         Map<String, Object> document = new HashMap<>();
@@ -496,24 +724,84 @@ public class DittoSyncManager {
         document.put("south", cell == null ? 0.0 : cell.getSouth());
         document.put("east", cell == null ? 0.0 : cell.getEast());
         document.put("north", cell == null ? 0.0 : cell.getNorth());
-        document.put("lineNorthing", message.getLineNorthing());
+        document.put("direction", message.getDirection().name());
+        document.put("lineOffset", message.getLineOffset());
+        // Kept under the old name for peers that predate directional lines.
+        document.put("lineNorthing", message.getLineOffset());
         document.put("color", message.getColorOption().name());
         document.put("tolerance", message.getToleranceMeters());
         document.put("created", message.getCreated());
 
-        try {
-            insertDocument(SEARCH_LINE_COLLECTION, "line", document);
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: line publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto search line publish failed", throwable);
-        }
+        queueInsert(SEARCH_LINE_COLLECTION, "line", document,
+                "line publish", null);
+    }
+
+    public void publishSearchRoutePlan(SearchRoutePlan routePlan) {
+        if (!started || session == null || routePlan == null)
+            return;
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", safe(routePlan.getPlanId()));
+        document.put("planId", safe(routePlan.getPlanId()));
+        document.put("operationId", getOperationId());
+        document.put("teamId", safe(routePlan.getTeamId()));
+        document.put("teamName", safe(routePlan.getTeamName()));
+        document.put("teamColorName", safe(routePlan.getTeamColorName()));
+        document.put("teamColorArgb", routePlan.getTeamColorArgb());
+        document.put("createdByUid", safe(routePlan.getCreatedByUid()));
+        document.put("createdByCallsign", safe(routePlan
+                .getCreatedByCallsign()));
+        document.put("updatedAt", routePlan.getUpdatedAt());
+        // Runs keep a large-area route to a few KB; see RouteCellRuns. Both
+        // fields are always written because ON ID CONFLICT DO UPDATE keeps
+        // any field left out, which would leave a stale list behind.
+        document.put("cellRuns", routePlan.getCellRunsJson());
+        document.put("cellRunsUpdatedAt", routePlan.getUpdatedAt());
+        document.put("cellIds", routePlan.getLegacyCellIdsJson());
+
+        queueInsert(ROUTE_PLAN_COLLECTION, "routePlan", document,
+                "route publish", null);
+    }
+
+    public void publishAreaAssignment(SearchAreaAssignment assignment) {
+        if (!started || session == null || assignment == null
+                || assignment.getArea() == null)
+            return;
+        SearchGridStateStore.PlannedAreaRecord area = assignment.getArea();
+        Map<String, Object> document = new HashMap<>();
+        document.put("_id", assignment.getAssignmentId());
+        document.put("assignmentId", assignment.getAssignmentId());
+        document.put("operationId", getOperationId());
+        document.put("teamId", safe(assignment.getTeamId()));
+        document.put("teamName", safe(assignment.getTeamName()));
+        document.put("leaderUid", safe(assignment.getLeaderUid()));
+        document.put("leaderCallsign", safe(assignment.getLeaderCallsign()));
+        document.put("assignedByUid", safe(assignment.getAssignedByUid()));
+        document.put("assignedByCallsign", safe(assignment
+                .getAssignedByCallsign()));
+        document.put("status", safe(assignment.getStatus()));
+        document.put("updatedAt", assignment.getUpdatedAt());
+        document.put("shape", safe(area.shape));
+        document.put("zone", safe(area.zone));
+        document.put("centerEasting", area.centerEasting);
+        document.put("centerNorthing", area.centerNorthing);
+        document.put("west", area.west);
+        document.put("south", area.south);
+        document.put("east", area.east);
+        document.put("north", area.north);
+        document.put("radiusMeters", area.radiusMeters);
+        document.put("widthMeters", area.widthMeters);
+        document.put("heightMeters", area.heightMeters);
+
+        queueInsert(AREA_ASSIGNMENT_COLLECTION, "assignment", document,
+                "area assignment publish", null);
     }
 
     public void clearLocalCaches() {
         synchronized (devices) {
             devices.clear();
+        }
+        synchronized (operationStatuses) {
+            operationStatuses.clear();
         }
         synchronized (teamEvents) {
             teamEvents.clear();
@@ -527,13 +815,19 @@ public class DittoSyncManager {
         synchronized (searchLines) {
             searchLines.clear();
         }
+        synchronized (routePlans) {
+            routePlans.clear();
+        }
+        synchronized (areaAssignments) {
+            areaAssignments.clear();
+        }
         synchronized (sharedMapMarkers) {
             sharedMapMarkers.clear();
         }
         synchronized (alerts) {
             alerts.clear();
         }
-        lastReceiveTime = 0L;
+        peerHeartbeats.clear();
         lastPublishTime = 0L;
     }
 
@@ -591,11 +885,13 @@ public class DittoSyncManager {
     }
 
     private void updateReadyStatus() {
-        if (!started || ditto == null)
+        // Also called from the writer and auth threads, so read the profile
+        // once: an operation change can clear it at any time.
+        OperationProfile profile = operationProfile;
+        if (!started || ditto == null || profile == null)
             return;
         if (isAuthenticated())
-            status = "Ditto: active for " + operationProfile
-                    .getOperationName();
+            status = "Ditto: active for " + profile.getOperationName();
         else if (lastAuthFailure.length() > 0)
             status = "Ditto: auth failed, retrying - " + lastAuthFailure;
         else
@@ -613,38 +909,46 @@ public class DittoSyncManager {
     }
 
     public boolean publishSharedMapMarker(SharedMapMarkerMessage message) {
-        if (!started || ditto == null || message == null)
-            return false;
-        Map<String, Object> document = new HashMap<>();
-        document.put("_id", "shared-marker-" + getOperationId() + "-"
-                + safe(message.getMarkerUid()));
-        document.put("operationId", getOperationId());
-        document.put("uid", safe(message.getUid()));
-        document.put("markerUid", safe(message.getMarkerUid()));
-        document.put("markerType", safe(message.getMarkerType()));
-        document.put("title", safe(message.getTitle()));
-        document.put("latitude", message.getLatitude());
-        document.put("longitude", message.getLongitude());
-        document.put("altitude", message.getAltitude());
-        document.put("senderUid", safe(message.getSenderUid()));
-        document.put("senderCallsign", safe(message.getSenderCallsign()));
-        document.put("teamId", safe(message.getTeamId()));
-        document.put("updatedAt", message.getUpdatedAt());
+        return publishSharedMapMarker(message, null);
+    }
 
-        try {
-            insertDocument(SHARED_MARKER_COLLECTION, "marker", document);
-            updateReadyStatus();
-            return true;
-        } catch (Throwable throwable) {
-            status = "Ditto: marker publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto shared marker publish failed", throwable);
+    /**
+     * @param onFailed run on the writer thread if the queued write later
+     *                 throws, so the caller can try again
+     */
+    public boolean publishSharedMapMarker(SharedMapMarkerMessage message,
+            Runnable onFailed) {
+        if (!started || session == null || message == null)
             return false;
-        }
+        return queueInsert(SHARED_MARKER_COLLECTION, "marker",
+                message.toDocument(getOperationId()), "marker publish", null,
+                onFailed);
+    }
+
+    /**
+     * Writes only the tombstone fields. Ditto merges per field, so later
+     * ordinary updates (which never write {@code deleted}) cannot undo it.
+     * If an update of the same marker is still queued, the queue replaces
+     * it with this tombstone, which is the outcome we want anyway.
+     */
+    public boolean publishSharedMapMarkerDeletion(
+            SharedMapMarkerMessage tombstone) {
+        return publishSharedMapMarkerDeletion(tombstone, null);
+    }
+
+    /** @param onFailed as for {@link #publishSharedMapMarker(SharedMapMarkerMessage, Runnable)} */
+    public boolean publishSharedMapMarkerDeletion(
+            SharedMapMarkerMessage tombstone, Runnable onFailed) {
+        if (!started || session == null || tombstone == null
+                || tombstone.getMarkerUid().length() == 0)
+            return false;
+        return queueInsert(SHARED_MARKER_COLLECTION, "marker",
+                tombstone.toDeletionDocument(getOperationId()),
+                "marker delete", null, onFailed);
     }
 
     public boolean publishAlert(SearchAlertMessage message) {
-        if (!started || ditto == null || message == null)
+        if (!started || session == null || message == null)
             return false;
         Map<String, Object> document = new HashMap<>();
         document.put("_id", "alert-" + getOperationId() + "-"
@@ -667,16 +971,8 @@ public class DittoSyncManager {
         document.put("requiresHalt", message.requiresHalt());
         document.put("created", message.getCreated());
 
-        try {
-            insertDocument(ALERT_COLLECTION, "alert", document);
-            updateReadyStatus();
-            return true;
-        } catch (Throwable throwable) {
-            status = "Ditto: alert publish failed - "
-                    + describeFailure(throwable);
-            Log.w(TAG, "Ditto alert publish failed", throwable);
-            return false;
-        }
+        return queueInsert(ALERT_COLLECTION, "alert", document,
+                "alert publish", null);
     }
 
     private boolean isSyncActive() {
@@ -689,6 +985,12 @@ public class DittoSyncManager {
         }
     }
 
+    public String getWriteQueueSummary() {
+        DittoSession<Connection> current = session;
+        return current == null ? "writes: Ditto not started"
+                : current.getSummary();
+    }
+
     public String getDiagnosticsSummary() {
         return getSummary()
                 + "\nOperation: " + getOperationSummary()
@@ -697,7 +999,9 @@ public class DittoSyncManager {
                 + " team events, " + getTeamMemberships().size()
                 + " memberships, " + getSearchGridMessages().size()
                 + " grid states, " + getSearchLineMessages().size()
-                + " search lines, " + getAlertMessages().size()
+                + " search lines, " + getRoutePlans().size()
+                + " route plans, " + getAreaAssignments().size()
+                + " area assignments, " + getAlertMessages().size()
                 + " alerts";
     }
 
@@ -721,11 +1025,11 @@ public class DittoSyncManager {
                 auth = "unknown";
             }
         }
-        int peers = Math.max(0, getDeviceSnapshots().size() - 1);
+        int peers = getRecentPeerCount();
         return status + " (" + active + ") | peers " + peers
                 + " | auth " + auth
                 + " | sent " + formatAge(lastPublishTime)
-                + " | received " + formatAge(lastReceiveTime);
+                + " | peer heard " + formatAge(peerHeartbeats.lastHeard());
     }
 
     private void publishDeviceState(boolean teamCreated, String teamId,
@@ -781,20 +1085,84 @@ public class DittoSyncManager {
         document.put("gridCellId", selectedCell == null ? ""
                 : selectedCell.getId());
 
-        try {
-            insertDocument(DEVICE_COLLECTION, "device", document);
-            lastPublishTime = now;
-            updateReadyStatus();
-        } catch (Throwable throwable) {
-            status = "Ditto: publish failed - " + describeFailure(throwable);
-            Log.w(TAG, "Ditto publish failed", throwable);
-        }
+        final long publishedAt = now;
+        queueInsert(DEVICE_COLLECTION, "device", document, "publish",
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        lastPublishTime = publishedAt;
+                    }
+                });
     }
 
-    private void insertDocument(String collection, String argumentName,
-            Map<String, Object> document) throws Throwable {
-        String json = toDittoJson(document);
-        DittoSdkBridge.executeJsonArgument(ditto, "INSERT INTO " + collection
+    /**
+     * Serialises the document on the caller's thread, from values it has
+     * already captured, and hands only the blocking store write to the
+     * writer thread. A queued write to the same document that has not run
+     * yet is replaced, not repeated.
+     *
+     * @return false if nothing was queued; a write that fails later is
+     *         reported through the status line and the log, and to
+     *         {@code onFailed} when given
+     */
+    private boolean queueInsert(final String collection,
+            final String argumentName, Map<String, Object> document,
+            final String failureLabel, final Runnable onWritten) {
+        return queueInsert(collection, argumentName, document, failureLabel,
+                onWritten, null);
+    }
+
+    private boolean queueInsert(final String collection,
+            final String argumentName, Map<String, Object> document,
+            final String failureLabel, final Runnable onWritten,
+            final Runnable onFailed) {
+        final DittoSession<Connection> target = session;
+        if (target == null)
+            return false;
+        final String json;
+        try {
+            json = toDittoJson(document);
+        } catch (Throwable throwable) {
+            reportWriteFailure(target, failureLabel, throwable);
+            return false;
+        }
+        Object documentId = document.get("_id");
+        // Runs after the store opens and before it closes, even across an
+        // operation switch, so it reaches the operation it was made for.
+        return target.submit(documentId == null ? null
+                : collection + "/" + documentId,
+                new DittoSession.Write<Connection>() {
+                    @Override
+                    public void run(Connection connection) {
+                        try {
+                            insertDocument(connection.ditto, collection,
+                                    argumentName, json);
+                        } catch (Throwable throwable) {
+                            reportWriteFailure(target, failureLabel,
+                                    throwable);
+                            if (onFailed != null)
+                                onFailed.run();
+                            return;
+                        }
+                        if (onWritten != null)
+                            onWritten.run();
+                        if (target == session)
+                            updateReadyStatus();
+                    }
+                });
+    }
+
+    private void reportWriteFailure(DittoSession<Connection> target,
+            String failureLabel, Throwable throwable) {
+        if (target == session)
+            status = "Ditto: " + failureLabel + " failed - "
+                    + describeFailure(throwable);
+        Log.w(TAG, "Ditto " + failureLabel + " failed", throwable);
+    }
+
+    private void insertDocument(Ditto target, String collection,
+            String argumentName, String json) throws Throwable {
+        DittoSdkBridge.executeJsonArgument(target, "INSERT INTO " + collection
                 + " DOCUMENTS (deserialize_json(:" + argumentName
                 + ")) ON ID CONFLICT DO UPDATE", argumentName, json);
     }
@@ -830,8 +1198,6 @@ public class DittoSyncManager {
     private void updateTeamEvents(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchTeamCotMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -852,11 +1218,30 @@ public class DittoSyncManager {
             teamEvents.clear();
             teamEvents.putAll(next);
         }
-        for (SearchTeamCotMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
+    }
+
+    private void updateOperationStatuses(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        LinkedHashMap<String, String> next = new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                if (!isCurrentOperation(json))
+                    continue;
+                JSONObject object = new JSONObject(json);
+                String operationId = object.optString("operationId", "");
+                String operationStatus = object.optString("status", "");
+                if (operationId.length() == 0 || operationStatus.length() == 0)
+                    continue;
+                next.put(operationId, operationStatus);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto operation status document",
+                        exception);
             }
+        }
+        synchronized (operationStatuses) {
+            operationStatuses.clear();
+            operationStatuses.putAll(next);
         }
     }
 
@@ -886,8 +1271,6 @@ public class DittoSyncManager {
     private void updateTeamMemberships(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, DittoTeamMembershipSnapshot> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -910,19 +1293,11 @@ public class DittoSyncManager {
             teamMemberships.clear();
             teamMemberships.putAll(next);
         }
-        for (DittoTeamMembershipSnapshot membership : next.values()) {
-            if (!membership.getUpdatedByUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
     }
 
     private void updateGridStatuses(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchGridCotMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -943,12 +1318,6 @@ public class DittoSyncManager {
             gridStatuses.clear();
             gridStatuses.putAll(next);
         }
-        for (SearchGridCotMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
     }
 
     private SearchGridCotMessage gridStatusFromJson(String json)
@@ -968,8 +1337,6 @@ public class DittoSyncManager {
     private void updateSearchLines(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchLineCotMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -990,11 +1357,55 @@ public class DittoSyncManager {
             searchLines.clear();
             searchLines.putAll(next);
         }
-        for (SearchLineCotMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
+    }
+
+    private void updateRoutePlans(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        LinkedHashMap<String, SearchRoutePlan> next = new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                if (!isCurrentOperation(json))
+                    continue;
+                SearchRoutePlan plan = SearchRoutePlan.fromJson(json);
+                if (plan.getPlanId().length() == 0
+                        || plan.getTeamId().length() == 0)
+                    continue;
+                next.put(plan.getPlanId(), plan);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto route plan document",
+                        exception);
             }
+        }
+        synchronized (routePlans) {
+            routePlans.clear();
+            routePlans.putAll(next);
+        }
+    }
+
+    private void updateAreaAssignments(List<String> jsonDocuments) {
+        if (jsonDocuments == null)
+            return;
+        LinkedHashMap<String, SearchAreaAssignment> next =
+                new LinkedHashMap<>();
+        for (String json : jsonDocuments) {
+            try {
+                if (!isCurrentOperation(json))
+                    continue;
+                SearchAreaAssignment assignment =
+                        SearchAreaAssignment.fromJson(json);
+                if (assignment.getAssignmentId().length() == 0
+                        || assignment.getTeamId().length() == 0)
+                    continue;
+                next.put(assignment.getAssignmentId(), assignment);
+            } catch (JSONException exception) {
+                Log.w(TAG, "Ignoring invalid Ditto area assignment document",
+                        exception);
+            }
+        }
+        synchronized (areaAssignments) {
+            areaAssignments.clear();
+            areaAssignments.putAll(next);
         }
     }
 
@@ -1016,18 +1427,19 @@ public class DittoSyncManager {
                 object.optDouble("south", 0.0),
                 object.optDouble("east", 0.0),
                 object.optDouble("north", 0.0),
-                object.optDouble("lineNorthing", 0.0),
+                object.optDouble("lineOffset",
+                        object.optDouble("lineNorthing", 0.0)),
                 lineColorValue(object.optString("color", "")),
                 object.optDouble("tolerance", 0.0),
                 object.optLong("created", 0L),
-                object.optString("operationId", ""));
+                object.optString("operationId", ""),
+                SearchLineDirection.fromName(
+                        object.optString("direction", "")));
     }
 
     private void updateSharedMapMarkers(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SharedMapMarkerMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1047,37 +1459,17 @@ public class DittoSyncManager {
             sharedMapMarkers.clear();
             sharedMapMarkers.putAll(next);
         }
-        for (SharedMapMarkerMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
-        }
+        sharedMarkerSnapshotLoaded = true;
     }
 
     private SharedMapMarkerMessage sharedMapMarkerFromJson(String json)
             throws JSONException {
-        JSONObject object = new JSONObject(json);
-        return new SharedMapMarkerMessage(
-                object.optString("uid", ""),
-                object.optString("markerUid", ""),
-                object.optString("markerType", ""),
-                object.optString("title", ""),
-                object.optDouble("latitude", Double.NaN),
-                object.optDouble("longitude", Double.NaN),
-                object.optDouble("altitude", 0.0),
-                object.optString("senderUid", ""),
-                object.optString("senderCallsign", ""),
-                object.optString("teamId", ""),
-                object.optString("operationId", ""),
-                object.optLong("updatedAt", 0L));
+        return SharedMapMarkerMessage.fromJson(new JSONObject(json));
     }
 
     private void updateAlerts(List<String> jsonDocuments) {
         if (jsonDocuments == null)
             return;
-        IdentityManager.Identity identity = identityManager.getCurrentIdentity();
-        String selfUid = identity == null ? "" : identity.getUid();
         LinkedHashMap<String, SearchAlertMessage> next =
                 new LinkedHashMap<>();
         for (String json : jsonDocuments) {
@@ -1097,13 +1489,6 @@ public class DittoSyncManager {
         synchronized (alerts) {
             alerts.clear();
             alerts.putAll(next);
-        }
-        for (SearchAlertMessage message : next.values()) {
-            if (!message.getSenderUid().equals(selfUid)
-                    && !message.getAckUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
         }
     }
 
@@ -1171,11 +1556,11 @@ public class DittoSyncManager {
             devices.clear();
             devices.putAll(next);
         }
+        long now = System.currentTimeMillis();
         for (DittoDeviceSnapshot snapshot : next.values()) {
-            if (!snapshot.getUid().equals(selfUid)) {
-                lastReceiveTime = System.currentTimeMillis();
-                break;
-            }
+            if (!snapshot.getUid().equals(selfUid))
+                peerHeartbeats.observe(snapshot.getUid(),
+                        snapshot.getUpdatedAt(), now);
         }
     }
 

@@ -24,6 +24,13 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = 26, manifest = Config.NONE)
 public class SearchTrackManagerRuntimeTest {
 
+    /**
+     * Track logging is operation-scoped: the manager records nothing and
+     * reports no session until an operation id is set, which
+     * SARTakMapController does when an operation is created or joined.
+     */
+    private static final String OPERATION_ID = "op-7f3a";
+
     private DatabaseHelper dbHelper;
     private SearchTrackManager manager;
 
@@ -33,9 +40,7 @@ public class SearchTrackManagerRuntimeTest {
         dbHelper = new DatabaseHelper(context);
         manager = new SearchTrackManager(new TrackSessionRepository(dbHelper),
                 new LocationRepository(dbHelper));
-        // Track logging is operation-scoped: startOrResume() and
-        // recordFix() do nothing until an operation id is set.
-        manager.setOperationId("op-1");
+        manager.setOperationId(OPERATION_ID);
     }
 
     @After
@@ -96,6 +101,19 @@ public class SearchTrackManagerRuntimeTest {
     }
 
     @Test
+    public void getStatusSummary_withNoOperation_asksForAnOperation() {
+        SearchTrackManager unscoped = new SearchTrackManager(
+                new TrackSessionRepository(dbHelper),
+                new LocationRepository(dbHelper));
+
+        unscoped.startOrResume("uid1", "Alpha");
+
+        assertEquals("Waiting for active operation",
+                unscoped.getStatusSummary());
+        assertNull(unscoped.getActiveSessionId());
+    }
+
+    @Test
     public void getStatusSummary_whenRecording_returnsRecordingMessage() {
         manager.startOrResume("uid1", "Alpha");
 
@@ -132,7 +150,8 @@ public class SearchTrackManagerRuntimeTest {
         String summary = manager.getDetailsSummary();
 
         assertTrue(summary.contains("Track points: 1"));
-        assertTrue(summary.contains("Session: track-op-1-uid1-"));
+        assertTrue(summary.contains("Session: track-" + OPERATION_ID
+                + "-uid1-"));
         assertTrue(summary.contains("Visibility: Shown on map"));
     }
 
@@ -194,5 +213,81 @@ public class SearchTrackManagerRuntimeTest {
 
         // Antipodal points are half the Earth's circumference apart, π·R.
         assertEquals(Math.PI * 6_371_000.0, distance, 50.0);
+    }
+
+    // -------------------------------------------------------------------------
+    // Session distance
+    // -------------------------------------------------------------------------
+
+    /** Northward steps of 0.0001 deg latitude, about 11 m each. */
+    private static final double STEP_DEGREES = 0.0001;
+
+    private void walkNorth(int fixes, long firstTimestamp) {
+        for (int i = 0; i < fixes; i++)
+            manager.recordLocation("uid1", "Alpha", -27.47 + i * STEP_DEGREES,
+                    153.02, 10.0, 5.0, 0.0, 1.0, firstTimestamp + i * 5000L);
+    }
+
+    private static double expectedNorthwardDistance(int fixes) {
+        return SearchTrackManager.haversineDistance(-27.47, 153.02,
+                -27.47 + (fixes - 1) * STEP_DEGREES, 153.02);
+    }
+
+    /**
+     * About 2.5 hours of fixes at one every five seconds. The display cache
+     * keeps only the newest 1500, and the distance used to be summed over
+     * that cache, so it would have dropped the first 300 fixes of the walk.
+     */
+    @Test
+    public void distance_coversTheWholeSessionBeyondTheDisplayLimit() {
+        manager.startOrResume("uid1", "Alpha");
+        walkNorth(1800, 1000L);
+
+        assertEquals(expectedNorthwardDistance(1800),
+                manager.getDistanceMeters(), 0.5);
+    }
+
+    @Test
+    public void distance_isTheSameWhenRecomputedAfterARestart() {
+        manager.startOrResume("uid1", "Alpha");
+        walkNorth(1700, 1000L);
+        double before = manager.getDistanceMeters();
+
+        SearchTrackManager restarted = new SearchTrackManager(
+                new TrackSessionRepository(dbHelper),
+                new LocationRepository(dbHelper));
+        restarted.setOperationId(OPERATION_ID);
+        restarted.startOrResume("uid1", "Alpha");
+
+        assertEquals(manager.getActiveSessionId(),
+                restarted.getActiveSessionId());
+        assertEquals(before, restarted.getDistanceMeters(), 0.01);
+        assertEquals(expectedNorthwardDistance(1700), before, 0.5);
+    }
+
+    @Test
+    public void distance_keepsUpWithFixesRecordedAfterItWasRead() {
+        manager.startOrResume("uid1", "Alpha");
+        walkNorth(3, 1000L);
+        manager.getDistanceMeters();
+        manager.getTrackPoints();
+
+        manager.recordLocation("uid1", "Alpha", -27.47 + 3 * STEP_DEGREES,
+                153.02, 10.0, 5.0, 0.0, 1.0, 16000L);
+
+        assertEquals(expectedNorthwardDistance(4),
+                manager.getDistanceMeters(), 0.01);
+    }
+
+    @Test
+    public void distance_resetsWhenTheTrackIsCleared() {
+        manager.startOrResume("uid1", "Alpha");
+        walkNorth(10, 1000L);
+        manager.getDistanceMeters();
+
+        manager.clearCurrentTrack();
+
+        assertEquals(0.0, manager.getDistanceMeters(), 0.0001);
+        assertTrue(manager.getDetailsSummary().startsWith("Distance: 0.00 km"));
     }
 }

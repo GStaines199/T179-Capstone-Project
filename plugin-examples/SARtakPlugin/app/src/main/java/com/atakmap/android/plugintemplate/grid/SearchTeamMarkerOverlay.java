@@ -36,8 +36,8 @@ public class SearchTeamMarkerOverlay {
     private String selectedMemberId;
     private boolean showCallsigns = true;
     private boolean visible = true;
-
-    public SearchTeamMarkerOverlay(MapView mapView,
+    private boolean hiddenGroupCleared;
+    private String lastRenderKey = "";public SearchTeamMarkerOverlay(MapView mapView,
             SearchPartyAssignmentManager assignmentManager,
             SearchLineManager searchLineManager) {
         this.mapView = mapView;
@@ -77,8 +77,7 @@ public class SearchTeamMarkerOverlay {
         this.visible = visible;
         ensureMarkerGroup();
         if (!visible || !USE_CUSTOM_SARTAK_ICONS) {
-            markerGroup.clearItems();
-            markerGroup.setVisible(false);
+            clearHiddenGroupOnce();
         } else {
             markerGroup.setVisible(true);
             render();
@@ -88,15 +87,20 @@ public class SearchTeamMarkerOverlay {
     public void render() {
         ensureMarkerGroup();
         if (!visible || !USE_CUSTOM_SARTAK_ICONS) {
-            markerGroup.clearItems();
-            markerGroup.setVisible(false);
+            clearHiddenGroupOnce();
             return;
         }
         markerGroup.setVisible(true);
+        hiddenGroupCleared = false;
 
-        Set<String> wantedUids = new HashSet<>();
         List<SearchLineMemberStatus> lineStatuses = searchLineManager
                 .getMemberStatuses();
+        String renderKey = buildRenderKey(lineStatuses);
+        if (renderKey.equals(lastRenderKey))
+            return;
+        lastRenderKey = renderKey;
+
+        Set<String> wantedUids = new HashSet<>();
         for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
             if (!shouldShow(member))
                 continue;
@@ -113,6 +117,43 @@ public class SearchTeamMarkerOverlay {
         removeStaleMarkers(wantedUids);
     }
 
+    private void clearHiddenGroupOnce() {
+        ensureMarkerGroup();
+        if (!hiddenGroupCleared) {
+            markerGroup.clearItems();
+            hiddenGroupCleared = true;
+            lastRenderKey = "";
+        }
+        markerGroup.setVisible(false);
+    }
+
+    private String buildRenderKey(List<SearchLineMemberStatus> lineStatuses) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(visibilityMode.name()).append('|')
+                .append(selectedMemberId == null ? "" : selectedMemberId)
+                .append('|').append(showCallsigns).append('|');
+        for (SearchTeamMember member : assignmentManager.getVisibleMembers()) {
+            if (!shouldShow(member))
+                continue;
+            builder.append(member.getUniqueId()).append('@')
+                    .append(Math.round(member.getLatitude() * 1000000.0))
+                    .append(',')
+                    .append(Math.round(member.getLongitude() * 1000000.0))
+                    .append('|').append(member.getConnectionStatus().name())
+                    .append('|').append(member.getRoleLabel())
+                    .append('|').append(member.getDisplayColor())
+                    .append('|').append(member.getTeamColorArgb())
+                    .append('|').append(member.hasReliableHeading())
+                    .append('|').append(Math.round(member.getHeadingDegrees()))
+                    .append(';');
+        }
+        builder.append("line=").append(searchLineManager.isStarted()).append('|');
+        for (SearchLineMemberStatus status : lineStatuses)
+            builder.append(status.getMember().getUniqueId()).append(':')
+                    .append(Math.round(status.getDistanceFromLineMeters()))
+                    .append(';');
+        return builder.toString();
+    }
     private boolean shouldShow(SearchTeamMember member) {
         // ATAK already draws this device's own location arrow. SARtak only adds
         // plugin markers for other team members to avoid duplicate self-icons.
@@ -330,3 +371,5 @@ public class SearchTeamMarkerOverlay {
         markerGroup.setMetaBoolean("addToObjList", true);
     }
 }
+
+

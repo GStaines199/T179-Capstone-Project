@@ -11,6 +11,7 @@ import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.android.plugintemplate.grid.SearchGridCell;
 import com.atakmap.android.plugintemplate.grid.SearchLineColorOption;
+import com.atakmap.android.plugintemplate.grid.SearchLineDirection;
 import com.atakmap.android.plugintemplate.grid.SearchLineManager;
 import com.atakmap.comms.CommsMapComponent;
 import com.atakmap.comms.CotServiceRemote;
@@ -154,8 +155,9 @@ public class SearchLineCotWorkflow {
                 cell == null ? 0.0 : cell.getSouth(),
                 cell == null ? 0.0 : cell.getEast(),
                 cell == null ? 0.0 : cell.getNorth(),
-                manager.getLineNorthing(), manager.getColorOption(),
-                manager.getReturnMarkToleranceMeters(), created, operationId);
+                manager.getLineOffset(), manager.getColorOption(),
+                manager.getReturnMarkToleranceMeters(), created, operationId,
+                manager.getDirection());
         messages.put(message.getUid(), message);
         if (dittoSyncManager != null)
             dittoSyncManager.publishSearchLine(message);
@@ -186,8 +188,14 @@ public class SearchLineCotWorkflow {
             detail.setAttribute("east", String.valueOf(cell.getEast()));
             detail.setAttribute("north", String.valueOf(cell.getNorth()));
         }
+        detail.setAttribute("direction", message.getDirection().name());
+        detail.setAttribute("lineOffset", String.valueOf(
+                message.getLineOffset()));
+        // Also written under the old name. A peer on a build that predates
+        // directional lines reads only this one and treats it as a northing,
+        // which is exactly right for the north and south lines it can draw.
         detail.setAttribute("lineNorthing", String.valueOf(
-                message.getLineNorthing()));
+                message.getLineOffset()));
         detail.setAttribute("color", message.getColorOption().name());
         detail.setAttribute("tolerance", String.valueOf(
                 message.getToleranceMeters()));
@@ -257,10 +265,11 @@ public class SearchLineCotWorkflow {
                 intValue(detail, "column"), doubleValue(detail, "west"),
                 doubleValue(detail, "south"), doubleValue(detail, "east"),
                 doubleValue(detail, "north"),
-                doubleValue(detail, "lineNorthing"),
+                lineOffsetValue(detail),
                 colorValue(value(detail, "color")),
                 doubleValue(detail, "tolerance"), created,
-                value(detail, "operationId"));
+                value(detail, "operationId"),
+                SearchLineDirection.fromName(value(detail, "direction")));
     }
 
     private void addStandardContactDetails(CotDetail root, String callsign) {
@@ -409,6 +418,18 @@ public class SearchLineCotWorkflow {
         } catch (NumberFormatException ignored) {
             return 0.0;
         }
+    }
+
+    /**
+     * Reads the line offset, preferring the current attribute and falling back
+     * to the legacy {@code lineNorthing} written by older builds. Both carry
+     * the same number; only the name changed when the offset stopped always
+     * being a northing.
+     */
+    private double lineOffsetValue(CotDetail detail) {
+        if (value(detail, "lineOffset").length() > 0)
+            return doubleValue(detail, "lineOffset");
+        return doubleValue(detail, "lineNorthing");
     }
 
     private SearchLineColorOption colorValue(String value) {

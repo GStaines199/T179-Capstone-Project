@@ -33,6 +33,13 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = 26, manifest = Config.NONE)
 public class NoFabricatedPositionTest {
 
+    /**
+     * Track logging is operation-scoped: SearchTrackManager writes nothing
+     * until an operation id is set, as SARTakMapController does when an
+     * operation is created or joined.
+     */
+    private static final String OPERATION_ID = "op-7f3a";
+
     private static final String UID = "uid-1";
     private static final String CALLSIGN = "RESCUE-1";
 
@@ -49,6 +56,7 @@ public class NoFabricatedPositionTest {
         trackManager = new SearchTrackManager(
                 new TrackSessionRepository(dbHelper),
                 new LocationRepository(dbHelper));
+        trackManager.setOperationId(OPERATION_ID);
         healthManager = new PluginHealthManager();
         healthManager.start();
         healthManager.setStorageReady(true, "Local storage ready");

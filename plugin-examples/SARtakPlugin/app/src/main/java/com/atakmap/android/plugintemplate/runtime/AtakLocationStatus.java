@@ -1,5 +1,9 @@
 package com.atakmap.android.plugintemplate.runtime;
 
+import android.content.Context;
+import android.location.LocationManager;
+import android.os.Build;
+
 import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.MetaDataHolder2;
 import com.atakmap.android.maps.Marker;
@@ -26,6 +30,9 @@ public class AtakLocationStatus {
         if (mapView == null)
             return Snapshot.unavailable("GPS unavailable; no ATAK map");
 
+        if (!isDeviceLocationEnabled(mapView.getContext()))
+            return Snapshot.unavailable("No GPS Signal");
+
         Marker self = mapView.getSelfMarker();
         if (self == null || self.getPoint() == null
                 || !self.getPoint().isValid())
@@ -39,6 +46,26 @@ public class AtakLocationStatus {
             return Snapshot.unavailable(evaluation.getMessage());
         return Snapshot.available(point, evaluation.getTimestamp(),
                 evaluation.getSource());
+    }
+
+    private static boolean isDeviceLocationEnabled(Context context) {
+        if (context == null)
+            return true;
+        try {
+            LocationManager manager = (LocationManager) context
+                    .getSystemService(Context.LOCATION_SERVICE);
+            if (manager == null)
+                return true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                return manager.isLocationEnabled();
+            return manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                    || manager.isProviderEnabled(
+                            LocationManager.NETWORK_PROVIDER);
+        } catch (Exception ignored) {
+            // ATAK metadata remains the authoritative fallback when Android
+            // does not expose provider state on a particular device build.
+            return true;
+        }
     }
 
     /**

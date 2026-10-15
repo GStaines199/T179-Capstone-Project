@@ -10,6 +10,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Roster honesty tests for SearchPartyAssignmentManager.
@@ -205,6 +206,18 @@ public class SearchTeamRosterTest {
     }
 
     @Test
+    public void setSelfIdentity_refreshesCallsignForTheSameUid() {
+        manager.setTeamCreated(true);
+        manager.setSelfIdentity(SELF_UID, SELF_CALLSIGN);
+
+        manager.setSelfIdentity(SELF_UID, "Rescue One Updated");
+
+        assertEquals("Rescue One Updated",
+                manager.getSelfMember().getCallsign());
+        assertEquals(1, manager.getVisibleMembers().size());
+    }
+
+    @Test
     public void setSelfIdentity_retiresThePreviousSelfWhenTheUidChanges() {
         manager.setTeamCreated(true);
         manager.setSelfIdentity(SELF_UID, SELF_CALLSIGN);
@@ -215,5 +228,19 @@ public class SearchTeamRosterTest {
             assertNotEquals("the old self should have been retired",
                     SELF_UID, member.getUniqueId());
         }
+    }
+
+    @Test
+    public void setSelfRole_restoresMemberAndLeaderRolesWithoutChangingTeam() {
+        manager.setSelfIdentity(SELF_UID, SELF_CALLSIGN);
+        manager.joinTeam("Bravo", "TEAM-leader-uid");
+
+        manager.setSelfRole(false);
+        assertFalse(manager.getSelfMember().isTeamLeader());
+        assertEquals("TEAM-leader-uid", manager.getTeamId());
+
+        manager.setSelfRole(true);
+        assertTrue(manager.getSelfMember().isTeamLeader());
+        assertEquals("TEAM-leader-uid", manager.getTeamId());
     }
 }

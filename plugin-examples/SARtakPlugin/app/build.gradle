@@ -50,10 +50,11 @@ buildscript {
     ext.takrepoUser = getProperty('takrepo.user', 'invalid')
     ext.takrepoPassword = getProperty('takrepo.password', 'invalid')
     ext.takdevPlugin = getProperty('takdev.plugin', "${rootDir}/../../atak-gradle-takdev.jar")
-    // Default to the ATAK 5.6 plugin API. The installed ATAK app may report a
-    // patch version such as 5.6.0.23, but the plugin API requirement remains
-    // 5.6.0. Developers can set atak.version=5.8.0 in local.properties or pass
-    // -Patak.version=5.8.0 when testing against ATAK 5.8.
+    // Default to the ATAK 5.6 plugin API, matching the SDK at the repo root
+    // (ATAK CIV 5.6.0.24). The installed ATAK app may report a patch version
+    // such as 5.6.0.24, but the plugin API requirement remains 5.6.0.
+    // Developers can set atak.version=<x.y.z> in local.properties or pass
+    // -Patak.version=<x.y.z> when testing against another ATAK release.
     ext.ATAK_VERSION = getProperty('atak.version', '5.6.0')
 
     repositories {
@@ -157,12 +158,21 @@ android {
             storePassword getOptionalLocalProperty("takDebugKeyFilePassword") ?: "android"
             keyAlias getOptionalLocalProperty("takDebugKeyAlias") ?: "androiddebugkey"
             keyPassword getOptionalLocalProperty("takDebugKeyPassword") ?: "android"
+            // ATAK's plugin loader is the consumer here, and every reference
+            // template in this repo ships v1-signed (AGP 4.2.2 / minSdk 21).
+            // AGP drops v1 by default once minSdk >= 24, which this module now
+            // is, so set both explicitly rather than inheriting that default.
+            enableV1Signing true
+            enableV2Signing true
         }
         release {
             storeFile file(getOptionalLocalProperty("takReleaseKeyFile") ?: getOptionalLocalProperty("takDebugKeyFile") ?: "${System.properties['user.home']}/.android/debug.keystore")
             storePassword getOptionalLocalProperty("takReleaseKeyFilePassword") ?: getOptionalLocalProperty("takDebugKeyFilePassword") ?: "android"
             keyAlias getOptionalLocalProperty("takReleaseKeyAlias") ?: getOptionalLocalProperty("takDebugKeyAlias") ?: "androiddebugkey"
             keyPassword getOptionalLocalProperty("takReleaseKeyPassword") ?: getOptionalLocalProperty("takDebugKeyPassword") ?: "android"
+            // v1 kept on for ATAK's loader - see note on the debug config above.
+            enableV1Signing true
+            enableV2Signing true
         }
     }
 
@@ -244,8 +254,8 @@ android {
         }
     }
 
-    // ATAK 5.8 performs an inner signing check. Keeping the store archive out
-    // of app bundles matches the 5.8 SDK template and prevents load failures.
+    // ATAK performs an inner signing check. Keeping the store archive out of
+    // app bundles matches the SDK template and prevents load failures.
     bundle {
         storeArchive {
             enable = false

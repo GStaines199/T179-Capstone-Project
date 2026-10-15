@@ -70,7 +70,52 @@ public class DittoCredentialStore {
         for (DittoCredentialProfile existing : getProfiles())
             byId.put(existing.getId(), existing);
         byId.put(profile.getId(), profile);
-        persist(new ArrayList<>(byId.values()), profile.getId());
+        // Saving a profile no longer selects it (finding T1-6): HQ's next
+        // Create Operation would otherwise quietly switch to whichever
+        // profile was added or edited last. Only the first profile, or one
+        // saved while the selection points at nothing, becomes selected.
+        String selectedId = getSelectedProfileId();
+        if (!byId.containsKey(selectedId))
+            selectedId = profile.getId();
+        persist(new ArrayList<>(byId.values()), selectedId);
+    }
+
+    /** What {@link #importFromOperation} did, for the toast. */
+    public enum ImportResult {
+        UNCHANGED, CREATED, TOKEN_UPDATED
+    }
+
+    /**
+     * Records the credentials carried by a joined or switched-to operation
+     * (finding T1-4). A new profile is created only when none has the same
+     * database ID and auth URL. A matching profile keeps the label and type
+     * the user gave it; only its token is replaced, and only when it differs.
+     */
+    public ImportResult importFromOperation(String label, String databaseId,
+            String authUrl, String developmentToken) {
+        String targetDatabaseId = safe(databaseId);
+        String targetAuthUrl = safe(authUrl);
+        for (DittoCredentialProfile existing : getProfiles()) {
+            if (!existing.getDatabaseId().equals(targetDatabaseId)
+                    || !existing.getAuthUrl().equals(targetAuthUrl))
+                continue;
+            if (existing.getDevelopmentToken().equals(safe(developmentToken)))
+                return ImportResult.UNCHANGED;
+            DittoCredentialProfile updated = existing.updated(
+                    existing.getRawLabel(), existing.getConnectionType(),
+                    targetDatabaseId, targetAuthUrl, developmentToken);
+            if (!updated.isComplete())
+                return ImportResult.UNCHANGED;
+            saveProfile(updated);
+            return ImportResult.TOKEN_UPDATED;
+        }
+        DittoCredentialProfile created = DittoCredentialProfile.create(label,
+                DittoCredentialProfile.CONNECTION_SDK, targetDatabaseId,
+                targetAuthUrl, developmentToken);
+        if (!created.isComplete())
+            return ImportResult.UNCHANGED;
+        saveProfile(created);
+        return ImportResult.CREATED;
     }
 
     public void removeProfile(String profileId) {
@@ -80,8 +125,10 @@ public class DittoCredentialStore {
             if (!profile.getId().equals(target))
                 remaining.add(profile);
         }
-        String nextSelected = remaining.isEmpty() ? "" : remaining.get(0)
-                .getId();
+        // Removing another profile keeps the current selection.
+        String nextSelected = getSelectedProfileId();
+        if (nextSelected.equals(target) || nextSelected.length() == 0)
+            nextSelected = remaining.isEmpty() ? "" : remaining.get(0).getId();
         persist(remaining, nextSelected);
     }
 

@@ -3,14 +3,21 @@ package com.atakmap.android.plugintemplate.grid;
 import com.atakmap.android.plugintemplate.database.LocationRepository;
 import com.atakmap.android.plugintemplate.database.ReportedMeasurement;
 import com.atakmap.android.plugintemplate.database.TrackSessionRepository;
+import com.atakmap.android.plugintemplate.runtime.RawGnssCapture;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.UUID;
 
 
 public class SearchTrackManager {
+
+    private static final int MAX_DISPLAY_TRACK_POINTS = 1500;
+    private static final int MAX_SESSION_POINTS = 10000;
+    private static final long MAX_SESSION_AGE_MS = 12L * 60L * 60L * 1000L;
 
     private final TrackSessionRepository trackSessionRepository;
     private final LocationRepository locationRepository;
@@ -21,6 +28,21 @@ public class SearchTrackManager {
     private String activeCallsign;
     private String operationId = "";
     private long sessionStartedAt;
+    private List<double[]> cachedTrackPoints = Collections.emptyList();
+    private boolean trackCacheDirty = true;
+    // The display cache above keeps only the newest points, so the distance
+    // is tracked separately over the whole session.
+    private double sessionDistanceMeters;
+    private double lastLatitude = Double.NaN;
+    private double lastLongitude = Double.NaN;
+    private long lastTimestamp;
+    private boolean distanceDirty = true;
+
+    /**
+     * Faster than anyone searching moves, on foot or in a vehicle or aircraft.
+     * A leg implying more than this is a position jump, not travel.
+     */
+    static final double MAX_PLAUSIBLE_SPEED_MPS = 150.0;
 
     public SearchTrackManager(TrackSessionRepository trackSessionRepository,
             LocationRepository locationRepository) {
@@ -39,6 +61,20 @@ public class SearchTrackManager {
         }
         String existingSession = trackSessionRepository.getActiveSessionId(uid,
                 sessionPrefix(uid));
+        if (existingSession != null) {
+            long startedAt = trackSessionRepository
+                    .getSessionStartTimestamp(existingSession);
+            boolean expired = startedAt <= 0L
+                    || System.currentTimeMillis() - startedAt
+                            > MAX_SESSION_AGE_MS;
+            boolean oversized = locationRepository.countPointsInSession(
+                    existingSession) >= MAX_SESSION_POINTS;
+            if (expired || oversized) {
+                trackSessionRepository.closeSession(existingSession,
+                        System.currentTimeMillis());
+                existingSession = null;
+            }
+        }
         if (existingSession == null) {
             existingSession = sessionPrefix(uid) + UUID.randomUUID();
             sessionStartedAt = System.currentTimeMillis();
@@ -50,6 +86,7 @@ public class SearchTrackManager {
         }
         activeSessionId = existingSession;
         recording = true;
+        invalidateSessionCaches();
     }
 
     public void setOperationId(String operationId) {
@@ -59,6 +96,8 @@ public class SearchTrackManager {
         this.operationId = nextOperationId;
         activeSessionId = null;
         sessionStartedAt = 0L;
+        cachedTrackPoints = Collections.emptyList();
+        invalidateSessionCaches();
         if (activeUid != null && activeCallsign != null && recording)
             startOrResume(activeUid, activeCallsign);
     }
@@ -97,6 +136,7 @@ public class SearchTrackManager {
 
         activeSessionId = null;
         sessionStartedAt = 0L;
+        invalidateSessionCaches();
         recording = wasRecording;
         if (uid != null && callsign != null && wasRecording)
             startOrResume(uid, callsign);
@@ -149,12 +189,97 @@ public class SearchTrackManager {
                 ReportedMeasurement.toFloat(speed), timestamp,
                 activeSessionId);
         trackSessionRepository.incrementPointCount(activeSessionId);
+        onPointStored(latitude, longitude, timestamp,
+                accuracy == null ? Double.NaN : accuracy);
+    }
+
+    /**
+     * Records a raw GNSS fix into the active session.
+     *
+     * <p>Raw capture used to write straight to {@link LocationRepository},
+     * which left the point cache and the distance behind: the Track tab kept
+     * showing the distance from the last time the session was loaded. Writing
+     * through here keeps both current. Without an active operation there is no
+     * session to write to, so nothing is stored.
+     */
+    public void recordRawCapture(String uid, String callsign,
+            RawGnssCapture capture) {
+        if (!recording || !hasActiveOperation() || capture == null)
+            return;
+        if (activeSessionId == null || activeUid == null
+                || !activeUid.equals(uid))
+            startOrResume(uid, callsign);
+
+        locationRepository.insertRaw(uid, callsign, activeSessionId, capture);
+        trackSessionRepository.incrementPointCount(activeSessionId);
+        Double accuracy = capture.getAccuracyMeters();
+        onPointStored(capture.getLatitude(), capture.getLongitude(),
+                capture.getTimestamp(),
+                accuracy == null ? Double.NaN : accuracy);
+    }
+
+    private void onPointStored(double latitude, double longitude,
+            long timestamp, double accuracy) {
+        // A dirty cache is reloaded from the database on the next read.
+        if (!trackCacheDirty) {
+            List<double[]> updated = new ArrayList<>(cachedTrackPoints);
+            updated.add(new double[] {latitude, longitude, timestamp,
+                    accuracy});
+            if (updated.size() > MAX_DISPLAY_TRACK_POINTS)
+                updated = new ArrayList<>(updated.subList(updated.size()
+                        - MAX_DISPLAY_TRACK_POINTS, updated.size()));
+            cachedTrackPoints = updated;
+        }
+        if (!distanceDirty) {
+            if (!Double.isNaN(lastLatitude))
+                sessionDistanceMeters += legDistance(lastLatitude,
+                        lastLongitude, lastTimestamp, latitude, longitude,
+                        timestamp);
+            lastLatitude = latitude;
+            lastLongitude = longitude;
+            lastTimestamp = timestamp;
+        }
+    }
+
+    private void invalidateSessionCaches() {
+        trackCacheDirty = true;
+        distanceDirty = true;
+    }
+
+    /** Distance walked in the active session, over every stored point. */
+    public double getDistanceMeters() {
+        if (distanceDirty) {
+            sessionDistanceMeters = 0.0;
+            lastLatitude = Double.NaN;
+            lastLongitude = Double.NaN;
+            lastTimestamp = 0L;
+            if (activeSessionId != null) {
+                for (double[] point : locationRepository
+                        .getAllPointsForSession(activeSessionId)) {
+                    long timestamp = point.length > 2 ? (long) point[2] : 0L;
+                    if (!Double.isNaN(lastLatitude))
+                        sessionDistanceMeters += legDistance(lastLatitude,
+                                lastLongitude, lastTimestamp, point[0],
+                                point[1], timestamp);
+                    lastLatitude = point[0];
+                    lastLongitude = point[1];
+                    lastTimestamp = timestamp;
+                }
+            }
+            distanceDirty = false;
+        }
+        return sessionDistanceMeters;
     }
 
     public List<double[]> getTrackPoints() {
         if (activeSessionId == null)
-            return java.util.Collections.emptyList();
-        return locationRepository.getPointsForSession(activeSessionId);
+            return Collections.emptyList();
+        if (trackCacheDirty) {
+            cachedTrackPoints = locationRepository.getPointsForSession(
+                    activeSessionId);
+            trackCacheDirty = false;
+        }
+        return new ArrayList<>(cachedTrackPoints);
     }
 
     public String getStatusSummary() {
@@ -173,7 +298,7 @@ public class SearchTrackManager {
                 : locationRepository.countPointsInSession(activeSessionId);
         long elapsedSeconds = sessionStartedAt <= 0L ? 0L
                 : (System.currentTimeMillis() - sessionStartedAt) / 1000L;
-        double distanceMeters = calculateDistance(getTrackPoints());
+        double distanceMeters = getDistanceMeters();
         return String.format(Locale.US,
                 "Distance: %.2f km\nDuration: %s\nTrack points: %d\nVisibility: %s\nSession: %s",
                 distanceMeters / 1000.0, formatDuration(elapsedSeconds),
@@ -181,19 +306,22 @@ public class SearchTrackManager {
                 activeSessionId == null ? "pending" : activeSessionId);
     }
 
-    private double calculateDistance(List<double[]> points) {
-        double total = 0.0;
-        double prevLat = Double.NaN;
-        double prevLng = Double.NaN;
-        for (double[] point : points) {
-            double lat = point[0];
-            double lng = point[1];
-            if (!Double.isNaN(prevLat))
-                total += haversineDistance(prevLat, prevLng, lat, lng);
-            prevLat = lat;
-            prevLng = lng;
-        }
-        return total;
+    /**
+     * Metres walked between two consecutive fixes, or 0 when getting from one
+     * to the other would take an impossible speed. A receiver that jumps to a
+     * stale or default position and back (the emulator's GPS swaps between
+     * California and Brisbane on boot) otherwise added thousands of km. The
+     * next leg is measured from the jumped-to fix, so a real move after a gap
+     * still counts. Timestamps in ms; a missing or out-of-order one counts as
+     * one second apart.
+     */
+    static double legDistance(double lat1, double lng1, long time1,
+            double lat2, double lng2, long time2) {
+        double meters = haversineDistance(lat1, lng1, lat2, lng2);
+        double seconds = time1 > 0L && time2 > time1
+                ? (time2 - time1) / 1000.0 : 1.0;
+        return meters > MAX_PLAUSIBLE_SPEED_MPS * Math.max(seconds, 1.0)
+                ? 0.0 : meters;
     }
 
     /**
@@ -239,6 +367,8 @@ public class SearchTrackManager {
             );
             activeSessionId = null;
             sessionStartedAt = 0L;
+            cachedTrackPoints = Collections.emptyList();
+            invalidateSessionCaches();
         }
     }
 }

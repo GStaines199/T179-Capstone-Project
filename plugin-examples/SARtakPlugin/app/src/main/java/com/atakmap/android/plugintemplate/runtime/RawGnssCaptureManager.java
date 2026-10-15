@@ -10,7 +10,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 
-import com.atakmap.android.plugintemplate.database.LocationRepository;
 import com.atakmap.android.plugintemplate.grid.SearchTrackManager;
 
 public class RawGnssCaptureManager {
@@ -19,14 +18,18 @@ public class RawGnssCaptureManager {
         void onRawGnssCaptured(RawGnssCapture capture);
     }
 
-    public static final long MIN_UPDATE_INTERVAL_MS = 1000L;
-    public static final float MIN_UPDATE_DISTANCE_M = 0f;
+    /**
+     * Field state is synchronized on a five-to-ten second cadence. Capturing a
+     * fix every second caused a synchronous SQLite write, ATAK crumb write and
+     * map refresh on the main looper even while a device was stationary.
+     */
+    public static final long MIN_UPDATE_INTERVAL_MS = 5000L;
+    public static final float MIN_UPDATE_DISTANCE_M = 2f;
 
     private final Context context;
     private final LocationManager locationManager;
     private final IdentityManager identityManager;
     private final SearchTrackManager trackManager;
-    private final LocationRepository locationRepository;
     private final Listener listener;
     private boolean running;
 
@@ -50,14 +53,12 @@ public class RawGnssCaptureManager {
     };
 
     public RawGnssCaptureManager(Context context, IdentityManager identityManager,
-            SearchTrackManager trackManager, LocationRepository locationRepository,
-            Listener listener) {
+            SearchTrackManager trackManager, Listener listener) {
         this.context = context;
         this.locationManager = (LocationManager)
                 context.getSystemService(Context.LOCATION_SERVICE);
         this.identityManager = identityManager;
         this.trackManager = trackManager;
-        this.locationRepository = locationRepository;
         this.listener = listener;
     }
 
@@ -94,15 +95,11 @@ public class RawGnssCaptureManager {
         if (!trackManager.isRecording())
             return;
 
-        String sessionId = trackManager.getActiveSessionId();
-        if (sessionId == null) {
-            trackManager.startOrResume(identity.getUid(), identity.getCallsign());
-            sessionId = trackManager.getActiveSessionId();
-        }
-
+        // The track manager owns the session, so the write goes through it to
+        // keep its point cache and distance current.
         RawGnssCapture capture = RawGnssCapture.from(location);
-        locationRepository.insertRaw(identity.getUid(), identity.getCallsign(),
-                sessionId, capture);
+        trackManager.recordRawCapture(identity.getUid(), identity.getCallsign(),
+                capture);
 
         if (listener != null)
             listener.onRawGnssCaptured(capture);

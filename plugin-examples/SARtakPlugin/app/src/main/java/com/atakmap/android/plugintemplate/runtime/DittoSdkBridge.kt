@@ -1,7 +1,11 @@
 package com.atakmap.android.plugintemplate.runtime
 
 import android.content.Context
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.startup.AppInitializer
+import com.atakmap.android.plugintemplate.plugin.BuildConfig
 import com.ditto.kotlin.Ditto
 import com.ditto.kotlin.DittoAuthenticationProvider
 import com.ditto.kotlin.DittoConfig
@@ -19,6 +23,10 @@ import java.security.MessageDigest
 import java.util.function.Consumer
 
 object DittoSdkBridge {
+    private const val PERF_TAG = "SARtakPerf"
+    private const val SLOW_WRITE_MS = 100L
+    private const val MAIN_THREAD_STACK_LOG_LIMIT = 5
+    private var mainThreadWriteWarnings = 0
     private var sharedDitto: Ditto? = null
     private var sharedDatabaseId: String = ""
     private var sharedAuthUrl: String = ""
@@ -125,16 +133,20 @@ object DittoSdkBridge {
     @JvmStatic
     @Throws(DittoException::class)
     fun disableStrictMode(ditto: Ditto) {
-        runBlocking {
-            ditto.store.execute("ALTER SYSTEM SET DQL_STRICT_MODE=false")
+        timedWrite("strict mode") {
+            runBlocking {
+                ditto.store.execute("ALTER SYSTEM SET DQL_STRICT_MODE=false")
+            }
         }
     }
 
     @JvmStatic
     @Throws(DittoException::class)
     fun execute(ditto: Ditto, query: String, args: Map<String, Any?>) {
-        runBlocking {
-            ditto.store.execute(query, args)
+        timedWrite(query) {
+            runBlocking {
+                ditto.store.execute(query, args)
+            }
         }
     }
 
@@ -146,9 +158,53 @@ object DittoSdkBridge {
         argumentName: String,
         json: String
     ) {
-        runBlocking {
-            ditto.store.execute(query, mapOf(argumentName to json))
+        timedWrite(query) {
+            runBlocking {
+                ditto.store.execute(query, mapOf(argumentName to json))
+            }
         }
+    }
+
+    /**
+     * Debug builds only: every store write blocks its thread in runBlocking,
+     * so one on the main thread freezes ATAK for as long as Ditto takes.
+     * Writes belong on DittoWriteQueue's thread; this makes a regression show
+     * up in `adb logcat -s SARtakPerf`, with a stack for the first few.
+     */
+    private inline fun timedWrite(label: String, write: () -> Unit) {
+        if (!BuildConfig.DEBUG) {
+            write()
+            return
+        }
+        val onMainThread = Looper.myLooper() == Looper.getMainLooper()
+        val startedAt = SystemClock.elapsedRealtime()
+        try {
+            write()
+        } finally {
+            val elapsed = SystemClock.elapsedRealtime() - startedAt
+            if (onMainThread) {
+                logMainThreadWrite(label, elapsed)
+            } else if (elapsed >= SLOW_WRITE_MS) {
+                Log.d(PERF_TAG, "slow ditto write ms=$elapsed thread=" +
+                    Thread.currentThread().name + " " + shortLabel(label))
+            }
+        }
+    }
+
+    private fun logMainThreadWrite(label: String, elapsed: Long) {
+        val count = synchronized(this) { ++mainThreadWriteWarnings }
+        val message = "ditto write on MAIN thread ms=$elapsed count=$count " +
+            shortLabel(label)
+        if (count <= MAIN_THREAD_STACK_LOG_LIMIT) {
+            Log.w(PERF_TAG, message, Throwable("main-thread Ditto write"))
+        } else {
+            Log.w(PERF_TAG, message)
+        }
+    }
+
+    private fun shortLabel(label: String): String {
+        val match = Regex("INSERT INTO (\\w+)").find(label)
+        return match?.groupValues?.get(1) ?: label.take(40)
     }
 
     @JvmStatic

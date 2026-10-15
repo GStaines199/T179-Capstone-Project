@@ -124,14 +124,16 @@ public class AtakTeamContactDataSource {
             String uid = safeStatic(snapshot.getUid());
             String leaderUid = safeStatic(snapshot.getLeaderUid());
             String role = safeStatic(snapshot.getRole()).toLowerCase();
+            // Outside a team a device reports itself as its own leader, so
+            // neither that nor its ATAK role makes it anyone's Team Lead.
+            if (!snapshot.isTeamCreated())
+                return "Team Member";
             if (uid.length() > 0 && uid.equals(leaderUid))
                 return "Team Lead";
-            if (snapshot.isTeamCreated()
-                    && (role.equals("team lead")
-                            || role.equals("team leader")
-                            || role.equals("leader")))
+            if (role.equals("team lead") || role.equals("team leader")
+                    || role.equals("leader"))
                 return "Team Lead";
-            return "Searcher";
+            return "Team Member";
         }
 
         private static String dittoGroupName(DittoDeviceSnapshot snapshot) {

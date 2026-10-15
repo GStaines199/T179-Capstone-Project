@@ -1,6 +1,6 @@
 # SARtak ATAK Plugin
 
-SARtak adds search-and-rescue coordination tools to ATAK 5.8 CIV. The plugin
+SARtak adds search-and-rescue coordination tools to ATAK 5.6 CIV. The plugin
 uses ATAK for the base map, self location, role/callsign identity, and CoT
 markers, then adds SARtak-specific operation, grid, team, search-line, track,
 and Ditto sync views.
@@ -19,7 +19,7 @@ and Ditto sync views.
 
 ## Generic Deployment Model
 
-The plugin APK can be installed on any compatible ATAK 5.8 CIV device. A normal
+The plugin APK can be installed on any compatible ATAK 5.6 CIV device. A normal
 volunteer device should not need your personal Ditto credentials compiled into
 its build.
 
@@ -84,6 +84,10 @@ Create `local.properties` from `local.properties.example` and set:
 - `takdev.plugin`
 - optional Ditto values for operation creation
 
+The default ATAK plugin API target is `5.6.0`, which is compatible with ATAK
+`5.6.0.x` devices. Developers testing against ATAK 5.8 can override this with
+`atak.version=5.8.0` in `local.properties`.
+
 Then build:
 
 ```powershell
@@ -101,7 +105,7 @@ app\build\outputs\apk\civ\debug
 Use the full path to `adb` if PowerShell cannot find it:
 
 ```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r "app\build\outputs\apk\civ\debug\ATAK-Plugin-SARtakPlugin-1.0-<git>-5.8.0-civ-debug.apk"
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r "app\build\outputs\apk\civ\debug\ATAK-Plugin-SARtakPlugin-1.0-<git>-5.6.0-civ-debug.apk"
 ```
 
 ## Files That Must Stay Local

@@ -3,13 +3,48 @@ package com.atakmap.android.plugintemplate.grid;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 public class SearchGridStateStore {
 
     private static final String PREFS_NAME = "sartak_search_grid_state";
     private static final String CELL_PREFIX = "cell.";
+    private static final String AREA_PREFIX = "area.";
+    /**
+     * How many recent writes {@link #changedSince(int)} can report. More
+     * than this between two reads and the reader rebuilds from scratch.
+     */
+    static final int MAX_TRACKED_CHANGES = 512;
 
     private final SharedPreferences preferences;
     private String operationId = "";
+    private int revision;
+    /**
+     * This operation's statuses, read from preferences once and then kept
+     * in step with every write. Reading them back with getAll() copied every
+     * stored preference, 30,000+ on a large searched area, on each change.
+     */
+    private Map<String, SearchGridStatus> knownStatuses;
+    private final ArrayDeque<Change> changes = new ArrayDeque<>();
+    /** {@link #changedSince(int)} can answer for this revision and later. */
+    private int oldestAnswerableRevision;
+
+    private static final class Change {
+        final int revision;
+        final String cellId;
+
+        Change(int revision, String cellId) {
+            this.revision = revision;
+            this.cellId = cellId;
+        }
+    }
 
     public SearchGridStateStore(Context context) {
         preferences = context.getSharedPreferences(PREFS_NAME,
@@ -18,6 +53,50 @@ public class SearchGridStateStore {
 
     public void setOperationId(String operationId) {
         this.operationId = sanitize(operationId);
+        revision++;
+        knownStatuses = null;
+        changes.clear();
+        oldestAnswerableRevision = revision;
+    }
+
+    /**
+     * Cell ids written after {@code sinceRevision}, each once, oldest first.
+     * Null when that can't be told any more (the operation changed, or more
+     * than {@link #MAX_TRACKED_CHANGES} writes happened since), in which case
+     * the caller rebuilds from {@link #getKnownStatuses()}.
+     */
+    public List<String> changedSince(int sinceRevision) {
+        if (sinceRevision < oldestAnswerableRevision
+                || sinceRevision > revision)
+            return null;
+        Set<String> ids = new LinkedHashSet<>();
+        for (Change change : changes) {
+            if (change.revision > sinceRevision)
+                ids.add(change.cellId);
+        }
+        return new ArrayList<>(ids);
+    }
+
+    private void recordChange(String cellId, SearchGridStatus status) {
+        String id = sanitize(cellId);
+        if (knownStatuses != null) {
+            if (status == null || status == SearchGridStatus.NOT_STARTED)
+                knownStatuses.remove(id);
+            else
+                knownStatuses.put(id, status);
+        }
+        changes.addLast(new Change(revision, id));
+        while (changes.size() > MAX_TRACKED_CHANGES)
+            oldestAnswerableRevision = changes.removeFirst().revision;
+    }
+
+    /**
+     * Changes whenever a cell status is written or the operation scope
+     * changes, so callers can cache work derived from
+     * {@link #getKnownStatuses()} instead of re-reading every preference.
+     */
+    public int getRevision() {
+        return revision;
     }
 
     public SearchGridStatus getStatus(String cellId) {
@@ -38,16 +117,119 @@ public class SearchGridStateStore {
             return;
         preferences.edit().putString(keyForCell(cellId), status.name())
                 .apply();
+        revision++;
+        recordChange(cellId, status);
     }
 
     public void clearStatus(String cellId) {
         if (!isOperationScoped() || sanitize(cellId).length() == 0)
             return;
         preferences.edit().remove(keyForCell(cellId)).apply();
+        revision++;
+        recordChange(cellId, null);
+    }
+
+    /**
+     * Every status other than NOT_STARTED in this operation, by cell id.
+     * The map is read-only and kept up to date by this store.
+     */
+    public Map<String, SearchGridStatus> getKnownStatuses() {
+        if (!isOperationScoped())
+            return Collections.emptyMap();
+        if (knownStatuses == null)
+            knownStatuses = readKnownStatuses();
+        return Collections.unmodifiableMap(knownStatuses);
+    }
+
+    private Map<String, SearchGridStatus> readKnownStatuses() {
+        Map<String, SearchGridStatus> statuses = new LinkedHashMap<>();
+        String prefix = CELL_PREFIX + operationId + ".";
+        for (Map.Entry<String, ?> entry : preferences.getAll().entrySet()) {
+            String key = entry.getKey();
+            if (!key.startsWith(prefix) || !(entry.getValue() instanceof String))
+                continue;
+            try {
+                SearchGridStatus status = SearchGridStatus.valueOf(
+                        (String) entry.getValue());
+                if (status != SearchGridStatus.NOT_STARTED)
+                    statuses.put(key.substring(prefix.length()), status);
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        return statuses;
+    }
+
+    public void savePlannedArea(PlannedAreaRecord record) {
+        if (!isOperationScoped() || record == null
+                || sanitize(record.shape).length() == 0)
+            return;
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString(keyForArea("shape"), sanitize(record.shape));
+        editor.putString(keyForArea("zone"), sanitize(record.zone));
+        putDouble(editor, "centerEasting", record.centerEasting);
+        putDouble(editor, "centerNorthing", record.centerNorthing);
+        putDouble(editor, "west", record.west);
+        putDouble(editor, "south", record.south);
+        putDouble(editor, "east", record.east);
+        putDouble(editor, "north", record.north);
+        putDouble(editor, "radiusMeters", record.radiusMeters);
+        putDouble(editor, "widthMeters", record.widthMeters);
+        putDouble(editor, "heightMeters", record.heightMeters);
+        editor.apply();
+    }
+
+    public PlannedAreaRecord loadPlannedArea() {
+        if (!isOperationScoped())
+            return null;
+        String shape = preferences.getString(keyForArea("shape"), "");
+        if (sanitize(shape).length() == 0 || "NONE".equals(shape))
+            return null;
+        return new PlannedAreaRecord(shape, preferences.getString(keyForArea(
+                "zone"), ""), getDouble("centerEasting"),
+                getDouble("centerNorthing"), getDouble("west"),
+                getDouble("south"), getDouble("east"), getDouble("north"),
+                getDouble("radiusMeters"), getDouble("widthMeters"),
+                getDouble("heightMeters"));
+    }
+
+    public void clearPlannedArea() {
+        if (!isOperationScoped())
+            return;
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.remove(keyForArea("shape"));
+        editor.remove(keyForArea("zone"));
+        editor.remove(keyForArea("centerEasting"));
+        editor.remove(keyForArea("centerNorthing"));
+        editor.remove(keyForArea("west"));
+        editor.remove(keyForArea("south"));
+        editor.remove(keyForArea("east"));
+        editor.remove(keyForArea("north"));
+        editor.remove(keyForArea("radiusMeters"));
+        editor.remove(keyForArea("widthMeters"));
+        editor.remove(keyForArea("heightMeters"));
+        editor.apply();
     }
 
     private String keyForCell(String cellId) {
         return CELL_PREFIX + operationId + "." + sanitize(cellId);
+    }
+
+    private String keyForArea(String field) {
+        return AREA_PREFIX + operationId + "." + field;
+    }
+
+    private void putDouble(SharedPreferences.Editor editor, String field,
+            double value) {
+        editor.putString(keyForArea(field), Double.toString(value));
+    }
+
+    private double getDouble(String field) {
+        String value = preferences.getString(keyForArea(field), "0");
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException ignored) {
+            return 0.0;
+        }
     }
 
     private boolean isOperationScoped() {
@@ -56,5 +238,36 @@ public class SearchGridStateStore {
 
     private String sanitize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    public static final class PlannedAreaRecord {
+        public final String shape;
+        public final String zone;
+        public final double centerEasting;
+        public final double centerNorthing;
+        public final double west;
+        public final double south;
+        public final double east;
+        public final double north;
+        public final double radiusMeters;
+        public final double widthMeters;
+        public final double heightMeters;
+
+        public PlannedAreaRecord(String shape, String zone,
+                double centerEasting, double centerNorthing, double west,
+                double south, double east, double north, double radiusMeters,
+                double widthMeters, double heightMeters) {
+            this.shape = shape;
+            this.zone = zone;
+            this.centerEasting = centerEasting;
+            this.centerNorthing = centerNorthing;
+            this.west = west;
+            this.south = south;
+            this.east = east;
+            this.north = north;
+            this.radiusMeters = radiusMeters;
+            this.widthMeters = widthMeters;
+            this.heightMeters = heightMeters;
+        }
     }
 }

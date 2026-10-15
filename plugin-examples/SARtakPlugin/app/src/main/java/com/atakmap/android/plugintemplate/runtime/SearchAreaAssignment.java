@@ -84,6 +84,17 @@ public class SearchAreaAssignment {
     public long getUpdatedAt() { return updatedAt; }
     public SearchGridStateStore.PlannedAreaRecord getArea() { return area; }
 
+    public static SearchAreaAssignment newest(
+            SearchAreaAssignment existing,
+            SearchAreaAssignment candidate) {
+        if (existing == null)
+            return candidate;
+        if (candidate == null)
+            return existing;
+        return candidate.updatedAt >= existing.updatedAt ? candidate
+                : existing;
+    }
+
     public String getDisplaySummary() {
         return teamName + " | Leader: " + leaderCallsign + "\n"
                 + areaSummary() + "\nStatus: " + status;

@@ -22,6 +22,7 @@ public class SearchGridStateStore {
      * than this between two reads and the reader rebuilds from scratch.
      */
     static final int MAX_TRACKED_CHANGES = 512;
+    private static final String UI_PREFIX = "ui.";
 
     private final SharedPreferences preferences;
     private String operationId = "";
@@ -210,12 +211,40 @@ public class SearchGridStateStore {
         editor.apply();
     }
 
+    public boolean isGridOverlayVisible() {
+        return isOperationScoped() && preferences.getBoolean(
+                keyForUi("overlayVisible"), false);
+    }
+
+    public void setGridOverlayVisible(boolean visible) {
+        if (!isOperationScoped())
+            return;
+        preferences.edit().putBoolean(keyForUi("overlayVisible"), visible)
+                .apply();
+    }
+
+    public boolean isGridLabelsVisible() {
+        return isOperationScoped() && preferences.getBoolean(
+                keyForUi("labelsVisible"), false);
+    }
+
+    public void setGridLabelsVisible(boolean visible) {
+        if (!isOperationScoped())
+            return;
+        preferences.edit().putBoolean(keyForUi("labelsVisible"), visible)
+                .apply();
+    }
+
     private String keyForCell(String cellId) {
         return CELL_PREFIX + operationId + "." + sanitize(cellId);
     }
 
     private String keyForArea(String field) {
         return AREA_PREFIX + operationId + "." + field;
+    }
+
+    private String keyForUi(String field) {
+        return UI_PREFIX + operationId + "." + field;
     }
 
     private void putDouble(SharedPreferences.Editor editor, String field,

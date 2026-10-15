@@ -70,6 +70,38 @@ public class AtakTeamContactDataSource {
                     dittoRole(snapshot), dittoGroupName(snapshot));
         }
 
+        public static ContactSnapshot mergeWithDitto(
+                ContactSnapshot atakContact,
+                DittoDeviceSnapshot snapshot) {
+            ContactSnapshot dittoContact = fromDitto(snapshot);
+            if (atakContact == null)
+                return dittoContact;
+
+            boolean useAtakPosition = atakContact.point != null
+                    && (dittoContact.point == null
+                            || atakContact.timestamp
+                                    >= dittoContact.timestamp);
+            String callsign = safeStatic(dittoContact.callsign).length() > 0
+                    ? dittoContact.callsign : atakContact.callsign;
+            String group = isAssignedGroup(dittoContact.atakGroupName)
+                    ? dittoContact.atakGroupName
+                    : atakContact.atakGroupName;
+            return new ContactSnapshot(
+                    safeStatic(dittoContact.uid).length() > 0
+                            ? dittoContact.uid : atakContact.uid,
+                    callsign,
+                    useAtakPosition ? atakContact.point
+                            : dittoContact.point,
+                    useAtakPosition ? atakContact.headingDegrees
+                            : dittoContact.headingDegrees,
+                    useAtakPosition ? atakContact.headingReliable
+                            : dittoContact.headingReliable,
+                    useAtakPosition ? atakContact.speedMetersPerSecond
+                            : dittoContact.speedMetersPerSecond,
+                    Math.max(atakContact.timestamp, dittoContact.timestamp),
+                    dittoContact.role, group);
+        }
+
         public String getUid() {
             return uid;
         }
@@ -114,7 +146,7 @@ public class AtakTeamContactDataSource {
         }
 
         public String getDisplayLabel() {
-            return callsign + " - " + role + "\nNative ATAK team: "
+            return callsign + " - " + role + "\nTeam/group: "
                     + atakGroupName + "\n" + uid;
         }
 
@@ -124,15 +156,20 @@ public class AtakTeamContactDataSource {
             String uid = safeStatic(snapshot.getUid());
             String leaderUid = safeStatic(snapshot.getLeaderUid());
             String role = safeStatic(snapshot.getRole()).toLowerCase();
+            if (role.equals("hq") || role.equals("headquarters"))
+                return "HQ";
             // Outside a team a device reports itself as its own leader, so
             // neither that nor its ATAK role makes it anyone's Team Lead.
             if (!snapshot.isTeamCreated())
                 return "Team Member";
-            if (uid.length() > 0 && uid.equals(leaderUid))
-                return "Team Lead";
             if (role.equals("team lead") || role.equals("team leader")
                     || role.equals("leader"))
                 return "Team Lead";
+            if (uid.length() > 0 && uid.equals(leaderUid))
+                return "Team Lead";
+            if (role.equals("team member") || role.equals("member")
+                    || role.equals("searcher"))
+                return "Team Member";
             return "Team Member";
         }
 
@@ -152,6 +189,12 @@ public class AtakTeamContactDataSource {
 
         private static String safeStatic(String value) {
             return value == null ? "" : value.trim();
+        }
+
+        private static boolean isAssignedGroup(String value) {
+            String group = safeStatic(value);
+            return group.length() > 0
+                    && !"Unassigned".equalsIgnoreCase(group);
         }
     }
 

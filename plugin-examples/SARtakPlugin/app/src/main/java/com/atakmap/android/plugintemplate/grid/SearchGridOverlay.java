@@ -78,6 +78,12 @@ public class SearchGridOverlay {
         return showLabels;
     }
 
+    public void setShowingLabels(boolean showing) {
+        if (showLabels != showing)
+            lastRenderKey = "";
+        showLabels = showing;
+    }
+
     public boolean isShowingLabels() {
         return showLabels;
     }
@@ -155,7 +161,6 @@ public class SearchGridOverlay {
         if (renderKey.equals(lastRenderKey))
             return;
         lastRenderKey = renderKey;
-
         List<OverlayItemSync.Spec> specs = new ArrayList<>();
         int blocksDrawn = 0;
         boolean blocksCapped = false;

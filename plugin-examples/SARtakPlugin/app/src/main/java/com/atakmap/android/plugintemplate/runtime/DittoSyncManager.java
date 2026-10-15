@@ -33,6 +33,7 @@ public class DittoSyncManager {
     private static final String PERF_TAG = "SARtakPerf";
     private static final long PUBLISH_INTERVAL_MS = 5000L;
     private static final long AUTH_RETRY_INTERVAL_MS = 30000L;
+    private static final long PEER_ACTIVE_WINDOW_MS = 30000L;
     private static final double MIN_HEADING_SPEED_METERS_PER_SECOND = 0.4;
     private static final double MAX_REASONABLE_SEARCH_SPEED_METERS_PER_SECOND =
             12.0;
@@ -1024,6 +1025,23 @@ public class DittoSyncManager {
                 + " | peer heard " + formatAge(peerHeartbeats.lastHeard());
     }
 
+    private int getActivePeerCount() {
+        IdentityManager.Identity identity = identityManager
+                .getCurrentIdentity();
+        String selfUid = identity == null ? "" : identity.getUid();
+        long now = System.currentTimeMillis();
+        int peers = 0;
+        for (DittoDeviceSnapshot snapshot : getDeviceSnapshots()) {
+            if (snapshot.getUid().equals(selfUid))
+                continue;
+            if (snapshot.getUpdatedAt() > 0L
+                    && now - snapshot.getUpdatedAt()
+                            <= PEER_ACTIVE_WINDOW_MS)
+                peers++;
+        }
+        return peers;
+    }
+
     private void publishDeviceState(boolean teamCreated, String teamId,
             String teamName, String leaderUid, String leaderCallsign,
             String roleLabel, String teamColorName, int teamColorArgb,
@@ -1386,10 +1404,11 @@ public class DittoSyncManager {
                     continue;
                 SearchAreaAssignment assignment =
                         SearchAreaAssignment.fromJson(json);
-                if (assignment.getAssignmentId().length() == 0
-                        || assignment.getTeamId().length() == 0)
+                if (assignment.getAssignmentId().length() == 0)
                     continue;
-                next.put(assignment.getAssignmentId(), assignment);
+                String assignmentId = assignment.getAssignmentId();
+                next.put(assignmentId, SearchAreaAssignment.newest(
+                        next.get(assignmentId), assignment));
             } catch (JSONException exception) {
                 Log.w(TAG, "Ignoring invalid Ditto area assignment document",
                         exception);

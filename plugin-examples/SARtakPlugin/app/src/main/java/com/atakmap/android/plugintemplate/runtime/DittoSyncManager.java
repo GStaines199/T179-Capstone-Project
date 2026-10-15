@@ -461,6 +461,14 @@ public class DittoSyncManager {
     }
 
     /**
+     * The running Ditto instance, or null when sync is stopped. Used by
+     * features that manage their own collection, such as shared photos.
+     */
+    public Ditto getActiveDitto() {
+        return started ? ditto : null;
+    }
+
+    /**
      * Restores operation credentials without touching the native Ditto
      * runtime. ATAK constructs plugin components on its UI thread, so native
      * store creation and subscription registration are deferred until core

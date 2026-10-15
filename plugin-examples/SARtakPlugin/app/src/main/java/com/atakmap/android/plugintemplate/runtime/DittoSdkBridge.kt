@@ -14,7 +14,10 @@ import com.ditto.kotlin.DittoFactory
 import com.ditto.kotlin.DittoInitializer
 import com.ditto.kotlin.DittoStoreObserver
 import com.ditto.kotlin.DittoSyncSubscription
+import com.ditto.kotlin.serialization.DittoCborSerializable
+import com.ditto.kotlin.serialization.toDittoCbor
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.security.MessageDigest
 import java.util.function.Consumer
@@ -221,6 +224,100 @@ object DittoSdkBridge {
     }
 
     @JvmStatic
+    @Throws(DittoException::class)
+    fun queryJson(ditto: Ditto, query: String, args: Map<String, Any?>): List<String> {
+        return runBlocking {
+            ditto.store.execute(query, args) { result ->
+                result.items.map { item -> item.jsonString() }
+            }
+        }
+    }
+
+    /**
+     * Copies the file at [filePath] into Ditto's attachment store and upserts a
+     * document that references it under [attachmentField]. Attachments only
+     * sync when a peer fetches them, so the document itself stays small.
+     */
+    @JvmStatic
+    @Throws(DittoException::class)
+    fun insertDocumentWithAttachment(
+        ditto: Ditto,
+        collection: String,
+        attachmentField: String,
+        filePath: String,
+        fields: Map<String, Any?>,
+        attachmentMetadata: Map<String, Any?>
+    ) {
+        val attachment = ditto.store.newAttachment(filePath, attachmentMetadata)
+        try {
+            val document = LinkedHashMap<String, DittoCborSerializable>()
+            for ((key, value) in fields) {
+                document[key] = cborValue(value)
+            }
+            document[attachmentField] = attachment.toDittoCbor()
+            val arguments = mapOf<String, DittoCborSerializable>(
+                "document" to document.toDittoCbor()
+            ).toDittoCbor()
+            runBlocking {
+                ditto.store.execute(
+                    "INSERT INTO COLLECTION $collection ($attachmentField ATTACHMENT) " +
+                        "DOCUMENTS (:document) ON ID CONFLICT DO UPDATE",
+                    arguments
+                )
+            }
+        } finally {
+            attachment.close()
+        }
+    }
+
+    /**
+     * Downloads the attachment on document [documentId] to [destinationPath].
+     * Returns "" on success, otherwise a short reason the caller can log and
+     * retry on. Gives up after [timeoutMs] so an absent peer cannot pin the
+     * calling thread.
+     */
+    @JvmStatic
+    fun fetchAttachmentToPath(
+        ditto: Ditto,
+        collection: String,
+        attachmentField: String,
+        documentId: String,
+        destinationPath: String,
+        timeoutMs: Long
+    ): String {
+        return try {
+            runBlocking {
+                val token = ditto.store.execute(
+                    "SELECT * FROM COLLECTION $collection ($attachmentField ATTACHMENT) " +
+                        "WHERE _id = :id",
+                    mapOf<String, Any?>("id" to documentId)
+                ) { result ->
+                    result.items.firstOrNull()?.let { item ->
+                        try {
+                            item.value[attachmentField].attachmentTokenOrNull
+                        } catch (_: Throwable) {
+                            null
+                        }
+                    }
+                } ?: return@runBlocking "attachment not available yet"
+                val fetched = withTimeoutOrNull(timeoutMs) {
+                    ditto.store.fetchAttachment(token)
+                } ?: return@runBlocking "attachment fetch timed out"
+                val attachment = fetched.asCompleted()?.attachment
+                    ?: return@runBlocking "attachment was deleted"
+                try {
+                    attachment.copyToPath(destinationPath)
+                } finally {
+                    attachment.close()
+                }
+                ""
+            }
+        } catch (throwable: Throwable) {
+            describeFailure(throwable)
+        }
+    }
+
+    @JvmStatic
     fun startSync(ditto: Ditto) {
         ditto.sync.start()
     }
@@ -316,6 +413,17 @@ object DittoSdkBridge {
         val bytes = MessageDigest.getInstance("SHA-256")
             .digest(seed.toByteArray(Charsets.UTF_8))
         return bytes.take(12).joinToString("") { "%02x".format(it) }
+    }
+
+    private fun cborValue(value: Any?): DittoCborSerializable {
+        return when (value) {
+            is String -> value.toDittoCbor()
+            is Long -> value.toDittoCbor()
+            is Int -> value.toDittoCbor()
+            is Double -> value.toDittoCbor()
+            is Boolean -> value.toDittoCbor()
+            else -> (value?.toString() ?: "").toDittoCbor()
+        }
     }
 
     private fun describeFailure(throwable: Throwable?): String {

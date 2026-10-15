@@ -81,6 +81,7 @@ import com.atakmap.android.plugintemplate.runtime.SearchTeamCotMessage;
 import com.atakmap.android.plugintemplate.runtime.SearchTeamCotWorkflow;
 import com.atakmap.android.plugintemplate.runtime.SharedMapMarkerSyncManager;
 import com.atakmap.android.plugintemplate.runtime.SharedMarkerStateStore;
+import com.atakmap.android.plugintemplate.runtime.SharedPhotoSyncManager;
 import com.atakmap.android.plugintemplate.runtime.StepTimer;
 import com.atakmap.android.plugintemplate.plugin.BuildConfig;
 import com.atakmap.coremap.log.Log;
@@ -156,6 +157,7 @@ public class SARTakMapController {
     private String dittoProfileNotice;
     private final DittoAtakContactBridge dittoAtakContactBridge;
     private final SharedMapMarkerSyncManager sharedMapMarkerSyncManager;
+    private final SharedPhotoSyncManager sharedPhotoSyncManager;
     private final SearchTeamStateStore teamStateStore;
     private final OperationStateStore operationStateStore;
     private final DatabaseHelper databaseHelper;
@@ -258,6 +260,8 @@ public class SARTakMapController {
         this.sharedMapMarkerSyncManager = new SharedMapMarkerSyncManager(
                 mapView, identityManager, dittoSyncManager,
                 new SharedMarkerStateStore(runtimeContext));
+        this.sharedPhotoSyncManager = new SharedPhotoSyncManager(mapView,
+                identityManager, dittoSyncManager);
         // Merely restoring an operation must not start Ditto while ATAK is
         // still constructing plugins on its main thread.
         this.dittoSyncManager.prepareOperationProfile(activeOperationProfile);
@@ -2566,6 +2570,7 @@ public class SARTakMapController {
         locationCaptureManager.stop();
         rawGnssCaptureManager.stop();
         healthManager.stop();
+        sharedPhotoSyncManager.dispose();
         dittoSyncManager.stop();
         // Unloading: the store must be closed before the plugin goes away.
         dittoSyncManager.awaitStopped(DITTO_UNLOAD_WAIT_MS);
@@ -2802,6 +2807,8 @@ public class SARTakMapController {
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId(),
                 isLeaderRole() || isHqRole());
         timer.mark("markers");
+        sharedPhotoSyncManager.sync(assignmentManager.getTeamId());
+        timer.mark("photos");
         if (assignmentManager.isTeamCreated())
             refreshTeamContactsInternal();
         timer.mark("contacts");
@@ -3171,6 +3178,7 @@ public class SARTakMapController {
         syncDittoDevicesToAtakMarkers();
         sharedMapMarkerSyncManager.sync(assignmentManager.getTeamId(),
                 isLeaderRole() || isHqRole());
+        sharedPhotoSyncManager.sync(assignmentManager.getTeamId());
         refreshTeamContactsInternal();
         refreshOverlay();
     }
@@ -3206,6 +3214,7 @@ public class SARTakMapController {
         gridCotWorkflow.setOperationId(operationId);
         searchLineCotWorkflow.setOperationId(operationId);
         sharedMapMarkerSyncManager.setOperationId(operationId);
+        sharedPhotoSyncManager.setOperationId(operationId);
     }
 
     private void appendReadinessLine(StringBuilder builder, int state,

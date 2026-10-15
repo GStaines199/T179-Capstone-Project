@@ -21,7 +21,7 @@
 
             <Button
                 android:id="@+id/home_tab_button"
-                style="@style/SARtakActionButton"
+                style="@style/SARtakTabButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -29,7 +29,7 @@
 
             <Button
                 android:id="@+id/grid_tab_button"
-                style="@style/SARtakActionButton"
+                style="@style/SARtakTabButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="4dp"
@@ -38,7 +38,7 @@
 
             <Button
                 android:id="@+id/team_tab_button"
-                style="@style/SARtakActionButton"
+                style="@style/SARtakTabButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="4dp"
@@ -47,7 +47,7 @@
 
             <Button
                 android:id="@+id/devices_tab_button"
-                style="@style/SARtakActionButton"
+                style="@style/SARtakTabButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="4dp"
@@ -56,7 +56,7 @@
 
             <Button
                 android:id="@+id/alerts_tab_button"
-                style="@style/SARtakActionButton"
+                style="@style/SARtakTabButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="4dp"
@@ -65,7 +65,7 @@
 
             <Button
                 android:id="@+id/track_tab_button"
-                style="@style/SARtakActionButton"
+                style="@style/SARtakTabButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="4dp"

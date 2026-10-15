@@ -58,6 +58,10 @@ public class SearchPartyAssignmentManager {
     // explicit roster action -- nothing is seeded.
     private final List<SearchTeamMember> members = new ArrayList<>();
     private final Set<String> blockedRosterMemberKeys = new HashSet<>();
+    // UIDs matched to a live ATAK contact during the current refresh cycle.
+    // Used so a stale Ditto/presence echo does not overwrite the fresher ATAK
+    // callsign already applied this cycle.
+    private final Set<String> atakMatchedThisCycle = new HashSet<>();
     private int lastAtakMatchedMembers;
     private boolean teamCreated;
 
@@ -384,6 +388,8 @@ public class SearchPartyAssignmentManager {
             existing.setMembershipStatus(
                     SearchTeamMember.MembershipStatus.ACTIVE_MEMBER);
             existing.setRole(role);
+            if (!atakMatchedThisCycle.contains(trimmedUid))
+                existing.setCallsign(callsign);
             if (!existing.hasLiveAtakContact())
                 existing.markLocationUnavailable("Location unavailable");
             applyMemberStyle(existing);
@@ -479,6 +485,7 @@ public class SearchPartyAssignmentManager {
             List<AtakTeamContactDataSource.ContactSnapshot> contacts,
             GeoPoint selfPoint, GridCoordinateConverter converter) {
         lastAtakMatchedMembers = 0;
+        atakMatchedThisCycle.clear();
         for (SearchTeamMember member : getVisibleMembers()) {
             if (member.getUniqueId().equals(selfMemberId))
                 continue;
@@ -495,6 +502,7 @@ public class SearchPartyAssignmentManager {
             }
 
             lastAtakMatchedMembers++;
+            atakMatchedThisCycle.add(member.getUniqueId());
             updateMemberFromContact(member, contact, selfPoint, converter);
             saveSearcherLastSeen(contact.getUid(),
                     System.currentTimeMillis());
@@ -857,6 +865,7 @@ public class SearchPartyAssignmentManager {
     private void updateMemberFromContact(SearchTeamMember member,
             AtakTeamContactDataSource.ContactSnapshot contact,
             GeoPoint selfPoint, GridCoordinateConverter converter) {
+        member.setCallsign(contact.getCallsign());
         GeoPoint point = contact.getPoint();
         if (point == null || !point.isValid()) {
             member.setAtakGroupName(contact.getAtakGroupName());

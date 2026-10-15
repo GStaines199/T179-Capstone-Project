@@ -2528,6 +2528,11 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
     }
 
     private void showTeamAlertDialog(final SearchAlertMessage alert) {
+        String type = alert.getAlertType();
+        if (SearchAlertMessage.TYPE_EMERGENCY_STOP.equals(type)
+                || SearchAlertMessage.TYPE_HOLD_POSITION.equals(type)) {
+            vibrateForAlert(type);
+        }
         String message = alert.getMessage();
         if (!Double.isNaN(alert.getLatitude())
                 && !Double.isNaN(alert.getLongitude()))
@@ -2547,6 +2552,23 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                             }
                         })
                 .show();
+    }
+
+    private void vibrateForAlert(String alertType) {
+        Context context = getMapView().getContext();
+        Vibrator vibrator = (Vibrator) context.getSystemService(
+                Context.VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            return;
+        }
+        long[] pattern = SearchAlertMessage.TYPE_EMERGENCY_STOP.equals(alertType)
+                ? new long[] { 0, 1000, 250, 1000, 250, 1000 }   // 3x 1s pulses
+                : new long[] { 0, 500 };                          // single burst
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+        } else {
+            vibrator.vibrate(pattern, -1);
+        }
     }
 
     private void acknowledgeAlert(SearchAlertMessage alert) {
@@ -2925,8 +2947,12 @@ public class PluginTemplateDropDownReceiver extends DropDownReceiver implements
                 + device.getTeamSummary(), 13, false));
         card.addView(createCardText("SARtak map group: "
                 + device.getAtakGroupName(), 13, false));
-        card.addView(createCardText("Role: " + device.getRole(),
+        card.addView(createCardText("SARtak role: "
+                + (device.getSartakRole().length() == 0
+                        ? "Not on SARtak team" : device.getSartakRole()),
                 13, false));
+        card.addView(createCardText("Native ATAK role: "
+                + device.getRole(), 13, false));
         card.addView(createCardText("UID: " + device.getUid(),
                 12, false));
         return card;

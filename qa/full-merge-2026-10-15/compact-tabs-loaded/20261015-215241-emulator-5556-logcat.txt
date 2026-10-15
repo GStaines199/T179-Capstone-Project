@@ -1,0 +1,403 @@
+10-15 21:46:50.046   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_SET_ROLE -p com.atakmap.app.civ --es role TEAM_LEAD'
+10-15 21:46:50.066   764   882 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_ROLE flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:46:50.067   764   882 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_ROLE flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:46:50.074  5538  5538 D PluginTemplateDropDownReceiver: Debug role set to Team Lead
+10-15 21:46:50.211   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_SET_CALLSIGN -p com.atakmap.app.civ --es callsign QA-LEAD'
+10-15 21:46:50.235   764   882 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_CALLSIGN flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:46:50.235   764   882 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_CALLSIGN flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:46:50.241  5538  5538 D PluginTemplateDropDownReceiver: Debug callsign set to QA-LEAD
+10-15 21:46:52.903  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.1 total=0.2 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:46:52.984  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:46:52.986  5538  5538 D SARtakPerf: background refresh ms=2.8 connect=0.1 area=0.1 advertise=0.1 lifecycle=0.2 markers=0.8 self=0.5 cell=0.2 device=0.4 devices=0.1 arrange=0.1 writes pending=1 done=23 merged=0 failed=0
+10-15 21:46:53.238  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:46:54.345   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab HOME'
+10-15 21:46:54.365   764   882 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:46:54.366   764   882 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:46:54.383  5538  5538 D DropDownManager: closing a right side drop down that is visible: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:46:54.384  5538  5538 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb with backstack count: 0
+10-15 21:46:54.387  5538  5538 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:46:54.387  5538  5538 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:46:54.387  5538  5538 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb size: 0.5x1.0
+10-15 21:46:57.522   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214658.png'
+10-15 21:46:58.086   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214658.png'
+10-15 21:46:58.279  5538  5538 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb with backstack count: 0
+10-15 21:47:00.404   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214701.png'
+10-15 21:47:00.940   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214701.png'
+10-15 21:47:01.096   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab TEAM'
+10-15 21:47:01.117   764  2553 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:47:01.118   764  2553 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:47:01.130  5538  5538 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:47:01.130  5538  5538 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:47:01.130  5538  5538 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb size: 0.5x1.0
+10-15 21:47:02.689  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:02.692  5538  5538 D SARtakPerf: background refresh ms=4.6 connect=0.2 area=0.2 lifecycle=0.3 markers=1.5 photos=0.2 self=1.0 cell=0.2 device=0.4 devices=0.1 arrange=0.2 line=0.1 writes pending=1 done=25 merged=0 failed=0
+10-15 21:47:02.943  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.1 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:04.281   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214705.png'
+10-15 21:47:04.890   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214705.png'
+10-15 21:47:06.174  5538  5538 D SARtakPerf: panel refresh tab=2 took=18 ms
+10-15 21:47:12.396  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:12.399  5538  5538 D SARtakPerf: background refresh ms=4.5 connect=0.2 area=0.2 advertise=0.1 lifecycle=0.3 markers=1.6 photos=0.3 contacts=0.1 self=0.6 cell=0.2 device=0.4 devices=0.1 arrange=0.1 writes pending=1 done=28 merged=0 failed=0
+10-15 21:47:12.650  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:12.906  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:16.212  5538  5538 D SARtakPerf: panel refresh tab=2 took=21 ms
+10-15 21:47:21.232  5538  5538 D SARtakPerf: panel refresh tab=2 took=16 ms
+10-15 21:47:22.101  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:22.103  5538  5538 D SARtakPerf: background refresh ms=2.7 connect=0.2 area=0.2 lifecycle=0.2 markers=0.8 photos=0.1 self=0.6 cell=0.1 device=0.2 writes pending=1 done=31 merged=0 failed=0
+10-15 21:47:22.354  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:22.908  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:29.917  6303  6303 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-15 21:47:29.922  6303  6303 I AndroidRuntime: Using default boot image
+10-15 21:47:29.922  6303  6303 I AndroidRuntime: Leaving lock profiling enabled
+10-15 21:47:30.025  6303  6303 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-15 21:47:31.096  6303  6303 D AndroidRuntime: Shutting down VM
+10-15 21:47:31.805  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:31.807  5538  5538 D SARtakPerf: background refresh ms=3.4 connect=0.1 area=0.1 lifecycle=0.1 markers=0.9 photos=0.1 self=0.3 cell=0.2 device=0.9 arrange=0.2 writes pending=1 done=34 merged=0 failed=0
+10-15 21:47:32.058  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:32.910  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:36.276  5538  5538 D SARtakPerf: panel refresh tab=2 took=17 ms
+10-15 21:47:41.510  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:41.511  5538  5538 D SARtakPerf: background refresh ms=2.7 connect=0.1 area=0.1 lifecycle=0.1 markers=1.1 photos=0.1 self=0.5 cell=0.1 device=0.2 writes pending=1 done=37 merged=0 failed=0
+10-15 21:47:41.762  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:42.910  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:46.342  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:46.380  5538  5538 D SARtakPerf: panel refresh tab=2 took=38 ms
+10-15 21:47:46.472  5538  5940 D SARtakPerf: slow ditto write ms=107 thread=SARtak-Ditto-Writer sartak_team_memberships
+10-15 21:47:46.615  5538  5940 D SARtakPerf: slow ditto write ms=142 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:47:51.214  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:51.217  5538  5538 D SARtakPerf: background refresh ms=4.9 connect=0.1 area=0.1 advertise=0.1 lifecycle=0.2 membership=0.2 markers=0.8 photos=0.2 contacts=1.8 self=0.3 cell=0.2 device=0.2 devices=0.2 arrange=0.1 line=0.2 writes pending=0 done=43 merged=0 failed=0
+10-15 21:47:51.319  5538  5538 D SARtakPerf: panel refresh tab=2 took=20 ms
+10-15 21:47:51.469  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:52.922  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:54.514   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214755.png'
+10-15 21:47:54.954   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214755.png'
+10-15 21:48:00.920  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:48:00.923  5538  5538 D SARtakPerf: background refresh ms=4.2 connect=0.1 area=0.1 advertise=0.2 lifecycle=0.2 markers=1.0 photos=0.2 contacts=1.3 self=0.5 cell=0.1 device=0.2 devices=0.2 writes pending=1 done=45 merged=0 failed=0
+10-15 21:48:01.174  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:02.923  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:06.383  5538  5538 D SARtakPerf: panel refresh tab=2 took=29 ms
+10-15 21:48:10.625  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:48:10.628  5538  5538 D SARtakPerf: background refresh ms=4.9 connect=0.2 area=0.1 advertise=0.2 lifecycle=0.2 markers=0.7 contacts=2.1 self=0.3 cell=0.2 device=0.4 devices=0.2 arrange=0.1 writes pending=1 done=50 merged=0 failed=0
+10-15 21:48:10.879  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:11.406  5538  5538 D SARtakPerf: panel refresh tab=2 took=20 ms
+10-15 21:48:12.926  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:16.433  5538  5538 D SARtakPerf: panel refresh tab=2 took=23 ms
+10-15 21:48:20.332  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:48:20.338  5538  5538 D SARtakPerf: background refresh ms=7.1 connect=0.2 area=0.1 advertise=0.2 lifecycle=0.2 markers=1.0 photos=0.3 contacts=3.0 lineRoute=0.1 areaAlerts=0.2 self=0.4 cell=0.3 device=0.4 devices=0.2 arrange=0.1 writes pending=1 done=55 merged=0 failed=0
+10-15 21:48:20.588  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:21.455  5538  5538 D SARtakPerf: panel refresh tab=2 took=20 ms
+10-15 21:48:22.928  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:26.487  5538  5538 D SARtakPerf: panel refresh tab=2 took=31 ms
+10-15 21:48:30.041  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:48:30.047  5538  5538 D SARtakPerf: background refresh ms=8.2 connect=0.2 area=0.2 advertise=0.3 lifecycle=0.4 membership=0.1 markers=1.6 photos=0.7 contacts=3.0 self=0.4 cell=0.2 device=0.4 devices=0.3 arrange=0.2 line=0.1 writes pending=1 done=60 merged=0 failed=0
+10-15 21:48:30.298  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:31.506  5538  5538 D SARtakPerf: panel refresh tab=2 took=18 ms
+10-15 21:48:32.929  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:36.527  5538  5538 D SARtakPerf: panel refresh tab=2 took=19 ms
+10-15 21:48:39.750  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:48:39.755  5538  5538 D SARtakPerf: background refresh ms=6.0 connect=0.1 area=0.1 advertise=0.2 lifecycle=0.2 markers=0.9 photos=0.5 contacts=1.9 self=0.5 cell=0.2 device=0.5 devices=0.3 arrange=0.1 writes pending=1 done=65 merged=0 failed=0
+10-15 21:48:40.006  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:41.551  5538  5538 D SARtakPerf: panel refresh tab=2 took=24 ms
+10-15 21:48:42.931  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:46.572  5538  5538 D SARtakPerf: panel refresh tab=2 took=19 ms
+10-15 21:48:49.458  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:48:49.462  5538  5538 D SARtakPerf: background refresh ms=5.3 connect=0.1 area=0.1 advertise=0.2 lifecycle=0.2 markers=0.9 photos=0.1 contacts=2.3 self=0.4 cell=0.1 device=0.3 devices=0.2 arrange=0.1 writes pending=1 done=70 merged=0 failed=0
+10-15 21:48:49.713  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:51.597  5538  5538 D SARtakPerf: panel refresh tab=2 took=25 ms
+10-15 21:48:52.939  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:48:59.166  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:48:59.169  5538  5538 D SARtakPerf: background refresh ms=5.1 connect=0.2 area=0.2 advertise=0.4 lifecycle=0.4 membership=0.3 markers=0.8 contacts=1.7 self=0.3 cell=0.1 device=0.2 devices=0.2 arrange=0.2 writes pending=1 done=75 merged=0 failed=0
+10-15 21:48:59.421  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:01.632  5538  5538 D SARtakPerf: panel refresh tab=2 took=19 ms
+10-15 21:49:02.939  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:06.652  5538  5538 D SARtakPerf: panel refresh tab=2 took=19 ms
+10-15 21:49:08.873  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:49:08.880  5538  5538 D SARtakPerf: background refresh ms=10.0 connect=0.2 area=0.1 advertise=0.3 lifecycle=0.3 markers=1.8 photos=0.3 contacts=4.2 self=0.5 cell=0.8 device=0.8 devices=0.3 arrange=0.2 writes pending=1 done=80 merged=0 failed=0
+10-15 21:49:09.132  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:11.680  5538  5538 D SARtakPerf: panel refresh tab=2 took=26 ms
+10-15 21:49:12.940  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:16.703  5538  5538 D SARtakPerf: panel refresh tab=2 took=22 ms
+10-15 21:49:18.584  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:49:18.590  5538  5538 D SARtakPerf: background refresh ms=7.4 connect=0.2 area=0.2 advertise=0.1 lifecycle=0.3 markers=1.5 photos=0.3 contacts=2.7 self=0.4 cell=0.3 device=0.7 devices=0.3 arrange=0.1 writes pending=1 done=85 merged=0 failed=0
+10-15 21:49:18.841  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:21.757  5538  5538 D SARtakPerf: panel refresh tab=2 took=29 ms
+10-15 21:49:21.872  5538  5940 D SARtakPerf: slow ditto write ms=103 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:49:22.946  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:26.776  5538  5538 D SARtakPerf: panel refresh tab=2 took=18 ms
+10-15 21:49:28.293  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:49:28.297  5538  5538 D SARtakPerf: background refresh ms=4.4 connect=0.1 area=0.1 lifecycle=0.2 markers=0.8 photos=0.3 contacts=1.9 self=0.2 cell=0.1 device=0.2 devices=0.1 writes pending=1 done=90 merged=0 failed=0
+10-15 21:49:28.547  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:31.811  5538  5538 D SARtakPerf: panel refresh tab=2 took=32 ms
+10-15 21:49:31.936  5538  5940 D SARtakPerf: slow ditto write ms=108 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:49:32.947  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:36.842  5538  5538 D SARtakPerf: panel refresh tab=2 took=28 ms
+10-15 21:49:38.000  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:49:38.004  5538  5538 D SARtakPerf: background refresh ms=5.0 connect=0.1 area=0.1 lifecycle=0.1 markers=0.7 photos=0.1 contacts=1.5 self=0.7 cell=0.1 device=0.4 devices=0.6 arrange=0.1 writes pending=1 done=95 merged=0 failed=0
+10-15 21:49:38.256  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:41.862  5538  5538 D SARtakPerf: panel refresh tab=2 took=18 ms
+10-15 21:49:42.948  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.1 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:46.898  5538  5538 D SARtakPerf: panel refresh tab=2 took=35 ms
+10-15 21:49:47.051  5538  5940 D SARtakPerf: slow ditto write ms=137 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:49:47.706  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:49:47.710  5538  5538 D SARtakPerf: background refresh ms=4.3 connect=0.2 area=0.1 markers=0.9 contacts=1.5 self=0.4 cell=0.2 device=0.4 devices=0.2 arrange=0.1 writes pending=1 done=100 merged=0 failed=0
+10-15 21:49:47.961  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:51.952  5538  5538 D SARtakPerf: panel refresh tab=2 took=54 ms
+10-15 21:49:52.963  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:49:56.970  5538  5538 D SARtakPerf: panel refresh tab=2 took=17 ms
+10-15 21:49:57.412  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:49:57.416  5538  5538 D SARtakPerf: background refresh ms=4.9 connect=0.1 area=0.1 markers=1.2 contacts=1.6 self=0.2 cell=0.1 device=0.2 devices=0.9 arrange=0.1 writes pending=1 done=105 merged=0 failed=0
+10-15 21:49:57.668  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:01.992  5538  5538 D SARtakPerf: panel refresh tab=2 took=21 ms
+10-15 21:50:02.961  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:07.013  5538  5538 D SARtakPerf: panel refresh tab=2 took=19 ms
+10-15 21:50:07.120  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:50:07.124  5538  5538 D SARtakPerf: background refresh ms=6.1 connect=0.5 area=0.1 advertise=0.3 lifecycle=0.5 markers=1.0 contacts=2.3 lineRoute=0.3 self=0.2 cell=0.1 device=0.3 devices=0.1 writes pending=1 done=110 merged=0 failed=0
+10-15 21:50:07.375  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.2 markers=0.0 total=0.2 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:12.034  5538  5538 D SARtakPerf: panel refresh tab=2 took=18 ms
+10-15 21:50:12.963  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:16.828  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:50:16.832  5538  5538 D SARtakPerf: background refresh ms=7.1 connect=0.2 area=0.2 advertise=0.7 lifecycle=0.2 markers=1.5 photos=0.2 contacts=2.0 self=0.5 cell=0.2 device=0.6 devices=0.4 arrange=0.1 writes pending=1 done=113 merged=0 failed=0
+10-15 21:50:17.061  5538  5538 D SARtakPerf: panel refresh tab=2 took=26 ms
+10-15 21:50:17.084  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:22.088  5538  5538 D SARtakPerf: panel refresh tab=2 took=25 ms
+10-15 21:50:22.233  5538  5940 D SARtakPerf: slow ditto write ms=125 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:50:22.966  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:26.538  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:50:26.544  5538  5538 D SARtakPerf: background refresh ms=9.2 connect=0.2 area=0.2 advertise=0.6 lifecycle=0.3 markers=1.2 photos=0.2 contacts=3.4 lineRoute=0.1 self=0.8 cell=0.2 device=1.1 devices=0.3 arrange=0.2 line=0.1 writes pending=1 done=118 merged=0 failed=0
+10-15 21:50:26.796  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:26.972  5538  5943 I Ditto   : diagnostics_logger: outbound_diff_count_per_update mean=82.02752293577981 count=109 delta_from_previous=None
+10-15 21:50:26.972  5538  5943 I Ditto   : diagnostics_logger: outbound_create_update_delay mean=15.91131ms count=109 delta_from_previous=None
+10-15 21:50:26.972  5538  5943 I Ditto   : diagnostics_logger: outbound_cycle_duration mean=465.213029ms count=109 delta_from_previous=None
+10-15 21:50:27.114  5538  5538 D SARtakPerf: panel refresh tab=2 took=24 ms
+10-15 21:50:32.218  5538  5538 D SARtakPerf: panel refresh tab=2 took=103 ms
+10-15 21:50:32.348  5538  5940 D SARtakPerf: slow ditto write ms=105 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:50:32.967  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:36.248  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:50:36.255  5538  5538 D SARtakPerf: background refresh ms=10.3 connect=0.2 area=0.2 advertise=0.6 lifecycle=0.4 markers=1.8 photos=0.2 contacts=4.4 lineRoute=0.1 self=0.6 cell=0.3 device=0.8 devices=0.4 arrange=0.2 writes pending=1 done=123 merged=0 failed=0
+10-15 21:50:36.508  5538  5538 D SARtakPerf: render ms grid=0.1 route=0.1 assign=0.0 markers=0.0 total=0.2 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:37.259  5538  5538 D SARtakPerf: panel refresh tab=2 took=38 ms
+10-15 21:50:42.316  5538  5538 D SARtakPerf: panel refresh tab=2 took=56 ms
+10-15 21:50:42.968  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:45.959  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:50:45.965  5538  5538 D SARtakPerf: background refresh ms=8.4 connect=0.2 area=0.2 advertise=0.3 lifecycle=0.4 markers=1.7 photos=0.2 contacts=3.5 self=0.5 cell=0.2 device=0.5 devices=0.3 arrange=0.2 line=0.2 writes pending=1 done=128 merged=0 failed=0
+10-15 21:50:46.217  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:47.384  5538  5538 D SARtakPerf: panel refresh tab=2 took=67 ms
+10-15 21:50:52.410  5538  5538 D SARtakPerf: panel refresh tab=2 took=25 ms
+10-15 21:50:52.977  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:55.669  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:50:55.675  5538  5538 D SARtakPerf: background refresh ms=8.5 connect=0.2 area=0.2 advertise=0.5 lifecycle=0.2 markers=1.3 photos=0.2 contacts=3.7 self=0.4 cell=0.2 device=0.6 devices=0.3 arrange=0.3 line=0.1 writes pending=1 done=133 merged=0 failed=0
+10-15 21:50:55.929  5538  5538 D SARtakPerf: render ms grid=0.1 route=0.2 assign=0.0 markers=0.0 total=0.3 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:50:57.433  5538  5538 D SARtakPerf: panel refresh tab=2 took=21 ms
+10-15 21:51:02.472  5538  5538 D SARtakPerf: panel refresh tab=2 took=37 ms
+10-15 21:51:02.979  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:05.378  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:51:05.384  5538  5538 D SARtakPerf: background refresh ms=7.7 connect=0.1 area=0.1 advertise=0.2 markers=0.8 photos=0.2 contacts=3.5 lineRoute=0.1 self=0.3 cell=0.5 device=0.9 devices=0.3 arrange=0.2 writes pending=1 done=138 merged=0 failed=0
+10-15 21:51:05.636  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:07.499  5538  5538 D SARtakPerf: panel refresh tab=2 took=24 ms
+10-15 21:51:12.521  5538  5538 D SARtakPerf: panel refresh tab=2 took=21 ms
+10-15 21:51:12.981  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:15.087  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:51:15.090  5538  5538 D SARtakPerf: background refresh ms=4.3 connect=0.2 area=0.1 advertise=0.3 markers=0.8 photos=0.1 contacts=1.6 self=0.2 cell=0.1 device=0.2 devices=0.1 line=0.3 writes pending=1 done=143 merged=0 failed=0
+10-15 21:51:15.343  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:17.545  5538  5538 D SARtakPerf: panel refresh tab=2 took=23 ms
+10-15 21:51:22.587  5538  5538 D SARtakPerf: panel refresh tab=2 took=40 ms
+10-15 21:51:22.983  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:24.793  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:51:24.797  5538  5538 D SARtakPerf: background refresh ms=5.1 connect=0.1 area=0.1 advertise=0.3 lifecycle=0.1 markers=0.8 photos=0.2 contacts=2.3 self=0.3 cell=0.1 device=0.3 devices=0.1 arrange=0.1 writes pending=1 done=148 merged=0 failed=0
+10-15 21:51:25.048  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:27.609  5538  5538 D SARtakPerf: panel refresh tab=2 took=22 ms
+10-15 21:51:32.652  5538  5538 D SARtakPerf: panel refresh tab=2 took=40 ms
+10-15 21:51:32.985  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.1 assign=0.0 markers=0.0 total=0.2 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:34.350  5538  5943 I Ditto   : tombstone_reaper: Found expired tombstones in 0 collections
+10-15 21:51:34.499  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:51:34.502  5538  5538 D SARtakPerf: background refresh ms=4.5 connect=0.1 area=0.1 lifecycle=0.1 membership=0.3 markers=0.9 contacts=1.8 self=0.2 cell=0.1 device=0.2 devices=0.2 arrange=0.1 writes pending=1 done=153 merged=0 failed=0
+10-15 21:51:34.753  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:37.676  5538  5538 D SARtakPerf: panel refresh tab=2 took=23 ms
+10-15 21:51:42.707  5538  5538 D SARtakPerf: panel refresh tab=2 took=30 ms
+10-15 21:51:42.987  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:44.203  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:51:44.215  5538  5538 D SARtakPerf: background refresh ms=12.6 connect=0.2 area=0.1 advertise=0.1 lifecycle=0.1 markers=0.7 contacts=9.0 lineRoute=0.5 self=0.3 cell=0.1 device=0.8 devices=0.2 arrange=0.1 line=0.1 writes pending=1 done=158 merged=0 failed=0
+10-15 21:51:44.468  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:51:45.094   764  6447 D NativeLibraryHelper: Punching extracted elf file libcomdittodittoffijvmstubs.so on fs:61267
+10-15 21:51:45.821   764  6447 D NativeLibraryHelper: Punching extracted elf file libdittoffi.so on fs:61267
+10-15 21:51:45.993   764  6452 W CorePackageUpdate: Package com.atakmap.android.plugintemplate.plugin no process with activities in it.
+10-15 21:51:45.997   764   842 I AppsFilter: interaction: PackageSetting{a00515f com.android.microdroid.empty_payload/10212} -> PackageSetting{3a8e6fe com.atakmap.android.plugintemplate.plugin/10235} BLOCKED
+10-15 21:51:45.997   764   799 I ActivityManager: Force stopping com.atakmap.android.plugintemplate.plugin appid=10235 user=-1: killDueToPackageUpdate
+10-15 21:51:45.997   764   842 I AppsFilter: interaction: PackageSetting{a00515f com.android.microdroid.empty_payload/10212} -> PackageSetting{eb27f3 com.atakmap.android.plugintemplate.plugin/10235} BLOCKED
+10-15 21:51:45.998   764   842 I PackageManager: Update package com.atakmap.android.plugintemplate.plugin code path from /data/app/~~89Igp-nDZw8jKLyFGrVSGg==/com.atakmap.android.plugintemplate.plugin-jkgxphXekgoPsJHUyMBzHA== to /data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==; Retain data and using new
+10-15 21:51:46.049   764   842 I PackageManager: installation completed for package:com.atakmap.android.plugintemplate.plugin. Final code path: /data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==
+10-15 21:51:46.049   764   842 I AppsFilter: interaction: PackageSetting{5b72822 com.android.microdroid.empty_payload/10212} -> PackageSetting{992c5b0 com.atakmap.android.plugintemplate.plugin/10235} BLOCKED
+10-15 21:51:46.068   764   842 I ActivityManager: Force stopping com.atakmap.android.plugintemplate.plugin appid=10235 user=0: pkg removed
+10-15 21:51:46.093  5538  5538 D ApkUpdateReceiver: ACTION_PACKAGE_REMOVED: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.093  5538  5538 D AtakPluginRegistry: Unloading plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.093  5538  5538 D AtakPluginRegistry: Unloading plugin descriptor: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.097  5538  5538 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.104  5538  5538 D AtakPluginRegistry: Unloading app info: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.104  5538  5538 D AtakPluginRegistry: Unloading the classloader for item: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.112  1311  1479 I SatelliteAppTracker: onPackageUpdateFinished : com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.113  1311  1479 I SatelliteAppTracker: onPackageModified : com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.115  1311  1457 V MessagingReadRestrictionAllowlistMonitor: onBroadcastReceived: No AppOp changes for package: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.119  1311  1479 D SatelliteAppTracker: packageName: com.atakmap.android.plugintemplate.plugin, value: null
+10-15 21:51:46.121   764  1077 D ShortcutService: replacing package: com.atakmap.android.plugintemplate.plugin userId=0
+10-15 21:51:46.125   764  1089 I SdkSandboxManager: No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10235, mPackageName='com.atakmap.android.plugintemplate.plugin, mAppProcessToken='null'}
+10-15 21:51:46.127  1311  1479 D SatelliteAppTracker: packageName: com.atakmap.android.plugintemplate.plugin, value: null
+10-15 21:51:46.139  1311  1311 D CarrierSvcBindHelper: onPackageUpdateFinished: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.146  1311  1311 D CarrierSvcBindHelper: onPackageModified: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.177  5538  5538 D SARtakRecovery: disposing | operation=OP-2F971E0E4D-1792064668160/SAR Operatio/ACTIVE | role=Team Lead | team=TEAM-ANDROID-713b442f971e0e4d/QA_B/members=1 | area=No planned search area | cells complete=0 partial=0 inProgress=1 | selected=utm-56J-c100-e502400-n6961500 | route=none | line=NOT_STARTED | overlays grid=false route=true areas=false | track=recording
+10-15 21:51:46.208  1660  1660 I SafetyLabelChangedBroadcastReceiver: received broadcast packageName: com.atakmap.android.plugintemplate.plugin, current user: UserHandle{0}, packageChangeEvent: UPDATE, intent user: UserHandle{0}
+10-15 21:51:46.232   764  1089 I SdkSandboxManager: No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10235, mPackageName='com.atakmap.android.plugintemplate.plugin, mAppProcessToken='null'}
+10-15 21:51:46.242   764   968 W PackageConfigPersister: App-specific configuration not found for packageName: com.atakmap.android.plugintemplate.plugin and userId: 0
+10-15 21:51:46.250   764   764 I Telecom : CarModeTracker: Package com.atakmap.android.plugintemplate.plugin is not tracked.: SSH.oR@AKE🔒
+10-15 21:51:46.262  5538  5947 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+VTGqLUE}:session{operation=get_next_message}:outbound_cycle{update_index=2659274848771972530 trigger=LocalSubscriptionChange}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-15 21:51:46.267  5538  5947 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+VTGqLUE}:session{operation=get_next_message}:outbound_cycle{update_index=2659274848771972530 trigger=LocalSubscriptionChange}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-15 21:51:46.291   764   764 D AS.AudioService: received android.intent.action.PACKAGE_ADDED replacing: true archival: false for package com.atakmap.android.plugintemplate.plugin with uid 10235
+10-15 21:51:46.299  1803  6461 I AiAiEcho: AppIndexer Package:[com.atakmap.android.plugintemplate.plugin] UserProfile:[0] Enabled:[true].
+10-15 21:51:46.299  1803  6461 I AiAiEcho: AppFetcherImplV2 updateApps package:[com.atakmap.android.plugintemplate.plugin], userId:[0], reason:[package is updated.].
+10-15 21:51:46.331  5538  5940 W Ditto   : DittoWifiAwareManager: close().
+10-15 21:51:46.338  1311  1538 D ImsResolver: maybeAddedImsService, packageName: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.339  1311  1538 V ImsResolver: searchForImsServices: package=com.atakmap.android.plugintemplate.plugin, users=[UserHandle{0}]
+10-15 21:51:46.341  1311  1538 V ImsResolver: searchForImsServices: package=com.atakmap.android.plugintemplate.plugin, users=[UserHandle{0}]
+10-15 21:51:46.342  5538  5940 I Ditto   : Stopping mDNS discovery
+10-15 21:51:46.345  5538  5940 I Ditto   : DittoBluetoothManager: Stopping BLE systems.
+10-15 21:51:46.357  5538  5947 I Ditto   : DNS-SD stopping TCP browse by request
+10-15 21:51:46.361  5538  5940 I Ditto   : shutting down Ditto local.peer_id=pkAocCgkMC956ygdmhvJkBeTSZJNSzETQ_zMPQwmlAxnyUtUvVZNA
+10-15 21:51:46.361  5538  5948 I Ditto   : physical connection ended remote=pkAocCgkMC7fxj_HpxECRW5j93vO8j086ucVICOdTo2897VTGqLUE role=Client transport_type=Websocket
+10-15 21:51:46.361  5538  5948 I Ditto   : switching active transport remote=pkAocCgkMC7fxj_HpxECRW5j93vO8j086ucVICOdTo2897VTGqLUE old_conn_type=Some(Websocket) new_conn_type=None
+10-15 21:51:46.384  1311  1311 W VvmPkgInstalledRcvr: carrierVvmPkgAdded: carrier vvm packages doesn't contain com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.437  1311  1311 D SatelliteController: packageStateChanged: package:com.atakmap.android.plugintemplate.plugin defaultSmsPackageName: com.google.android.apps.messaging satelliteGatewayServicePackageName: 
+10-15 21:51:46.525   764   764 I BackupManagerService: No delayed restore requests for the given dependency: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.552   764   764 D AS.AudioService: received android.intent.action.PACKAGE_REPLACED replacing: true archival: false for package com.atakmap.android.plugintemplate.plugin with uid 10235
+10-15 21:51:46.736  1516  6471 I ProximityAuth: [RecentAppsMediator] Package added: (user=UserHandle{0}) com.atakmap.android.plugintemplate.plugin
+10-15 21:51:46.852  1978  6477 I NearbyDiscovery: processGrantSlicePermission: com.atakmap.android.plugintemplate.plugin [CONTEXT service_id=265 ]
+10-15 21:51:46.896  1978  6487 W SQLiteLog: (28) double-quoted string literal: "com.atakmap.android.plugintemplate.plugin"
+10-15 21:51:49.445  6497  6497 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-15 21:51:49.450  6497  6497 I AndroidRuntime: Using default boot image
+10-15 21:51:49.450  6497  6497 I AndroidRuntime: Leaving lock profiling enabled
+10-15 21:51:49.651  6497  6497 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-15 21:51:50.682  6497  6497 D AndroidRuntime: Shutting down VM
+10-15 21:51:51.189  5538  5940 I Ditto   : ditto_close{local.peer_id=pk.+tUvVZNA}: Ditto shutdown complete
+10-15 21:51:51.190  5538  5940 I Ditto   : shutting down Ditto local.peer_id=pkAocCgkMC956ygdmhvJkBeTSZJNSzETQ_zMPQwmlAxnyUtUvVZNA
+10-15 21:51:51.190  5538  5940 I Ditto   : ditto_close{local.peer_id=pk.+tUvVZNA}: Ditto shutdown complete
+10-15 21:51:51.191  5538  5940 I Ditto   : waiting for Ditto's async runtime to finish shutting down...
+10-15 21:51:51.195  5538  6510 I Ditto   : Ditto's async runtime shutdown complete
+10-15 21:51:51.235  5538  5538 D AtakPluginRegistry: Unloading loadedPluginsSet item: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.239  5538  5538 D AtakPluginRegistry: marking plugin.version.loaded.SARtak:1.0 (a071cecc) - [5.6.0]-1792063748 as unloaded: succeeded
+10-15 21:51:51.239  5538  5538 D AtakPluginRegistry: Unloaded plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.316  5538  5940 D SARtakPerf: ditto stop ms waited=1 observers=104 release=5007 thread=SARtak-Ditto-Writer
+10-15 21:51:51.360  5538  5538 D ProductProviderManager: app removed: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.361  5538  5538 D ApkUpdateReceiver: ACTION_PACKAGE_ADDED: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.362  5538  5538 D AtakPluginRegistry: Plugin has not been scanned, scanning now: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.367  5538  5538 D AtakPluginRegistry: Successfully loaded plugin descriptor for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:51:51.367  5538  5538 D AtakPluginRegistry: com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle],  will NOT load
+10-15 21:51:51.367  5538  5538 D AtakPluginRegistry: Scanned and found plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.367  5538  5538 D ApkUpdateReceiver: removeInstalling: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.437  5538  5538 D DropDownManager: closing a right side drop down that is visible: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:51:51.437  5538  5538 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb with backstack count: 0
+10-15 21:51:51.606  5538  5538 D ProductProviderManager: app added: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.607  5538  5538 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.610  5538  5538 W ProductProviderManager: No provider found for: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.610  5538  5538 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:51:51.610  5538  5538 D SideloadedPluginProvider: com.atakmap.android.update.SideloadedPluginProvider: installed added, com.atakmap.android.plugintemplate.plugin
+10-15 21:52:03.897   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab TEAM'
+10-15 21:52:03.920   764  2549 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:52:03.921   764  2549 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:52:08.074   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-215208.png'
+10-15 21:52:08.580   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-215208.png'
+10-15 21:52:23.879  5538  5538 D AtakPluginRegistry: Loading plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:52:23.879  5538  5538 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:52:23.880  5538  5538 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:52:23.995  5538  5538 D AtakPluginRegistry: Loading com.atak.plugins.impl.IToolbarItem extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:52:23.995  5538  5538 D AtakPluginRegistry: Loading gov.tak.api.plugin.IPlugin extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:52:23.996  5538  5538 D AtakPluginRegistry: api matches[ com.atakmap.android.plugintemplate.plugin]; pluginApiVersion:com.atakmap.app@5.6.0.CIV
+10-15 21:52:23.997  5538  5538 D AtakPluginRegistry: SDK skipping signature check[com.atakmap.android.plugintemplate.plugin]
+10-15 21:52:24.026  5538  5538 D AtakPluginRegistry: Loaded com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle, for plugin: com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:52:24.026  5538  5538 D AtakPluginRegistry: Loading new Kernel plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle@953d0a7
+10-15 21:52:24.026  5538  5538 D ToolMapComponent: Loading new IToolbarItem plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool@a6ce954
+10-15 21:52:24.027  5538  5538 D PluginMapComponent: addPluginIcon: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool
+10-15 21:52:24.171  5538  5538 D SARtakRecovery: restored | operation=OP-2F971E0E4D-1792064668160/SAR Operatio/ACTIVE | role=Team Lead | team=TEAM-ANDROID-713b442f971e0e4d/QA_B/members=1 | area=No planned search area | cells complete=0 partial=0 inProgress=0 | selected=No cell selected | route=none | line=NOT_STARTED | overlays grid=false route=true areas=false | track=recording
+10-15 21:52:24.225  5538  5538 D PluginTemplateMapComponent: registering the plugin filter
+10-15 21:52:24.226  5538  5538 D AtakPluginRegistry: Loaded plugin: com.atakmap.android.plugintemplate.plugin, with extension count: 2
+10-15 21:52:24.540  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.2 assign=0.1 markers=0.0 total=0.3 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:52:27.229  5538  6556 D nativeloader: Configuring clns-12 for other apk . target_sdk_version=35, uses_libraries=ALL, library_path=/data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==/lib/x86_64, permitted_path=/data:/mnt/expand
+10-15 21:52:27.234  5538  6556 D nativeloader: Load /data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==/lib/x86_64/libdittoffi.so using isolated ns clns-12 (caller=/data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==/base.apk): ok
+10-15 21:52:27.235  5538  6556 D nativeloader: Load /data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==/lib/x86_64/libcomdittodittoffijvmstubs.so using class loader ns clns-12 (caller=/data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==/base.apk): ok
+10-15 21:52:27.244  5538  6556 D nativeloader: Load /data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==/lib/x86_64/libcallbacks.so using class loader ns clns-12 (caller=/data/app/~~JF_IC2eAwP55nVGKJJdRmg==/com.atakmap.android.plugintemplate.plugin-nAOmtwS3qwDITNgTfsl2cA==/base.apk): ok
+10-15 21:52:27.255  5538  6556 I Ditto   : init_logging:init_tracing{config.service_name="ditto" tracing_format="json" rust_log="trace" otel_ratio=1.0 otel_endpoint="Disabled" otel_protocol="grpc"}: "initializing tracing" opentelemetry_enabled=false loki_enabled=false
+10-15 21:52:27.255  5538  6556 I Ditto   : post_init_logging: successfully initialized logging
+10-15 21:52:27.255  5538  6556 I Ditto   : post_init_logging: installed tracing-log compatibility layer originator=tracing-config
+10-15 21:52:27.340  5538  5538 W SARtak-Ditto-Wr: type=1400 audit(0.0:1771): avc:  denied  { search } for  name="/" dev="cgroup2" ino=1 scontext=u:r:untrusted_app_34:s0:c234,c256,c512,c768 tcontext=u:object_r:cgroup_v2:s0 tclass=dir permissive=0 app=com.atakmap.app.civ
+10-15 21:52:27.340  5538  5538 W SARtak-Ditto-Wr: type=1400 audit(0.0:1772): avc:  denied  { search } for  name="/" dev="cgroup2" ino=1 scontext=u:r:untrusted_app_34:s0:c234,c256,c512,c768 tcontext=u:object_r:cgroup_v2:s0 tclass=dir permissive=0 app=com.atakmap.app.civ
+10-15 21:52:27.340  5538  5538 W SARtak-Ditto-Wr: type=1400 audit(0.0:1773): avc:  denied  { search } for  name="/" dev="cgroup" ino=1 scontext=u:r:untrusted_app_34:s0:c234,c256,c512,c768 tcontext=u:object_r:cgroup:s0 tclass=dir permissive=0 app=com.atakmap.app.civ
+10-15 21:52:27.344  5538  5538 W SARtak-Ditto-Wr: type=1400 audit(0.0:1774): avc:  denied  { search } for  name="/" dev="cgroup2" ino=1 scontext=u:r:untrusted_app_34:s0:c234,c256,c512,c768 tcontext=u:object_r:cgroup_v2:s0 tclass=dir permissive=0 app=com.atakmap.app.civ
+10-15 21:52:27.344  5538  5538 W SARtak-Ditto-Wr: type=1400 audit(0.0:1775): avc:  denied  { search } for  name="/" dev="cgroup2" ino=1 scontext=u:r:untrusted_app_34:s0:c234,c256,c512,c768 tcontext=u:object_r:cgroup_v2:s0 tclass=dir permissive=0 app=com.atakmap.app.civ
+10-15 21:52:27.357  5538  6563 I Ditto   : ditto_init: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-15 21:52:27.344  5538  5538 W SARtak-Ditto-Wr: type=1400 audit(0.0:1776): avc:  denied  { search } for  name="/" dev="cgroup" ino=1 scontext=u:r:untrusted_app_34:s0:c234,c256,c512,c768 tcontext=u:object_r:cgroup:s0 tclass=dir permissive=0 app=com.atakmap.app.civ
+10-15 21:52:27.360  5538  6563 I Ditto   : ditto_init: DQL engine initialised
+10-15 21:52:27.360  5538  6563 I Ditto   : ditto_init: initializing auth client identity=OnlineWithAuthentication { app_id: ValidatedOnlineAppId("88ed3c0c-bf9b-4da2-bc94-6c3ac95751a3"), base_url: Url { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("i83inp.cloud.dittolive.app")), port: None, path: "/", query: None, fragment: None } }
+10-15 21:52:27.365  5538  6563 I Ditto   : ditto_init:new_auth_client{auth.kind=online_with_authentication}: peer key loaded from site info cache peer_pubkey=pkAocCgkMC956ygdmhvJkBeTSZJNSzETQ_zMPQwmlAxnyUtUvVZNA
+10-15 21:52:27.366  5538  6563 W Ditto   : ditto_init:new_auth_client{auth.kind=online_with_authentication}: error reading blob CBOR error=missing field `config` filename="dsoq.cbor"
+10-15 21:52:27.367  5538  6563 I Ditto   : ditto_init:new_auth_client{auth.kind=online_with_authentication}: CA certificate verifying this peer: MIIBWTCCAQCgAwIBAgIUJ8ugf31diqPvQUS73kGCjdxh6H4wCgYIKoZIzj0EAwIwDDEKMAgGA1UEAwwBKjAeFw0yNjA5MTAyMzU5NDdaFw0yNjA5MTgwMDAwNDdaMAwxCjAIBgNVBAMMASowWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASgQUhHflYEh8ZVe/HYimt6b3lEg3lSMKr9LiMVIkrtFkiIV2YFJMR/qM2CbGQnmpOf3l6od7LVvk1JC+oCEZH5o0AwPjAMBgNVHREEBTADggEqMB0GA1UdDgQWBBSdrG26FQqiPMeDOY7haVEeblnRezAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0cAMEQCIEOpatLQkOFCdNtknSWzRwSLN8/PDwbGRm9CIBy9Ps07AiBZgNUwb/d6XDZxJYCBOGng4yc9I8/oV6j8UJkqOsGTxg==
+10-15 21:52:27.369  5538  6563 I Ditto   : ditto_init: timestamps were parsed from all existing files; trying to reopen the latest
+10-15 21:52:27.369  5538  6563 I Ditto   : ditto_init: suitable latest log file found; trying to open it path="/data/data/com.atakmap.app.civ/files/sartak_ditto/6105337b30067aa7989f8075/ditto_logs/ditto-logs-2026-10-15-11-44-29.102000.log"
+10-15 21:52:27.369  5538  6563 I Ditto   : ditto_init: metrics Prometheus exporter is not enabled
+10-15 21:52:27.370  5538  6563 I Ditto   : ditto_init: metrics Proxy exporter is not enabled
+10-15 21:52:27.370  5538  6563 I Ditto   : ditto_init: metrics OnFile exporter is not enabled
+10-15 21:52:27.370  5538  6563 I Ditto   : ditto_init: metrics VirtualCollection exporter is not enabled
+10-15 21:52:27.370  5538  6563 I Ditto   : ditto_init: metrics metrics-rs integration is not enabled
+10-15 21:52:27.371  5538  6563 I Ditto   : ditto_init: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-15 21:52:27.374  5538  6561 I Ditto   : next store system info collection scheduled delay=13 secs
+10-15 21:52:27.375  5538  6563 I Ditto   : ditto_init: Setting up blob storage for doc-sync blob_storage.kind=Dynamic blob_storage.dyn_choice=Some(Tiered)
+10-15 21:52:27.379  5538  6563 I Ditto   : ditto_init: Setting up blob storage for attachment-sync blob_storage.kind=Dynamic blob_storage.dyn_choice=Some(UnencryptedFs)
+10-15 21:52:27.383  5538  6563 I Ditto   : ditto_init: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-15 21:52:27.392  5538  6563 I Ditto   : ditto_init: starting Ditto... app_id=88ed3c0c-bf9b-4da2-bc94-6c3ac95751a3 local.peer_id=pkAocCgkMC956ygdmhvJkBeTSZJNSzETQ_zMPQwmlAxnyUtUvVZNA sdk.platform=Android sdk.language=Kotlin sdk.version=5.0.0 sdk.commit=d64fe04b5b absolute_persistence_directory=PersistenceDirectory("/data/data/com.atakmap.app.civ/files/sartak_ditto/6105337b30067aa7989f8075")
+10-15 21:52:27.399  5538  6563 I Ditto   : Initialising WebSocket client transport
+10-15 21:52:27.457  5538  5538 I Ditto   : AppLifecycleListener: Application has been put to foreground.
+10-15 21:52:27.614  5538  6556 D SARtakPerf: ditto start ms waited=2 create=295 observers=138 thread=SARtak-Ditto-Writer
+10-15 21:52:27.685  5538  6556 I Ditto   : Starting TCP server bind="[::]:0"
+10-15 21:52:27.686  5538  6556 I Ditto   : Starting WiFi Aware transport
+10-15 21:52:27.701  5538  6556 E Ditto   : WifiAwarePlatform: Device DOES NOT support WiFi Aware, skipping setup.
+10-15 21:52:27.702  5538  6556 I Ditto   : Starting mDNS discovery
+10-15 21:52:27.702  5538  6556 I Ditto   : Starting multicast discovery
+10-15 21:52:27.702  5538  6556 I Ditto   : Starting BLE transport
+10-15 21:52:27.703  5538  6556 I Ditto   : DittoBluetoothManager: Starting BLE systems.
+10-15 21:52:27.704  5538  6562 I Ditto   : DNS-SD starting TCP browse
+10-15 21:52:27.705  5538  6562 I Ditto   : DNS-SD starting TCP registration service_info=ServiceInfo { instance_name: "dittoc38998fe_Q2CGeNphhw", host_name: "dittoQ2CGeNphhw.local.", ip_addrs: [fe80::5054:ff:fe12:3456, fec0::5054:ff:fe12:3456, 10.0.2.15, fe80::ecb4:4cff:fea0:c51e, fe80::18eb:c023:d5d8:c52a, fec0::f4e8:a275:7155:4d14, fec0::b08:aa6c:fab6:6250, 10.0.2.17, ::1, 127.0.0.1], port: 46753, service_name: "_http-alt", protocol: "_tcp", domain: "local", is_awdl: false }
+10-15 21:52:27.846  5538  6556 I Ditto   : add_ble_transport{local.peer_id=pk.+tUvVZNA peer.subsystem=transport}: StableBluetoothPlatform: Asked to start scanning.
+10-15 21:52:27.848  5538  6556 I Ditto   : Starting WebSocket client connection to "wss://i83inp.cloud.dittolive.app/"
+10-15 21:52:27.856  5538  6560 I Ditto   : Bluetooth Client - platform state changed condition=Ok
+10-15 21:52:27.856  5538  6602 I Ditto   : StableBluetoothPlatform: Android Bluetooth starting scanning, assuming success.
+10-15 21:52:27.891  5538  6560 I Ditto   : Bluetooth Server - platform state changed condition=Ok
+10-15 21:52:31.426  5538  6557 I Ditto   : physical connection started remote=pkAocCgkMCz_NmHjkbdla4w83y4NnXtfkXeUpCOoEfRSvGxfYO4ZI role=Client transport_type=Websocket
+10-15 21:52:31.519  5538  6559 I Ditto   : auth server login successful, caching JWT on disk
+10-15 21:52:31.668  5538  6559 I Ditto   : switching active transport remote=pkAocCgkMCz_NmHjkbdla4w83y4NnXtfkXeUpCOoEfRSvGxfYO4ZI old_conn_type=None new_conn_type=Some(Websocket)
+10-15 21:52:31.702  5538  6559 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+xfYO4ZI}: Setting Sqlite3 backend pragmas journal_mode="WAL" synchronous=1 mmap_size=30000000 cache_size_negative=-32000 temp_store=2 wal_autocheckpoint=5000 fullfsync=0
+10-15 21:52:32.294  5538  6558 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+xfYO4ZI}:session{operation=receive_message}:outbound_cycle{update_index=8645512677440035790 trigger=BeginSync}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-15 21:52:32.296  5538  6558 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+xfYO4ZI}:session{operation=receive_message}:outbound_cycle{update_index=8645512677440035790 trigger=BeginSync}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-15 21:52:34.420  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:52:35.937  5538  6559 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+xfYO4ZI}:session{operation=receive_message}:inbound_cycle:integrate_received_update: Outdated assumptions about session state detected when processing update - initiating NACK. (The received update was based on an outdated assumption of the local session basis - assumed local session sync: 1, actual local session sync: Initiated(2))
+10-15 21:52:36.236   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab TEAM'
+10-15 21:52:36.288   764  2549 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:52:36.289   764  2549 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:52:36.295  5538  5538 W ContextImpl: Failed to ensure /data/user/0/com.atakmap.android.plugintemplate.plugin/shared_prefs
+10-15 21:52:36.295  5538  5538 W ContextImpl: 	at com.atakmap.android.plugintemplate.runtime.OperationQrScanResultStore.consume(OperationQrScanResultStore.java:25)
+10-15 21:52:36.295  5538  5538 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.consumePendingOperationQrScan(PluginTemplateDropDownReceiver.java:1891)
+10-15 21:52:36.295  5538  5538 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.refreshGridUiNow(PluginTemplateDropDownReceiver.java:718)
+10-15 21:52:36.295  5538  5538 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.refreshGridUi(PluginTemplateDropDownReceiver.java:709)
+10-15 21:52:36.295  5538  5538 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.openForDebug(PluginTemplateDropDownReceiver.java:3420)
+10-15 21:52:36.295  5538  5538 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.handleDebugAction(PluginTemplateDropDownReceiver.java:3390)
+10-15 21:52:36.295  5538  5538 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.onReceive(PluginTemplateDropDownReceiver.java:3349)
+10-15 21:52:36.329  5538  5538 D SARtakPerf: panel refresh tab=0 took=37 ms
+10-15 21:52:36.333  5538  5538 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@e083e0d
+10-15 21:52:36.334  5538  5538 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@e083e0d
+10-15 21:52:36.334  5538  5538 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@e083e0d size: 0.5x1.0
+10-15 21:52:36.374  5538  5538 D SARtakPerf: panel refresh tab=2 took=27 ms
+10-15 21:52:36.522  5538  6556 D SARtakPerf: slow ditto write ms=163 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:52:36.883  5538  5538 D SARtakRecovery: synced | operation=OP-2F971E0E4D-1792064668160/SAR Operatio/ACTIVE | role=Team Lead | team=TEAM-ANDROID-713b442f971e0e4d/QA_B/members=1 | area=No planned search area | cells complete=0 partial=0 inProgress=0 | selected=No cell selected | route=none | line=NOT_STARTED | overlays grid=false route=true areas=false | track=recording
+10-15 21:52:36.885  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:52:36.892  5538  5538 D SARtakPerf: background refresh ms=10.1 snapshot=0.6 connect=0.2 advertise=0.1 lifecycle=0.3 membership=0.3 markers=1.4 photos=0.6 contacts=1.6 self=0.4 cell=3.1 device=0.6 devices=0.2 arrange=0.3 line=0.1 writes pending=1 done=3 merged=0 failed=0
+10-15 21:52:37.144  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:52:40.376  5538  6561 I Ditto   : gathering and publishing store system info
+10-15 21:52:40.393  5538  6560 I Ditto   : next store system info collection scheduled delay=600 secs
+10-15 21:52:40.460  5538  6560 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+xfYO4ZI}:session{operation=get_next_message}:outbound_cycle{update_index=8645512677440035792 trigger=CycleEnded}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-15 21:52:40.461  5538  6562 I Ditto   : channel{service=replication local.peer_id=pk.+tUvVZNA remote.peer_id=pk.+xfYO4ZI}:session{operation=get_next_message}:outbound_cycle{update_index=8645512677440035792 trigger=CycleEnded}:create_sending_update: clearing scan marker for outbound updates reason=local_subscription_change
+10-15 21:52:40.464   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-215241.png'
+10-15 21:52:40.942   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-215241.png'

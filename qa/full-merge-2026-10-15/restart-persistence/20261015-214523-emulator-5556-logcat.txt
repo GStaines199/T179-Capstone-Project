@@ -1,0 +1,28 @@
+10-15 21:44:59.223  4470  4470 I AndroidRuntime: VM exiting with result code 0, cleanup skipped.
+10-15 21:45:01.591  5524  5524 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-15 21:45:01.601  5524  5524 I AndroidRuntime: Using default boot image
+10-15 21:45:01.601  5524  5524 I AndroidRuntime: Leaving lock profiling enabled
+10-15 21:45:01.863  5524  5524 D AndroidRuntime: Calling main entry com.android.commands.monkey.Monkey
+10-15 21:45:02.043  5524  5524 I AndroidRuntime: VM exiting with result code 0.
+10-15 21:45:17.231   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab HOME'
+10-15 21:45:17.285   764  2553 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:45:17.285   764  2553 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:45:22.023  5538  5878 D AtakPluginRegistry: Successfully loaded plugin descriptor for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:45:22.023  5538  5878 D AtakPluginRegistry: com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle],  will load
+10-15 21:45:22.024  5538  5878 D AtakPluginRegistry: Adding plugin app: ApplicationInfo{d33a7d2 com.atakmap.android.plugintemplate.plugin}, total plugins: 1
+10-15 21:45:22.209  5538  5878 D AtakPluginRegistry: Loading com.atak.plugins.impl.IToolbarItem extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:45:22.209  5538  5878 D AtakPluginRegistry: Loading gov.tak.api.plugin.IPlugin extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:45:22.211  5538  5878 D AtakPluginRegistry: api matches[ com.atakmap.android.plugintemplate.plugin]; pluginApiVersion:com.atakmap.app@5.6.0.CIV
+10-15 21:45:22.213  5538  5878 D AtakPluginRegistry: SDK skipping signature check[com.atakmap.android.plugintemplate.plugin]
+10-15 21:45:22.215  5538  5878 V HashingUtils: Computing SHA256 for: /data/app/~~89Igp-nDZw8jKLyFGrVSGg==/com.atakmap.android.plugintemplate.plugin-jkgxphXekgoPsJHUyMBzHA==/base.apk
+10-15 21:45:22.395  5538  5878 D PluginValidator: generated a fragile hash cache for: com.atakmap.android.plugintemplate.plugin,1792064454464
+10-15 21:45:22.430   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214523.png'
+10-15 21:45:22.431  5538  5878 D AtakPluginRegistry: Loaded com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle, for plugin: com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:45:22.431  5538  5878 D AtakPluginRegistry: Loading new Kernel plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle@c710713
+10-15 21:45:22.434  5538  5538 D ToolMapComponent: Loading new IToolbarItem plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool@8671c4e
+10-15 21:45:22.434  5538  5538 D PluginMapComponent: addPluginIcon: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool
+10-15 21:45:22.599  5538  5538 D SARtakRecovery: restored | operation=OP-2F971E0E4D-1792064668160/SAR Operatio/ACTIVE | role=HQ | team=none | area=No planned search area | cells complete=0 partial=0 inProgress=0 | selected=No cell selected | route=none | line=NOT_STARTED | overlays grid=false route=true areas=false | track=recording
+10-15 21:45:22.633  5538  5538 D PluginTemplateMapComponent: registering the plugin filter
+10-15 21:45:22.847  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.4 assign=0.1 markers=0.1 total=0.6 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:45:22.931   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214523.png'
+10-15 21:45:23.159  5538  5538 D SARtakPerf: render ms grid=0.1 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden

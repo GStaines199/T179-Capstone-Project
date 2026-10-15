@@ -1,0 +1,72 @@
+10-15 21:46:50.046   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_SET_ROLE -p com.atakmap.app.civ --es role TEAM_LEAD'
+10-15 21:46:50.066   764   882 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_ROLE flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:46:50.067   764   882 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_ROLE flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:46:50.074  5538  5538 D PluginTemplateDropDownReceiver: Debug role set to Team Lead
+10-15 21:46:50.211   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_SET_CALLSIGN -p com.atakmap.app.civ --es callsign QA-LEAD'
+10-15 21:46:50.235   764   882 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_CALLSIGN flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:46:50.235   764   882 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_SET_CALLSIGN flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:46:50.241  5538  5538 D PluginTemplateDropDownReceiver: Debug callsign set to QA-LEAD
+10-15 21:46:52.903  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.1 total=0.2 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:46:52.984  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:46:52.986  5538  5538 D SARtakPerf: background refresh ms=2.8 connect=0.1 area=0.1 advertise=0.1 lifecycle=0.2 markers=0.8 self=0.5 cell=0.2 device=0.4 devices=0.1 arrange=0.1 writes pending=1 done=23 merged=0 failed=0
+10-15 21:46:53.238  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:46:54.345   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab HOME'
+10-15 21:46:54.365   764   882 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:46:54.366   764   882 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:46:54.383  5538  5538 D DropDownManager: closing a right side drop down that is visible: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:46:54.384  5538  5538 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb with backstack count: 0
+10-15 21:46:54.387  5538  5538 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:46:54.387  5538  5538 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:46:54.387  5538  5538 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb size: 0.5x1.0
+10-15 21:46:57.522   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214658.png'
+10-15 21:46:58.086   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214658.png'
+10-15 21:46:58.279  5538  5538 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb with backstack count: 0
+10-15 21:47:00.404   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214701.png'
+10-15 21:47:00.940   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214701.png'
+10-15 21:47:01.096   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab TEAM'
+10-15 21:47:01.117   764  2553 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:47:01.118   764  2553 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:47:01.130  5538  5538 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:47:01.130  5538  5538 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb
+10-15 21:47:01.130  5538  5538 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@97494cb size: 0.5x1.0
+10-15 21:47:02.689  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:02.692  5538  5538 D SARtakPerf: background refresh ms=4.6 connect=0.2 area=0.2 lifecycle=0.3 markers=1.5 photos=0.2 self=1.0 cell=0.2 device=0.4 devices=0.1 arrange=0.2 line=0.1 writes pending=1 done=25 merged=0 failed=0
+10-15 21:47:02.943  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.1 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:04.281   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214705.png'
+10-15 21:47:04.890   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214705.png'
+10-15 21:47:06.174  5538  5538 D SARtakPerf: panel refresh tab=2 took=18 ms
+10-15 21:47:12.396  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:12.399  5538  5538 D SARtakPerf: background refresh ms=4.5 connect=0.2 area=0.2 advertise=0.1 lifecycle=0.3 markers=1.6 photos=0.3 contacts=0.1 self=0.6 cell=0.2 device=0.4 devices=0.1 arrange=0.1 writes pending=1 done=28 merged=0 failed=0
+10-15 21:47:12.650  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:12.906  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:16.212  5538  5538 D SARtakPerf: panel refresh tab=2 took=21 ms
+10-15 21:47:21.232  5538  5538 D SARtakPerf: panel refresh tab=2 took=16 ms
+10-15 21:47:22.101  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:22.103  5538  5538 D SARtakPerf: background refresh ms=2.7 connect=0.2 area=0.2 lifecycle=0.2 markers=0.8 photos=0.1 self=0.6 cell=0.1 device=0.2 writes pending=1 done=31 merged=0 failed=0
+10-15 21:47:22.354  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:22.908  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:29.917  6303  6303 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+10-15 21:47:29.922  6303  6303 I AndroidRuntime: Using default boot image
+10-15 21:47:29.922  6303  6303 I AndroidRuntime: Leaving lock profiling enabled
+10-15 21:47:30.025  6303  6303 D AndroidRuntime: Calling main entry com.android.commands.uiautomator.Launcher
+10-15 21:47:31.096  6303  6303 D AndroidRuntime: Shutting down VM
+10-15 21:47:31.805  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:31.807  5538  5538 D SARtakPerf: background refresh ms=3.4 connect=0.1 area=0.1 lifecycle=0.1 markers=0.9 photos=0.1 self=0.3 cell=0.2 device=0.9 arrange=0.2 writes pending=1 done=34 merged=0 failed=0
+10-15 21:47:32.058  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:32.910  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.0 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:36.276  5538  5538 D SARtakPerf: panel refresh tab=2 took=17 ms
+10-15 21:47:41.510  5538  5538 D SARtakPerf: shared markers ms=1 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:41.511  5538  5538 D SARtakPerf: background refresh ms=2.7 connect=0.1 area=0.1 lifecycle=0.1 markers=1.1 photos=0.1 self=0.5 cell=0.1 device=0.2 writes pending=1 done=37 merged=0 failed=0
+10-15 21:47:41.762  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:42.910  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:46.342  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:46.380  5538  5538 D SARtakPerf: panel refresh tab=2 took=38 ms
+10-15 21:47:46.472  5538  5940 D SARtakPerf: slow ditto write ms=107 thread=SARtak-Ditto-Writer sartak_team_memberships
+10-15 21:47:46.615  5538  5940 D SARtakPerf: slow ditto write ms=142 thread=SARtak-Ditto-Writer sartak_team_events
+10-15 21:47:51.214  5538  5538 D SARtakPerf: shared markers ms=0 scan=true docs=0 applied=0 removed=0 published=0 deleted=0 refused=0 existingWaiting=0
+10-15 21:47:51.217  5538  5538 D SARtakPerf: background refresh ms=4.9 connect=0.1 area=0.1 advertise=0.1 lifecycle=0.2 membership=0.2 markers=0.8 photos=0.2 contacts=1.8 self=0.3 cell=0.2 device=0.2 devices=0.2 arrange=0.1 line=0.2 writes pending=0 done=43 merged=0 failed=0
+10-15 21:47:51.319  5538  5538 D SARtakPerf: panel refresh tab=2 took=20 ms
+10-15 21:47:51.469  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:52.922  5538  5538 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:47:54.514   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-214755.png'
+10-15 21:47:54.954   575   575 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-214755.png'

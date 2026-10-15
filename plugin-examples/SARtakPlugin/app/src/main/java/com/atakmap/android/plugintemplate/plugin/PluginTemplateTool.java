@@ -24,7 +24,7 @@ public class PluginTemplateTool extends AbstractPluginTool implements Disposable
         super(context,
                 context.getString(R.string.app_name),
                 context.getString(R.string.app_name),
-                context.getResources().getDrawable(R.drawable.ic_launcher),
+                context.getResources().getDrawable(R.drawable.ic_sartak_tool),
                 PluginTemplateDropDownReceiver.SHOW_PLUGIN);
     }
 

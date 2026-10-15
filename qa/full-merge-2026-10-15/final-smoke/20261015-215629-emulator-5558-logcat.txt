@@ -1,0 +1,99 @@
+10-15 21:55:54.664   778  5593 D NativeLibraryHelper: Punching extracted elf file libcomdittodittoffijvmstubs.so on fs:61267
+10-15 21:55:55.125   778  5593 D NativeLibraryHelper: Punching extracted elf file libdittoffi.so on fs:61267
+10-15 21:55:55.204   778  5598 W CorePackageUpdate: Package com.atakmap.android.plugintemplate.plugin no process with activities in it.
+10-15 21:55:55.204   778   826 I ActivityManager: Force stopping com.atakmap.android.plugintemplate.plugin appid=10235 user=-1: killDueToPackageUpdate
+10-15 21:55:55.204   778   865 I AppsFilter: interaction: PackageSetting{98dbdb6 com.android.microdroid.empty_payload/10212} -> PackageSetting{65e6ff7 com.atakmap.android.plugintemplate.plugin/10235} BLOCKED
+10-15 21:55:55.204   778   865 I AppsFilter: interaction: PackageSetting{98dbdb6 com.android.microdroid.empty_payload/10212} -> PackageSetting{ca2349a com.atakmap.android.plugintemplate.plugin/10235} BLOCKED
+10-15 21:55:55.205   778   865 I PackageManager: Update package com.atakmap.android.plugintemplate.plugin code path from /data/app/~~A-kYskmC1_1ZQmkluQFVTQ==/com.atakmap.android.plugintemplate.plugin-Sl1sU8vN4aBU0xgBq4jjeA== to /data/app/~~NeVobjTMgvuXpMbeBoujIA==/com.atakmap.android.plugintemplate.plugin-rv2IWuqvGf_uARvDdjnIOA==; Retain data and using new
+10-15 21:55:55.248   778   865 I PackageManager: installation completed for package:com.atakmap.android.plugintemplate.plugin. Final code path: /data/app/~~NeVobjTMgvuXpMbeBoujIA==/com.atakmap.android.plugintemplate.plugin-rv2IWuqvGf_uARvDdjnIOA==
+10-15 21:55:55.249   778   865 I AppsFilter: interaction: PackageSetting{f61378e com.android.microdroid.empty_payload/10212} -> PackageSetting{3877401 com.atakmap.android.plugintemplate.plugin/10235} BLOCKED
+10-15 21:55:55.268   778   865 I ActivityManager: Force stopping com.atakmap.android.plugintemplate.plugin appid=10235 user=0: pkg removed
+10-15 21:55:55.290  4710  4710 D ApkUpdateReceiver: ACTION_PACKAGE_REMOVED: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.290  4710  4710 D AtakPluginRegistry: Unloading plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.291  4710  4710 D AtakPluginRegistry: Unloading plugin descriptor: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.294  4710  4710 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.301  4710  4710 D AtakPluginRegistry: Unloading app info: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.301  4710  4710 D AtakPluginRegistry: Unloading the classloader for item: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.307   778  1099 D ShortcutService: replacing package: com.atakmap.android.plugintemplate.plugin userId=0
+10-15 21:55:55.308   778  1108 I SdkSandboxManager: No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10235, mPackageName='com.atakmap.android.plugintemplate.plugin, mAppProcessToken='null'}
+10-15 21:55:55.314  1295  1400 V MessagingReadRestrictionAllowlistMonitor: onBroadcastReceived: No AppOp changes for package: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.315  1295  1461 I SatelliteAppTracker: onPackageUpdateFinished : com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.315  1295  1461 I SatelliteAppTracker: onPackageModified : com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.319  1295  1461 D SatelliteAppTracker: packageName: com.atakmap.android.plugintemplate.plugin, value: null
+10-15 21:55:55.321  1295  1461 D SatelliteAppTracker: packageName: com.atakmap.android.plugintemplate.plugin, value: null
+10-15 21:55:55.333  1295  1295 D CarrierSvcBindHelper: onPackageUpdateFinished: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.334  1295  1295 D CarrierSvcBindHelper: onPackageModified: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.350  4710  4710 D SARtakRecovery: disposing | operation=none | role=Team Member | team=none | area=No planned search area | cells complete=0 partial=0 inProgress=0 | selected=utm-56J-c100-e502400-n6961500 | route=none | line=NOT_STARTED | overlays grid=false route=true areas=false | track=recording
+10-15 21:55:55.356   778  1108 I SdkSandboxManager: No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10235, mPackageName='com.atakmap.android.plugintemplate.plugin, mAppProcessToken='null'}
+10-15 21:55:55.385   778   778 I Telecom : CarModeTracker: Package com.atakmap.android.plugintemplate.plugin is not tracked.: SSH.oR@AKQ🔒
+10-15 21:55:55.393   778   778 D AS.AudioService: received android.intent.action.PACKAGE_ADDED replacing: true archival: false for package com.atakmap.android.plugintemplate.plugin with uid 10235
+10-15 21:55:55.397   778   994 W PackageConfigPersister: App-specific configuration not found for packageName: com.atakmap.android.plugintemplate.plugin and userId: 0
+10-15 21:55:55.431  4710  4710 D AtakPluginRegistry: Unloading loadedPluginsSet item: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.432  1875  5606 I AiAiEcho: AppIndexer Package:[com.atakmap.android.plugintemplate.plugin] UserProfile:[0] Enabled:[true].
+10-15 21:55:55.432  1875  5606 I AiAiEcho: AppFetcherImplV2 updateApps package:[com.atakmap.android.plugintemplate.plugin], userId:[0], reason:[package is updated.].
+10-15 21:55:55.448  4710  4710 D AtakPluginRegistry: marking plugin.version.loaded.SARtak:1.0 (a071cecc) - [5.6.0]-1792063748 as unloaded: succeeded
+10-15 21:55:55.448  4710  4710 D AtakPluginRegistry: Unloaded plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.462  4710  4710 D ProductProviderManager: app removed: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.462  4710  4710 D ApkUpdateReceiver: ACTION_PACKAGE_ADDED: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.463  4710  4710 D AtakPluginRegistry: Plugin has not been scanned, scanning now: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.486  4710  4710 D AtakPluginRegistry: Successfully loaded plugin descriptor for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:55:55.486  4710  4710 D AtakPluginRegistry: com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle],  will NOT load
+10-15 21:55:55.486  4710  4710 D AtakPluginRegistry: Scanned and found plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.486  4710  4710 D ApkUpdateReceiver: removeInstalling: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.506  1668  1668 I SafetyLabelChangedBroadcastReceiver: received broadcast packageName: com.atakmap.android.plugintemplate.plugin, current user: UserHandle{0}, packageChangeEvent: UPDATE, intent user: UserHandle{0}
+10-15 21:55:55.558  1295  1554 D ImsResolver: maybeAddedImsService, packageName: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.558  1295  1554 V ImsResolver: searchForImsServices: package=com.atakmap.android.plugintemplate.plugin, users=[UserHandle{0}]
+10-15 21:55:55.559  1295  1554 V ImsResolver: searchForImsServices: package=com.atakmap.android.plugintemplate.plugin, users=[UserHandle{0}]
+10-15 21:55:55.568  1295  1295 W VvmPkgInstalledRcvr: carrierVvmPkgAdded: carrier vvm packages doesn't contain com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.587  4710  4710 D DropDownManager: closing a right side drop down that is visible: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@570ba02
+10-15 21:55:55.587  4710  4710 D DropDownManager: closing the rightside dropdown: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@570ba02 with backstack count: 0
+10-15 21:55:55.598   778   778 I BackupManagerService: No delayed restore requests for the given dependency: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:55.656  1295  1295 D SatelliteController: packageStateChanged: package:com.atakmap.android.plugintemplate.plugin defaultSmsPackageName: com.google.android.apps.messaging satelliteGatewayServicePackageName: 
+10-15 21:55:55.677   778   778 D AS.AudioService: received android.intent.action.PACKAGE_REPLACED replacing: true archival: false for package com.atakmap.android.plugintemplate.plugin with uid 10235
+10-15 21:55:56.107  4710  4710 D ProductProviderManager: app added: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:56.108  4710  4710 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:56.110  4710  4710 W ProductProviderManager: No provider found for: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:56.110  4710  4710 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:55:56.110  4710  4710 D SideloadedPluginProvider: com.atakmap.android.update.SideloadedPluginProvider: installed added, com.atakmap.android.plugintemplate.plugin
+10-15 21:55:56.152  1511  5621 I ProximityAuth: [RecentAppsMediator] Package added: (user=UserHandle{0}) com.atakmap.android.plugintemplate.plugin
+10-15 21:55:56.321  1988  5633 I NearbyDiscovery: processGrantSlicePermission: com.atakmap.android.plugintemplate.plugin [CONTEXT service_id=265 ]
+10-15 21:55:56.332  1988  5636 W SQLiteLog: (28) double-quoted string literal: "com.atakmap.android.plugintemplate.plugin"
+10-15 21:56:05.601  4710  4710 D AtakPluginRegistry: Loading plugin: com.atakmap.android.plugintemplate.plugin
+10-15 21:56:05.601  4710  4710 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:56:05.606  4710  4710 D AtakPluginRegistry: Plugin was previously scanned: com.atakmap.android.plugintemplate.plugin
+10-15 21:56:05.826  4710  4710 D AtakPluginRegistry: Loading com.atak.plugins.impl.IToolbarItem extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:56:05.826  4710  4710 D AtakPluginRegistry: Loading gov.tak.api.plugin.IPlugin extensions for com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:56:05.826  4710  4710 D AtakPluginRegistry: api matches[ com.atakmap.android.plugintemplate.plugin]; pluginApiVersion:com.atakmap.app@5.6.0.CIV
+10-15 21:56:05.828  4710  4710 D AtakPluginRegistry: SDK skipping signature check[com.atakmap.android.plugintemplate.plugin]
+10-15 21:56:05.868  4710  4710 D AtakPluginRegistry: Loaded com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle, for plugin: com.atakmap.android.plugintemplate.plugin: [Extension type=gov.tak.api.plugin.IPlugin, impl=com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle], 
+10-15 21:56:05.869  4710  4710 D AtakPluginRegistry: Loading new Kernel plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateLifecycle@ee9b903
+10-15 21:56:05.869  4710  4710 D ToolMapComponent: Loading new IToolbarItem plugin: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool@b34e080
+10-15 21:56:05.869  4710  4710 D PluginMapComponent: addPluginIcon: com.atakmap.android.plugintemplate.plugin.PluginTemplateTool
+10-15 21:56:06.087  4710  4710 D SARtakRecovery: restored | operation=none | role=Team Member | team=none | area=No planned search area | cells complete=0 partial=0 inProgress=0 | selected=No cell selected | route=none | line=NOT_STARTED | overlays grid=false route=true areas=false | track=recording
+10-15 21:56:06.149  4710  4710 D PluginTemplateMapComponent: registering the plugin filter
+10-15 21:56:06.163  4710  4710 D AtakPluginRegistry: Loaded plugin: com.atakmap.android.plugintemplate.plugin, with extension count: 2
+10-15 21:56:06.337  4710  4710 D SARtakPerf: render ms grid=0.0 route=0.2 assign=0.0 markers=0.0 total=0.3 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:56:06.696  4710  4710 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:56:16.335  4710  4710 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:56:18.790  4710  4710 D SARtakRecovery: synced | operation=none | role=Team Member | team=none | area=No planned search area | cells complete=0 partial=0 inProgress=0 | selected=No cell selected | route=none | line=NOT_STARTED | overlays grid=false route=true areas=false | track=recording
+10-15 21:56:18.795  4710  4710 D SARtakPerf: background refresh ms=5.2 snapshot=0.3 lifecycle=2.7 photos=0.3 self=0.5 cell=0.6 device=0.1 arrange=0.2 writes: Ditto not started
+10-15 21:56:19.046  4710  4710 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:56:20.819   569   569 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:am broadcast -a com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB -p com.atakmap.app.civ --es tab HOME'
+10-15 21:56:20.852   778  2330 I ActivityManager: Broadcasting: Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }
+10-15 21:56:20.856   778  2330 I ActivityManager: Enqueued broadcast Intent { act=com.atakmap.android.plugintemplate.DEBUG_OPEN_TAB flg=0x400000 pkg=com.atakmap.app.civ (has extras) }: 0
+10-15 21:56:20.857  4710  4710 W ContextImpl: Failed to ensure /data/user/0/com.atakmap.android.plugintemplate.plugin/shared_prefs
+10-15 21:56:20.857  4710  4710 W ContextImpl: 	at com.atakmap.android.plugintemplate.runtime.OperationQrScanResultStore.consume(OperationQrScanResultStore.java:25)
+10-15 21:56:20.857  4710  4710 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.consumePendingOperationQrScan(PluginTemplateDropDownReceiver.java:1891)
+10-15 21:56:20.857  4710  4710 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.refreshGridUiNow(PluginTemplateDropDownReceiver.java:718)
+10-15 21:56:20.857  4710  4710 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.refreshGridUi(PluginTemplateDropDownReceiver.java:709)
+10-15 21:56:20.857  4710  4710 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.openForDebug(PluginTemplateDropDownReceiver.java:3420)
+10-15 21:56:20.857  4710  4710 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.handleDebugAction(PluginTemplateDropDownReceiver.java:3390)
+10-15 21:56:20.857  4710  4710 W ContextImpl: 	at com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver.onReceive(PluginTemplateDropDownReceiver.java:3349)
+10-15 21:56:20.867  4710  4710 D DropDownManager: drop down selected side is right: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@96bca3
+10-15 21:56:20.867  4710  4710 D DropDownManager: calling show on (right side): com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@96bca3
+10-15 21:56:20.867  4710  4710 D DropDownManager: showing drop down: com.atakmap.android.plugintemplate.PluginTemplateDropDownReceiver@96bca3 size: 0.5x1.0
+10-15 21:56:26.337  4710  4710 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden
+10-15 21:56:28.140   569   569 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:screencap -p /sdcard/sartak-20261015-215629.png'
+10-15 21:56:28.498  4710  4710 D SARtakPerf: background refresh ms=1.6 lifecycle=0.2 self=0.7 cell=0.1 writes: Ditto not started
+10-15 21:56:28.669   569   569 I adbd    : adbd service requested 'shell,v2,TERM=dumb,raw:rm /sdcard/sartak-20261015-215629.png'
+10-15 21:56:28.749  4710  4710 D SARtakPerf: render ms grid=0.0 route=0.0 assign=0.0 markers=0.0 total=0.1 | res=15642m | gridItems=0(off=0) routeItems=0(off=0) assignItems=none previewItems=none | Grid overlay hidden

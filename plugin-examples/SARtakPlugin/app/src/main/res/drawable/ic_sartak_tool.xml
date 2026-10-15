@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+
+    <!-- Transparent ATAK toolbar icon. Opaque square backgrounds are tinted
+         into solid blocks by ATAK's tool-menu renderer. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M32,3C21.5,3 13,11.5 13,22c0,13.5 19,28 19,28s19,-14.5 19,-28C51,11.5 42.5,3 32,3zM32,8.5A13.5,13.5 0,1 0,32 35.5A13.5,13.5 0,1 0,32 8.5z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30.5,11h3v7h-3zM30.5,32h3v7h-3zM18,20.5h7v3h-7zM39,20.5h7v3h-7z" />
+    <path
+        android:fillColor="#FFE53935"
+        android:pathData="M29,16h6v6h6v6h-6v6h-6v-6h-6v-6h6z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,60l13,-15l8,8l8,-10l9,10l7,-8l13,15l-10,-7l-4,5l-6,-3l-9,-7l-8,10l-8,-6z" />
+</vector>

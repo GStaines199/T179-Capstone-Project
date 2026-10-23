@@ -1,8 +1,10 @@
 # Handover Scope
 
 This branch starts from local `main` commit `b7e3349` and performs packaging
-cleanup only. SARtak runtime code and resources are unchanged. The full project
-history and removed material remain on `main`; this is not a history purge.
+cleanup followed by removal of the build-time Ditto credential fallback.
+Runtime profiles now come only from on-device setup or imported operations.
+The full project history and removed material remain on `main`; this is not a
+history purge.
 
 ## Removed from the Handover Tree
 
@@ -51,8 +53,8 @@ ATAK approval is implied by this cleanup.
 ## Before Delivery
 
 1. Build and run the unit tests using `SETUP.md` and the intended SDK.
-2. Build a generic APK without private Ditto build-time fallback values. Existing
-   local.properties files are not modified by this cleanup.
+2. Build a generic APK. Ditto build-time fallback inputs are no longer supported;
+   existing private local.properties files are ignored and are not distributed.
 3. Verify operation join/restart, team membership, map positions, grid progress,
    search lines and alerts on the target physical devices.
 4. Confirm production credentials, access policy and ATAK signing separately.
@@ -65,7 +67,7 @@ Git checkout where possible. For a source-only archive, initialise a new local
 Git repository and commit the imported files before building; an archive without
 Git metadata falls back to SDK version defaults and prints Git warnings.
 
-## Verification - 23 October 2026
+## Packaging Verification - 23 October 2026
 
 - Exported only the staged handover files to a new temporary directory.
 - Used JDK 17 and the installed Android SDK, without local.properties, private
@@ -79,3 +81,31 @@ Git metadata falls back to SDK version defaults and prints Git warnings.
 - No emulator/physical-device workflows were exercised during this packaging
   change. The temporary validation APK was not installed on any device and is
   not part of the handover source tree.
+
+## Personal Configuration Removal
+
+- Removed Ditto BuildConfig fields and all runtime fallback to developer
+  local.properties credentials. Local/environment Ditto settings cannot seed a
+  profile or be compiled into the APK by this build.
+- Fresh installations have no preset Ditto profile. HQ must configure a profile
+  on-device; joining devices can import the operation's QR/join code as before.
+- Existing on-device profiles/operations are deliberately preserved on upgrade.
+  Removing the fallback does not erase a profile already stored on a device.
+- Checked tracked text files for personal filesystem paths, device identities,
+  credential literals and matches to this machine's private Ditto values. No
+  actual account values were found in tracked source. Removed personal branch
+  naming from the maintenance notes; test identities and SDK debug passwords are
+  generic test/development values.
+- The ignored local.properties and private signing keys remain local and are
+  not part of the branch/export. Only the standard credential-free example is
+  distributed. Do not copy local caches or old APKs into a delivery.
+- This does not purge Git history or revoke credentials in previously produced
+  APKs/join codes. Rotate previously shared development tokens in Ditto before
+  wider delivery if those tokens should no longer grant access.
+
+Credential-removal verification: clean debug build and all 856 tests passed
+(73 suites, no failures/errors/skips), using the existing private local build
+configuration. Generated BuildConfig contains no Ditto credential fields. The
+rebuilt APK's 58 non-native/non-signature entries were checked in UTF-8/UTF-16
+against the local database ID, token and auth URL; no values matched. No APK was
+installed and no device profiles were erased during this change.

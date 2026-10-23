@@ -39,6 +39,8 @@ See [../../SETUP.md](../../SETUP.md) for building and installation and
 `local.properties.example` as the single configuration template.
 
 - Configure profiles via SARtak's Ditto Setup, not another developer's files.
+- APKs have no bundled Ditto account or build-time credential fallback. A fresh
+  installation starts without a profile; upgrades retain on-device profiles.
 - QR/join codes include development sync details; share them only with intended
   participants. Development tokens are not a production security model.
 - Nearby/offline operation depends on authentication, permissions and available

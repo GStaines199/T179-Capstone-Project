@@ -1387,9 +1387,6 @@ public class SARTakMapController {
                 summary += "\nHTTP profile saved; SDK profile required for live offline mesh sync";
             return summary;
         }
-        if (dittoSyncManager.canCreateOperationFromBuildConfig())
-            return "Using developer local.properties Ditto profile"
-                    + "\nSaved profiles: " + savedCount;
         return "No Ditto profile saved\nAdd a profile before creating an operation";
     }
 
@@ -3950,12 +3947,6 @@ public class SARTakMapController {
         if (selected != null && selected.isSdkProfile()
                 && selected.isComplete())
             return selected;
-        if (dittoSyncManager.canCreateOperationFromBuildConfig()) {
-            return new DittoCredentialProfile("build-config",
-                    "Developer local.properties", BuildConfig.DITTO_APP_ID,
-                    BuildConfig.DITTO_AUTH_URL,
-                    BuildConfig.DITTO_PLAYGROUND_TOKEN, 0L, 0L);
-        }
         return null;
     }
 

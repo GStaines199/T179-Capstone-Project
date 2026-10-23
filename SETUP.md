@@ -68,8 +68,9 @@ signing process; this branch does not provide that approval or a private key.
 5. Confirm devices, map positions, team membership and grid changes on both ends.
 
 Ditto profiles can be configured on-device; personal credentials are not needed
-at compile time. Join codes contain sync credentials and must be treated as
-sensitive. Stage development-profile devices with internet access before testing
+at compile time. The build does not read or embed Ditto credentials from
+local.properties or environment variables. Join codes contain sync credentials
+and must be treated as sensitive. Stage development-profile devices with internet access before testing
 nearby/offline sync. No-TAK-server testing alone does not prove fully offline or
 multi-hop connectivity.
 

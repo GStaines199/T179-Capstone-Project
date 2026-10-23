@@ -502,12 +502,6 @@ public class DittoSyncManager {
         return configured;
     }
 
-    public boolean canCreateOperationFromBuildConfig() {
-        return notEmpty(BuildConfig.DITTO_APP_ID)
-                && notEmpty(BuildConfig.DITTO_PLAYGROUND_TOKEN)
-                && notEmpty(BuildConfig.DITTO_AUTH_URL);
-    }
-
     public void publishDeviceStateIfDue(boolean teamCreated, String teamId,
             String teamName, String leaderUid, String leaderCallsign,
             String roleLabel, String teamColorName, int teamColorArgb,

@@ -7,7 +7,7 @@ Sprint tasks covered (Performance and Stability):
 3. Test recovery after ATAK is closed, restarted or interrupted by Android.
 
 Tested 2026-10-03 on the `ATAK_API30_x86` emulator (ATAK 5.6.0, 4 vCPU),
-using George's branch at `48c4faf` as the baseline. Physical devices were not
+using development commit `48c4faf` as the baseline. Physical devices were not
 used; their numbers will differ, but every problem found here is per map item
 and gets worse on slower phones, not better.
 
@@ -111,7 +111,7 @@ State before each test: Team Leader, operation active, team created, 20 km
 area, 5,400 cell statuses, 603-cell route, grid overlay, labels and team
 areas on, search line active. "Baseline" here is the build just before the
 recovery changes; the startup and persistence code it runs is unchanged from
-George's branch.
+the development baseline.
 
 | Scenario | How | Baseline | Fixed |
 |---|---|---|---|

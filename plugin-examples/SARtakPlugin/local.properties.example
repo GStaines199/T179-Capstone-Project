@@ -23,8 +23,5 @@ atak.version=5.6.0
 # takReleaseKeyAlias=YOUR_ALIAS
 # takReleaseKeyPassword=YOUR_KEY_PASSWORD
 
-# Prefer Ditto Setup inside SARtak. Leave these absent for a generic APK.
-# Optional development-only build-time fallback (compiled into the APK):
-# DITTO_DATABASE_ID=YOUR_DATABASE_ID
-# DITTO_DEVELOPMENT_TOKEN=YOUR_DEVELOPMENT_TOKEN
-# DITTO_AUTH_URL=https://YOUR_AUTH_URL
+# Configure Ditto profiles inside SARtak or import an operation's join code.
+# Ditto credentials in local.properties/environment are not embedded in APKs.

@@ -1,41 +1,27 @@
-# Copy this file and rename the copy to local.properties.
-# Do not commit local.properties because it may contain local paths, signing
-# details, and Ditto credentials.
+# Copy to local.properties and change YOUR_USERNAME / SDK location.
+# Forward slashes avoid Java .properties backslash escaping on Windows.
+# Never commit local.properties, signing keys or Ditto credentials.
+sdk.dir=C:/Users/YOUR_USERNAME/AppData/Local/Android/Sdk
 
-# Android SDK location
-# Windows example:
-sdk.dir=C\:\\Users\\YOUR_USERNAME\\AppData\\Local\\Android\\Sdk
+# Build default: the ATAK SDK JAR two directories above this project.
+# Override only if using an SDK stored elsewhere:
+# takdev.plugin=C:/path/to/atak-gradle-takdev.jar
 
-# ATAK Gradle plugin JAR location
-# Change this to wherever you store atak-gradle-takdev.jar
-takdev.plugin=C\:\\path\\to\\atak-gradle-takdev.jar
-
-# ATAK compatibility target. 5.6.0 matches the SDK checked in at the repo
-# root (ATAK CIV 5.6.0.24) and is what the build defaults to, so you only need
-# this line if you are deliberately building against a different ATAK release.
+# Default API target; do not substitute an installed app's patch version.
 atak.version=5.6.0
 
-# Optional: debug signing config
-# Usually Android Studio creates this automatically at:
-# C:\Users\YOUR_USERNAME\.android\debug.keystore
-takDebugKeyFile=C\:\\Users\\YOUR_USERNAME\\.android\\debug.keystore
-takDebugKeyFilePassword=android
-takDebugKeyAlias=androiddebugkey
-takDebugKeyPassword=android
+# Optional overrides. By default the build uses ~/.android/debug.keystore
+# with alias androiddebugkey and the standard debug password android.
+# takDebugKeyFile=C:/Users/YOUR_USERNAME/.android/debug.keystore
+# takDebugKeyFilePassword=android
+# takDebugKeyAlias=androiddebugkey
+# takDebugKeyPassword=android
 
-# Optional: temporary release config for local development only
-takReleaseKeyFile=C\:\\Users\\YOUR_USERNAME\\.android\\debug.keystore
-takReleaseKeyFilePassword=android
-takReleaseKeyAlias=androiddebugkey
-takReleaseKeyPassword=android
+# Use organisation-controlled signing details for approved release delivery.
+# takReleaseKeyFile=C:/private/location/release.jks
+# takReleaseKeyFilePassword=YOUR_STORE_PASSWORD
+# takReleaseKeyAlias=YOUR_ALIAS
+# takReleaseKeyPassword=YOUR_KEY_PASSWORD
 
-# Optional: Ditto SDK sync test credentials.
-# Only the machine/device that creates SARtak operation QR/join codes needs
-# these values at build time. Joining devices receive the operation profile from
-# the QR/code.
-#
-# Get these from the Ditto Portal database/app Connect tab and keep them out of
-# git.
-DITTO_DATABASE_ID=YOUR_DITTO_DATABASE_ID
-DITTO_DEVELOPMENT_TOKEN=YOUR_DITTO_DEVELOPMENT_OR_PLAYGROUND_TOKEN
-DITTO_AUTH_URL=https://YOUR_DITTO_AUTH_URL
+# Configure Ditto profiles inside SARtak or import an operation's join code.
+# Ditto credentials in local.properties/environment are not embedded in APKs.

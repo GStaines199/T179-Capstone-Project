@@ -2,6 +2,8 @@ package com.atakmap.android.plugintemplate.runtime;
 
 import android.content.Context;
 
+import com.atakmap.android.plugintemplate.plugin.BuildConfig;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -11,6 +13,9 @@ import org.robolectric.RuntimeEnvironment;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Saving a profile doesn't take over the selection (finding T1-6), and
@@ -34,6 +39,33 @@ public class DittoCredentialStoreTest {
         return DittoCredentialProfile.create(label,
                 DittoCredentialProfile.CONNECTION_SDK, db,
                 "https://auth.example.test", "token-" + db);
+    }
+
+    @Test
+    public void freshInstallHasNoPresetAccount() {
+        assertTrue(store.getProfiles().isEmpty());
+        assertNull(store.getSelectedProfile());
+        assertEquals("", store.getSelectedProfileId());
+    }
+
+    @Test
+    public void buildConfigDoesNotContainDittoCredentials() {
+        for (java.lang.reflect.Field field : BuildConfig.class.getDeclaredFields())
+            assertFalse("Bundled credential field: " + field.getName(),
+                    field.getName().startsWith("DITTO_"));
+    }
+
+    @Test
+    public void userConfiguredProfileSurvivesStoreRecreation() {
+        DittoCredentialProfile saved = profile("Organisation", "db-user");
+        store.saveProfile(saved);
+
+        DittoCredentialStore reopened = new DittoCredentialStore(
+                RuntimeEnvironment.getApplication());
+
+        assertEquals(saved.getId(), reopened.getSelectedProfileId());
+        assertEquals(saved.getDevelopmentToken(),
+                reopened.getSelectedProfile().getDevelopmentToken());
     }
 
     @Test

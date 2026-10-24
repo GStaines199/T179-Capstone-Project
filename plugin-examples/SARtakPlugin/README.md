@@ -1,131 +1,52 @@
 # SARtak ATAK Plugin
 
-SARtak adds search-and-rescue coordination tools to ATAK 5.6 CIV. The plugin
-uses ATAK for the base map, self location, role/callsign identity, and CoT
-markers, then adds SARtak-specific operation, grid, team, search-line, track,
-and Ditto sync views.
+SARtak extends ATAK with search-and-rescue coordination. ATAK supplies the map,
+device location, callsign/role identity and CoT integration. SARtak adds operation,
+team, grid, route, line, alert, tracking and Ditto-sync workflows.
 
-## Current Capabilities
+## Roles and Workflows
 
-- Operation setup with a local operation profile.
-- Operation join code and QR display.
-- Optional Ditto SDK sync for SARtak operation data.
-- Search grid overlay snapped to stable 100 m UTM cells.
-- Manual grid cell status marking.
-- Team setup, invites, requests, and member removal.
-- Search line sync between joined devices.
-- Devices tab showing known ATAK/Ditto devices.
-- Local track and grid/team persistence scoped to the active operation.
+- **HQ:** creates/manages operations, defines operation-wide search areas,
+  reviews teams and progress, and can archive operations while retaining data.
+- **Team Lead:** joins an operation, creates a team, handles membership, selects
+  team search cells/routes and controls the search line.
+- **Team Member:** joins an operation/team, follows the shared search line and
+  receives/sends team alerts.
 
-## Generic Deployment Model
+Devices can discover shared operation data through a configured Ditto profile.
+ATAK CoT/server communication is a separate transport; do not assume visible
+markers prove Ditto connectivity. The Devices tab exposes connection diagnostics.
 
-The plugin APK can be installed on any compatible ATAK 5.6 CIV device. A normal
-volunteer device should not need your personal Ditto credentials compiled into
-its build.
+## Code Map
 
-There are two setup roles:
+| Location under `app/src/main` | Responsibility |
+| --- | --- |
+| `java/.../PluginTemplateDropDownReceiver.java` | Main plugin UI and interactions |
+| `java/.../PluginTemplateMapComponent.java` | ATAK lifecycle/integration |
+| `java/.../grid/` | UTM cells, overlays, line/route guidance and progress |
+| `java/.../runtime/` | Identity, operations, membership, sync, alerts and health |
+| `java/.../database/` | Local SQLite storage and repositories |
+| `res/`, `assets/`, `AndroidManifest.xml` | UI resources and plugin registration |
 
-1. Operation organiser / team leader build
-   - Opens SARtak `Home` -> `Ditto Setup`.
-   - Adds one or more Ditto credential profiles.
-   - Selects the profile for the current organisation/search.
-   - Creates the SARtak operation.
-   - Shares the generated QR/code with other devices.
+Java package paths retain the template name `com.atakmap.android.plugintemplate`;
+those files are SARtak implementation, not an unused duplicate template.
+Automated regression tests are in `app/src/test`.
 
-2. Volunteer / joining device
-   - Installs the same SARtak APK.
-   - Opens SARtak in ATAK.
-   - Joins the operation by entering the QR/code contents.
-   - Receives the operation sync profile from that code.
-   - Saves the imported Ditto profile locally for future use.
+## Setup and Maintenance
 
-The join code currently contains the Ditto development sync details for the
-operation. This is acceptable for prototype testing, but not a production
-security model.
+See [../../SETUP.md](../../SETUP.md) for building and installation and
+[../../HANDOVER.md](../../HANDOVER.md) for handover scope. Use
+`local.properties.example` as the single configuration template.
 
-## Ditto Account Setup
-
-For current prototype testing:
-
-1. Create a Ditto Portal account.
-2. Create a Ditto database/app.
-3. Open the database/app `Connect` tab.
-4. Copy the SDK connection values:
-   - Database ID
-   - Auth URL
-   - Development or Online Playground token
-5. In SARtak, open `Home` -> `Ditto Setup` -> `Add New Ditto Profile`.
-6. Enter:
-   - Profile name
-   - Database ID
-   - Auth URL
-   - Development or Online Playground token
-7. Select that profile before creating an operation.
-
-Developers can still put these values in `local.properties` as a build-time
-fallback, but normal users should use the in-plugin Ditto Setup section.
-
-## Offline Behaviour
-
-With the current Ditto development setup, devices should be staged while they
-still have internet access so Ditto can authenticate. After that, devices in
-the same operation can continue syncing locally when nearby, depending on
-available transports such as LAN/Wi-Fi, Wi-Fi Aware, or Bluetooth LE.
-
-For a stronger field deployment model, SARtak should eventually support a
-proper organisation-owned Ditto setup or Ditto offline shared-key operation
-profiles instead of relying on one developer's portal credentials.
-
-## Build Setup
-
-Create `local.properties` from `local.properties.example` and set:
-
-- `sdk.dir`
-- `takdev.plugin`
-- optional Ditto values for operation creation
-
-The default ATAK plugin API target is `5.6.0`, which is compatible with ATAK
-`5.6.0.x` devices. Developers testing against ATAK 5.8 can override this with
-`atak.version=5.8.0` in `local.properties`.
-
-Then build:
-
-```powershell
-.\gradlew.bat :app:assembleCivDebug
-```
-
-The debug APK is generated under:
-
-```text
-app\build\outputs\apk\civ\debug
-```
-
-## Install
-
-Use the full path to `adb` if PowerShell cannot find it:
-
-```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r "app\build\outputs\apk\civ\debug\ATAK-Plugin-SARtakPlugin-1.0-<git>-5.6.0-civ-debug.apk"
-```
-
-## Files That Must Stay Local
-
-Do not commit:
-
-- `local.properties`
-- Ditto tokens
-- private keystores
-- generated APKs/AABs
-- local Gradle/build output
-
-The root `.gitignore` already excludes these.
-
-## Current Limitations
-
-- QR generation is implemented, but in-app camera scanning is not yet
-  implemented. Join code paste/import remains available.
-- Ditto development credentials are suitable for testing, not production.
-- True no-internet first-time onboarding would need Ditto offline shared-key or
-  a managed operational credential flow.
-- ATAK CoT and Ditto sync are both used; reliability should still be tested on
-  physical devices, not only emulators.
+- Configure profiles via SARtak's Ditto Setup, not another developer's files.
+- APKs have no bundled Ditto account or build-time credential fallback. A fresh
+  installation starts without a profile; upgrades retain on-device profiles.
+- QR/join codes include development sync details; share them only with intended
+  participants. Development tokens are not a production security model.
+- Nearby/offline operation depends on authentication, permissions and available
+  transports. Validate on physical devices in the intended field environment.
+- `tools/sartak-test.ps1` is optional debug-only QA tooling. Read
+  `tools/TESTING.md` before using reset/setup commands because they change state.
+- Preserve `tools/PERFORMANCE_AND_RECOVERY.md` when changing grid rendering.
+- The default ATAK API is 5.6.0. Changing metadata alone does not validate another
+  version or bypass ATAK's signature checks.

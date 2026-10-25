@@ -6,17 +6,13 @@ instructions needed to maintain the delivered plugin. It supports HQ, Team Lead
 and Team Member workflows for operations, teams, search grids, routes, search
 lines, alerts and tracks.
 
-## Unresolved HQ access limitation
+## Known HQ access issue
 
-A device with access to an operation can assume the HQ role and obtain
-operation-management controls without a separate authorisation decision.
-This can allow accidental or unauthorised changes to shared operation data.
-The issue is **open and unresolved** in the delivered implementation.
-The team's risk rating is **2 x 4 = 8 (Moderate)**.
-
-OreFox should review [HQ-001 in KNOWN_ISSUES.md](KNOWN_ISSUES.md#hq-001-unauthorised-hq-access)
-for the affected delivery, source references, current limitations and work
-required. Assigning roles by procedure does not enforce access control.
+A device participating in an operation can assume the HQ role and modify
+the operation without separate authorisation. This is a known unresolved
+issue that should be fixed by restricting HQ privileges and checking
+permissions before operation changes are applied. See
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md#unauthorised-hq-access).
 
 ## Start here
 
@@ -41,7 +37,7 @@ required. Assigning roles by procedure does not enforce access control.
 | APK SHA256 | `37c871a09e348ac37850d2e42524b8c80a950bfec914c7d83ef31d9838d5cde8` |
 
 The original handover tag includes the initial client README and predates the
-25 October HQ-001 disclosure. Use the maintained handover branch for the
+25 October known-issue documentation. Use the maintained handover branch for the
 updated documentation, and provide its current known-issue notes alongside
 any delivery of the original tag or APK. The tested APK was built from the
 earlier commit identified above; subsequent documentation updates do not
@@ -85,9 +81,9 @@ Unit-test success does not establish that all device workflows pass.
 
 Known limitations and remaining checks include:
 
-- **HQ-001 - Unauthorised HQ access (open):** a participating device can
-  assume HQ and gain operation-management controls. See
-  [KNOWN_ISSUES.md](KNOWN_ISSUES.md#hq-001-unauthorised-hq-access).
+- **Unauthorised HQ access:** a participating device can assume HQ and
+  modify the operation. This known issue should be fixed; see
+  [KNOWN_ISSUES.md](KNOWN_ISSUES.md#unauthorised-hq-access).
 - Peer role and roster labels can disagree between devices.
 - Raw GNSS storage performs synchronous SQLite work from a main-looper callback;
   its runtime latency has not been measured.

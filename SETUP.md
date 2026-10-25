@@ -60,13 +60,10 @@ signing process; this branch does not provide that approval or a private key.
 
 ## First Operation
 
-**Known access-control limitation:** selecting an ATAK role is not an
-approved grant of operation authority. A participating device can assume
-HQ and obtain operation-management controls. HQ-001 is unresolved; read
-[KNOWN_ISSUES.md](KNOWN_ISSUES.md#hq-001-unauthorised-hq-access) before
-deployment. Agree who should act as HQ and restrict operation access to
-trusted participants, while recognising that this procedure does not
-prevent another participant from selecting HQ.
+**Known issue:** a participating device can assume HQ and modify the
+operation without separate authorisation. This remains unresolved and
+should be fixed. See
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md#unauthorised-hq-access).
 
 1. Give every device a unique ATAK UID and a recognisable callsign.
 2. Set the organiser's ATAK role to `HQ`.

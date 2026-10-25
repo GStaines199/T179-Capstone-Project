@@ -6,23 +6,18 @@ Runtime profiles now come only from on-device setup or imported operations.
 The full project history and removed material remain on `main`; this is not a
 history purge.
 
-## Open HQ Access Issue - 25 October 2026
+## Known HQ Access Issue
 
-**HQ-001 remains unresolved:** a device participating in an operation can
-assume the HQ role and obtain operation-management controls. There is no
-separate authorisation decision in the inspected operation-management role
-check. This permits accidental or unauthorised operation changes. The team
-rates the risk as likelihood 2 x impact 4 = 8 (Moderate).
+A participating device can assume the HQ role and modify the operation
+without separate authorisation. This is a known unresolved issue that
+should be fixed by restricting HQ privileges and enforcing permission
+checks for operation changes. Include
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md#unauthorised-hq-access) with the handover
+and bring this limitation to OreFox's attention.
 
-Deliver [KNOWN_ISSUES.md](KNOWN_ISSUES.md#hq-001-unauthorised-hq-access) with
-the source and APK, and include this limitation in OreFox's walkthrough.
-The note records the reported behaviour, bounded source inspection,
-recommended development work and proposed verification checks. This
-documentation update does not fix the issue or add a device-test result.
-
-The original `sartak-handover-2026-10-24` tag predates this disclosure. It has
-not been moved. Include the current issue notes when supplying that
-snapshot; use a later documentation commit for the updated source handover.
+The original `sartak-handover-2026-10-24` tag predates this note. Supply
+the updated issue notes alongside that snapshot or use the later
+documentation commit.
 
 ## Removed from the Handover Tree
 
@@ -71,7 +66,7 @@ ATAK approval is implied by this cleanup.
 ## Before Delivery
 
 Include the current [known-issue record](KNOWN_ISSUES.md), particularly
-unresolved HQ-001, in the files supplied to OreFox. Record any client
+the unresolved HQ access issue, in the files supplied to OreFox. Record any client
 acknowledgement separately; this note is not evidence of acceptance.
 
 1. Build and run the unit tests using `SETUP.md` and the intended SDK.

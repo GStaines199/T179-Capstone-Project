@@ -9,7 +9,7 @@ team, grid, route, line, alert, tracking and Ditto-sync workflows.
 **Known issue:** a participating device can assume HQ and modify the
 operation without separate authorisation. This should be fixed by
 restricting HQ privileges and enforcing operation permissions. See
-[the known-issue notes](../../KNOWN_ISSUES.md#unauthorised-hq-access).
+[the known-issue notes](../../README.md#known-issues).
 
 - **HQ:** creates/manages operations, defines operation-wide search areas,
   reviews teams and progress, and can archive operations while retaining data.
@@ -39,8 +39,9 @@ Automated regression tests are in `app/src/test`.
 
 ## Setup and Maintenance
 
-See [../../SETUP.md](../../SETUP.md) for building and installation and
-[../../HANDOVER.md](../../HANDOVER.md) for handover scope. Use
+See the [handover README](../../README.md#build-and-install) for building and
+installation and [source notes](../../README.md#source-and-maintenance) for
+repository contents. Use
 `local.properties.example` as the single configuration template.
 
 - Configure profiles via SARtak's Ditto Setup, not another developer's files.

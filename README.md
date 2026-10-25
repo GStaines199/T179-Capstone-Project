@@ -6,6 +6,18 @@ instructions needed to maintain the delivered plugin. It supports HQ, Team Lead
 and Team Member workflows for operations, teams, search grids, routes, search
 lines, alerts and tracks.
 
+## Unresolved HQ access limitation
+
+A device with access to an operation can assume the HQ role and obtain
+operation-management controls without a separate authorisation decision.
+This can allow accidental or unauthorised changes to shared operation data.
+The issue is **open and unresolved** in the delivered implementation.
+The team's risk rating is **2 x 4 = 8 (Moderate)**.
+
+OreFox should review [HQ-001 in KNOWN_ISSUES.md](KNOWN_ISSUES.md#hq-001-unauthorised-hq-access)
+for the affected delivery, source references, current limitations and work
+required. Assigning roles by procedure does not enforce access control.
+
 ## Start here
 
 1. Download the tested APK and guides from the
@@ -28,15 +40,18 @@ lines, alerts and tracks.
 | APK | `ATAK-Plugin-SARtakPlugin-1.0-4c21e7da-5.6.0-civ-debug.apk` |
 | APK SHA256 | `37c871a09e348ac37850d2e42524b8c80a950bfec914c7d83ef31d9838d5cde8` |
 
-The handover tag includes this client README. The tested APK was built from the
-earlier commit identified above; the subsequent README update does not change
-runtime code or build inputs. The repository's default branch is currently
-`main`; use the handover branch or tag for this delivery.
+The original handover tag includes the initial client README and predates the
+25 October HQ-001 disclosure. Use the maintained handover branch for the
+updated documentation, and provide its current known-issue notes alongside
+any delivery of the original tag or APK. The tested APK was built from the
+earlier commit identified above; subsequent documentation updates do not
+change runtime code or build inputs. The repository's default branch is
+currently `main`; use the `handover` branch for the current source handover.
 
 ## Get the source and build
 
 ```powershell
-git clone --branch sartak-handover-2026-10-24 https://github.com/GStaines199/T179-Capstone-Project.git SARtak
+git clone --branch handover https://github.com/GStaines199/T179-Capstone-Project.git SARtak
 cd SARtak/plugin-examples/SARtakPlugin
 Copy-Item .\local.properties.example .\local.properties
 ```
@@ -51,8 +66,9 @@ Set `sdk.dir` in your local file, then follow the signing-key preparation in
 Use JDK 17 and Android SDK API 36. The Android minimum API is 24. Keep the root
 ATAK SDK files in place. Prefer a Git clone: a GitHub source ZIP has no `.git`
 metadata, so its generated version information can differ; see [HANDOVER.md](HANDOVER.md).
-A new build will also reflect the handover tag's commit rather than the older
-tested APK commit. To rebuild from the tested source, check out `4c21e7da`.
+A new build will also reflect the checked-out handover commit rather than the
+older tested APK commit. To rebuild from the tested source, check out
+`4c21e7da` and retain the current known-issue notes with the delivery.
 
 ## Tested environment and evidence
 
@@ -69,6 +85,9 @@ Unit-test success does not establish that all device workflows pass.
 
 Known limitations and remaining checks include:
 
+- **HQ-001 - Unauthorised HQ access (open):** a participating device can
+  assume HQ and gain operation-management controls. See
+  [KNOWN_ISSUES.md](KNOWN_ISSUES.md#hq-001-unauthorised-hq-access).
 - Peer role and roster labels can disagree between devices.
 - Raw GNSS storage performs synchronous SQLite work from a main-looper callback;
   its runtime latency has not been measured.

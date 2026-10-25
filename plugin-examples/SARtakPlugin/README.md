@@ -6,6 +6,13 @@ team, grid, route, line, alert, tracking and Ditto-sync workflows.
 
 ## Roles and Workflows
 
+**Open limitation HQ-001:** these roles describe available workflows;
+they do not establish independently authorised operation permissions. A
+participating device can assume HQ and gain operation-management controls.
+See [the known-issue record](../../KNOWN_ISSUES.md#hq-001-unauthorised-hq-access)
+for the unresolved issue and required follow-up work. The team's risk
+rating is likelihood 2 x impact 4 = 8 (Moderate).
+
 - **HQ:** creates/manages operations, defines operation-wide search areas,
   reviews teams and progress, and can archive operations while retaining data.
 - **Team Lead:** joins an operation, creates a team, handles membership, selects

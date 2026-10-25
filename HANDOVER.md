@@ -6,6 +6,24 @@ Runtime profiles now come only from on-device setup or imported operations.
 The full project history and removed material remain on `main`; this is not a
 history purge.
 
+## Open HQ Access Issue - 25 October 2026
+
+**HQ-001 remains unresolved:** a device participating in an operation can
+assume the HQ role and obtain operation-management controls. There is no
+separate authorisation decision in the inspected operation-management role
+check. This permits accidental or unauthorised operation changes. The team
+rates the risk as likelihood 2 x impact 4 = 8 (Moderate).
+
+Deliver [KNOWN_ISSUES.md](KNOWN_ISSUES.md#hq-001-unauthorised-hq-access) with
+the source and APK, and include this limitation in OreFox's walkthrough.
+The note records the reported behaviour, bounded source inspection,
+recommended development work and proposed verification checks. This
+documentation update does not fix the issue or add a device-test result.
+
+The original `sartak-handover-2026-10-24` tag predates this disclosure. It has
+not been moved. Include the current issue notes when supplying that
+snapshot; use a later documentation commit for the updated source handover.
+
 ## Removed from the Handover Tree
 
 - Word field-test checklists, meeting notes, the Figma design file and SDK PDF
@@ -51,6 +69,10 @@ applicable distribution arrangements. No new distribution permission or release
 ATAK approval is implied by this cleanup.
 
 ## Before Delivery
+
+Include the current [known-issue record](KNOWN_ISSUES.md), particularly
+unresolved HQ-001, in the files supplied to OreFox. Record any client
+acknowledgement separately; this note is not evidence of acceptance.
 
 1. Build and run the unit tests using `SETUP.md` and the intended SDK.
 2. Build a generic APK. Ditto build-time fallback inputs are no longer supported;
